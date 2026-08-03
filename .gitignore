@@ -55,3 +55,14 @@ coverage.xml
 
 # Build artifacts
 *.log
+
+# Claude Code / agent tools
+.claude/
+.agents/
+skills-lock.json
+
+# Root package-lock (no root package.json)
+/package-lock.json
+
+# Video assets (large binaries)
+assets/*.mp4
