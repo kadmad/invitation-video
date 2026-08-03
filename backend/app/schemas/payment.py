@@ -1,0 +1,70 @@
+import uuid
+from datetime import datetime
+
+from pydantic import BaseModel
+
+
+class CreateOrderRequest(BaseModel):
+    template_id: uuid.UUID
+    font_id: uuid.UUID | None = None
+    field_values: dict[str, str]
+    text_color_override: dict[str, str] | None = None
+
+
+class CreateOrderResponse(BaseModel):
+    razorpay_order_id: str
+    amount: int
+    currency: str
+    key_id: str
+    payment_id: uuid.UUID  # our internal Payment.id
+
+
+class VerifyPaymentRequest(BaseModel):
+    payment_id: uuid.UUID  # our internal Payment.id
+    razorpay_order_id: str
+    razorpay_payment_id: str
+    razorpay_signature: str
+
+
+class VerifyPaymentResponse(BaseModel):
+    render_job_id: uuid.UUID
+    status: str
+
+
+class RenderSummary(BaseModel):
+    id: uuid.UUID
+    status: str
+    progress: int
+    output_key: str | None
+
+    model_config = {"from_attributes": True}
+
+
+class OrderResponse(BaseModel):
+    id: uuid.UUID
+    order_number: str  # formatted INV-000001
+    razorpay_order_id: str
+    amount: int
+    currency: str
+    status: str
+    created_at: datetime
+    template_name: str
+    render: RenderSummary | None
+    field_values: dict[str, str]
+
+    model_config = {"from_attributes": True}
+
+
+class InvoiceResponse(BaseModel):
+    order_number: str  # formatted INV-000001
+    date: datetime
+    user_name: str
+    user_email: str
+    template_name: str
+    field_values: dict[str, str]
+    amount: int
+    currency: str
+    razorpay_payment_id: str | None
+    status: str
+
+    model_config = {"from_attributes": True}

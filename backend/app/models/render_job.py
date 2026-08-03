@@ -1,0 +1,34 @@
+import uuid
+
+from sqlalchemy import ForeignKey, Integer, String, Text
+from sqlalchemy.dialects.postgresql import JSONB, UUID
+from sqlalchemy.orm import Mapped, mapped_column, relationship
+
+from app.models.base import Base, UUIDMixin, TimestampMixin
+
+
+class RenderJob(UUIDMixin, TimestampMixin, Base):
+    __tablename__ = "render_jobs"
+
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id")
+    )
+    template_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("templates.id")
+    )
+    font_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("fonts.id"), nullable=True
+    )
+    status: Mapped[str] = mapped_column(
+        String(20), default="pending"
+    )  # pending, processing, completed, failed
+    field_values: Mapped[dict] = mapped_column(JSONB, default=dict)
+    output_key: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    celery_task_id: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    text_color_override: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    progress: Mapped[int] = mapped_column(Integer, default=0)
+
+    user = relationship("User", back_populates="render_jobs")
+    template = relationship("Template", back_populates="render_jobs")
+    font = relationship("Font")

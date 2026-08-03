@@ -1,0 +1,124 @@
+import { create } from "zustand";
+import type { Template, Font } from "@/types";
+
+/** Extract unique {tag} names from all text_blocks' content. */
+export function extractTags(template: Template): string[] {
+  const tagSet = new Set<string>();
+  for (const block of template.text_blocks ?? []) {
+    const re = /\{(\w+)\}/g;
+    let m: RegExpExecArray | null;
+    while ((m = re.exec(block.content)) !== null) {
+      tagSet.add(m[1]);
+    }
+  }
+  return Array.from(tagSet);
+}
+
+interface PrefillData {
+  fieldValues: Record<string, string>;
+  fontId: string | null;
+  textColorOverrides: Record<string, string> | null;
+}
+
+interface EditorState {
+  template: Template | null;
+  font: Font | null;
+  fontUrl: string | null;
+  fieldValues: Record<string, string>;
+  transliteratedValues: Record<string, string>;
+  textColorOverrides: Record<string, string>;
+  prefill: PrefillData | null;
+  imageUploads: Record<string, string>;
+  setImageUpload: (blockId: string, url: string) => void;
+  clearImageUpload: (blockId: string) => void;
+  setTemplate: (template: Template) => void;
+  setFont: (font: Font, url: string) => void;
+  setFieldValue: (key: string, value: string) => void;
+  setFieldValues: (values: Record<string, string>) => void;
+  setTransliteratedValues: (values: Record<string, string>) => void;
+  setTextColorOverride: (key: string, color: string) => void;
+  clearTextColorOverride: (key: string) => void;
+  clearFont: () => void;
+  setPrefill: (data: PrefillData) => void;
+  consumePrefill: () => PrefillData | null;
+  reset: () => void;
+}
+
+export const useEditorStore = create<EditorState>((set, get) => ({
+  template: null,
+  font: null,
+  fontUrl: null,
+  fieldValues: {},
+  transliteratedValues: {},
+  textColorOverrides: {},
+  prefill: null,
+  imageUploads: {},
+
+  setTemplate: (template) => {
+    const fieldValues: Record<string, string> = {};
+    const tags = extractTags(template);
+    tags.forEach((tag) => {
+      fieldValues[tag] = "";
+    });
+    set({ template, fieldValues, transliteratedValues: {}, textColorOverrides: {} });
+  },
+
+  setFont: (font, url) => set({ font, fontUrl: url }),
+
+  setFieldValue: (key, value) =>
+    set((state) => ({
+      fieldValues: { ...state.fieldValues, [key]: value },
+    })),
+
+  setFieldValues: (values) => set({ fieldValues: values }),
+
+  setTransliteratedValues: (values) => set({ transliteratedValues: values }),
+
+  setTextColorOverride: (key, color) =>
+    set((state) => ({
+      textColorOverrides: { ...state.textColorOverrides, [key]: color },
+    })),
+
+  clearTextColorOverride: (key) =>
+    set((state) => {
+      const next = { ...state.textColorOverrides };
+      delete next[key];
+      return { textColorOverrides: next };
+    }),
+
+  clearFont: () => set({ font: null, fontUrl: null, transliteratedValues: {} }),
+
+  setPrefill: (data) => set({ prefill: data }),
+
+  consumePrefill: () => {
+    const { prefill } = get();
+    if (prefill) {
+      set({ prefill: null });
+    }
+    return prefill;
+  },
+
+  setImageUpload: (blockId, url) =>
+    set((state) => ({
+      imageUploads: { ...state.imageUploads, [blockId]: url },
+    })),
+
+  clearImageUpload: (blockId) =>
+    set((state) => {
+      const next = { ...state.imageUploads };
+      delete next[blockId];
+      return { imageUploads: next };
+    }),
+
+  reset: () =>
+    set((state) => ({
+      template: null,
+      font: null,
+      fontUrl: null,
+      fieldValues: {},
+      transliteratedValues: {},
+      textColorOverrides: {},
+      imageUploads: {},
+      prefill: state.prefill, // preserve
+    })),
+}));
