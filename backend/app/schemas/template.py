@@ -17,11 +17,14 @@ class TextBlockResponse(BaseModel):
     text_align: str
     animation_type: str
     animation_out: str
+    anim_in_direction: str
+    anim_out_direction: str
     anim_in_duration: float
     anim_out_duration: float
     start_time: float
     end_time: float
     tag_config: dict | None
+    format_ranges: list[dict] | None = None
 
     model_config = {"from_attributes": True}
 
@@ -65,6 +68,8 @@ class TemplateListResponse(BaseModel):
     default_text_color: str
     default_font_id: uuid.UUID | None
     render_notes: str | None
+    preview_key: str | None = None
+    price: int
     created_at: datetime
 
     model_config = {"from_attributes": True}

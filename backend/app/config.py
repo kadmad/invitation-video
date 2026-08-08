@@ -34,6 +34,13 @@ class Settings(BaseSettings):
     OTP_RATE_LIMIT_MAX: int = 3
     OTP_RATE_LIMIT_WINDOW: int = 600
 
+    # Twilio (WhatsApp notifications)
+    TWILIO_ACCOUNT_SID: str = ""
+    TWILIO_AUTH_TOKEN: str = ""
+    TWILIO_WHATSAPP_FROM: str = ""  # e.g. "whatsapp:+17372212163"
+    TWILIO_CONTENT_SID: str = ""  # Content Template SID (e.g. HXa9d0fd...)
+    APP_BASE_URL: str = "http://localhost:5173"  # frontend URL for download links
+
     # App
     APP_NAME: str = "Invitation Video"
     BACKEND_CORS_ORIGINS: str = "http://localhost:5173,http://localhost:3000"

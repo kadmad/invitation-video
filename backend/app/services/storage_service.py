@@ -20,6 +20,14 @@ class StorageService:
         self._client = boto3.client("s3", **kwargs)
         self._bucket = settings.S3_BUCKET_NAME
 
+        # Separate client using public URL for browser-facing presigned URLs
+        # (signature must match the host the browser will use)
+        if settings.S3_PUBLIC_URL and settings.S3_PUBLIC_URL != settings.S3_ENDPOINT_URL:
+            public_kwargs = {**kwargs, "endpoint_url": settings.S3_PUBLIC_URL}
+            self._public_client = boto3.client("s3", **public_kwargs)
+        else:
+            self._public_client = self._client
+
     def upload(self, key: str, data: bytes, content_type: str = "application/octet-stream"):
         self._client.put_object(
             Bucket=self._bucket,
@@ -42,15 +50,20 @@ class StorageService:
             f.write(data)
 
     def presigned_url(self, key: str, expires: int = 3600) -> str:
-        url = self._client.generate_presigned_url(
+        """Presigned URL using public endpoint (for browser access)."""
+        return self._public_client.generate_presigned_url(
             "get_object",
             Params={"Bucket": self._bucket, "Key": key},
             ExpiresIn=expires,
         )
-        # Replace internal Docker hostname with public URL for browser access
-        if settings.S3_PUBLIC_URL and settings.S3_ENDPOINT_URL:
-            url = url.replace(settings.S3_ENDPOINT_URL, settings.S3_PUBLIC_URL)
-        return url
+
+    def internal_presigned_url(self, key: str, expires: int = 3600) -> str:
+        """Presigned URL using internal Docker hostname (for service-to-service calls)."""
+        return self._client.generate_presigned_url(
+            "get_object",
+            Params={"Bucket": self._bucket, "Key": key},
+            ExpiresIn=expires,
+        )
 
     def delete(self, key: str):
         self._client.delete_object(Bucket=self._bucket, Key=key)

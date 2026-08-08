@@ -4,7 +4,7 @@ import time
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, UploadFile, status
-from fastapi.responses import Response
+from fastapi.responses import RedirectResponse, Response
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -94,17 +94,50 @@ async def get_video_token(
     if not template or not template.video_key:
         raise HTTPException(status_code=404, detail="Template not found")
     token, expires_at = _generate_video_token(str(template_id))
-    return {"token": token, "expires_at": expires_at}
+    # Presigned S3 URL for direct browser access (native range requests, no proxy)
+    video_url = storage_service.presigned_url(template.video_key, expires=300)
+    # Extract version from preview_key for cache busting (preview_<ts>.mp4)
+    preview_version = ""
+    preview_url = None
+    if template.preview_key:
+        import re as _re
+        m = _re.search(r"preview_(\d+)\.mp4$", template.preview_key)
+        preview_version = m.group(1) if m else ""
+        preview_url = storage_service.presigned_url(template.preview_key, expires=3600)
+    return {
+        "token": token,
+        "expires_at": expires_at,
+        "has_preview": bool(template.preview_key),
+        "preview_v": preview_version,
+        "video_url": video_url,
+        "preview_url": preview_url,
+    }
+
+
+@router.get("/{template_id}/preview-video")
+async def get_preview_video(
+    template_id: uuid.UUID,
+    token: str = Query(...),
+    db: AsyncSession = Depends(get_db),
+):
+    """Redirect to presigned S3 URL for pre-rendered preview video."""
+    if not _verify_video_token(token, str(template_id)):
+        raise HTTPException(status_code=403, detail="Invalid or expired token")
+    result = await db.execute(select(Template).where(Template.id == template_id))
+    template = result.scalar_one_or_none()
+    if not template or not template.preview_key:
+        raise HTTPException(status_code=404, detail="No preview available")
+    url = storage_service.presigned_url(template.preview_key, expires=3600)
+    return RedirectResponse(url=url, status_code=302)
 
 
 @router.get("/{template_id}/video")
 async def get_video(
     template_id: uuid.UUID,
     token: str = Query(...),
-    request: Request = None,
     db: AsyncSession = Depends(get_db),
 ):
-    """Proxy template video — requires a valid signed token. Supports range requests for seeking."""
+    """Redirect to presigned S3 URL — native range request support, no proxy overhead."""
     if not _verify_video_token(token, str(template_id)):
         raise HTTPException(status_code=403, detail="Invalid or expired token")
     result = await db.execute(select(Template).where(Template.id == template_id))
@@ -113,41 +146,8 @@ async def get_video(
         raise HTTPException(status_code=404, detail="Template not found")
     if not template.video_key:
         raise HTTPException(status_code=400, detail="No video uploaded")
-    data = storage_service.download(template.video_key)
-    total = len(data)
-
-    range_header = request.headers.get("range") if request else None
-    if range_header:
-        # Parse "bytes=start-end"
-        range_spec = range_header.replace("bytes=", "")
-        parts = range_spec.split("-")
-        start = int(parts[0]) if parts[0] else 0
-        end = int(parts[1]) if parts[1] else total - 1
-        end = min(end, total - 1)
-        chunk = data[start : end + 1]
-        return Response(
-            content=chunk,
-            status_code=206,
-            media_type="video/mp4",
-            headers={
-                "Content-Range": f"bytes {start}-{end}/{total}",
-                "Accept-Ranges": "bytes",
-                "Content-Length": str(len(chunk)),
-                "Content-Disposition": "inline",
-                "Cache-Control": "private, max-age=300",
-            },
-        )
-
-    return Response(
-        content=data,
-        media_type="video/mp4",
-        headers={
-            "Content-Length": str(total),
-            "Accept-Ranges": "bytes",
-            "Content-Disposition": "inline",
-            "Cache-Control": "private, max-age=300",
-        },
-    )
+    url = storage_service.presigned_url(template.video_key, expires=300)
+    return RedirectResponse(url=url, status_code=302)
 
 
 @router.get("/{slug}/thumbnail")

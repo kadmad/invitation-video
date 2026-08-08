@@ -8,7 +8,7 @@ import { listFonts, getFontFileUrl } from "@/api/fonts";
 import { transliterateBatch } from "@/api/transliterate";
 import TextBlockOverlay from "./TextBlockOverlay";
 import ImageBlockOverlay from "./ImageBlockOverlay";
-import type { Font, TextBlock } from "@/types";
+import type { Font, TextBlock, FormatRange } from "@/types";
 
 interface VideoPreviewCanvasProps {
   playerRef: React.RefObject<PlayerRef | null>;
@@ -41,6 +41,16 @@ export default function VideoPreviewCanvas({ playerRef }: VideoPreviewCanvasProp
   // Load fonts
   useEffect(() => { listFonts().then(setFontList); }, []);
 
+  // Auto-refresh video token every 4 min (token TTL is 5 min)
+  useEffect(() => {
+    if (!templateId || !template?.video_key) return;
+    const refresh = () => {
+      getTemplateVideoUrl(templateId).then(setVideoUrl).catch(() => {});
+    };
+    const interval = setInterval(refresh, 4 * 60 * 1000);
+    return () => clearInterval(interval);
+  }, [templateId, template?.video_key, setVideoUrl]);
+
   useEffect(() => {
     if (!template) return;
     const fontIds = new Set<string>();
@@ -63,6 +73,7 @@ export default function VideoPreviewCanvas({ playerRef }: VideoPreviewCanvasProp
     return map;
   }, [fontList]);
 
+  // Show placeholder value if admin set one, otherwise tag name as-is
   const sampleTagValues = useMemo(() => {
     if (!template) return {};
     const values: Record<string, string> = {};
@@ -72,8 +83,8 @@ export default function VideoPreviewCanvas({ playerRef }: VideoPreviewCanvasProp
       while ((m = re.exec(block.content)) !== null) {
         const tag = m[1];
         if (!values[tag]) {
-          const cfg = block.tag_config?.[tag];
-          values[tag] = cfg?.label ?? tag.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+          const placeholder = block.tag_config?.[tag]?.placeholder;
+          values[tag] = placeholder || `{${tag}}`;
         }
       }
     }
@@ -145,21 +156,52 @@ export default function VideoPreviewCanvas({ playerRef }: VideoPreviewCanvasProp
         }
       }
       // Reassemble block content: transliterated static parts + original tags
+      // Also build character position mapping: original index → transliterated index
       const results: Record<string, string> = {};
       for (const [blockId, { parts }] of Object.entries(blockSegments)) {
+        let origOffset = 0;
+        let newOffset = 0;
+        // charMap[origIdx] = newIdx for each character in original content
+        const charMap: number[] = [];
+
         const assembled = parts.map((part, i) => {
-          if (i % 2 === 1) return part; // tag — keep as-is
+          if (i % 2 === 1) {
+            // Tag — same length in both
+            for (let c = 0; c < part.length; c++) {
+              charMap[origOffset + c] = newOffset + c;
+            }
+            origOffset += part.length;
+            newOffset += part.length;
+            return part;
+          }
           const key = `seg:${blockId}:${i}`;
           const translated = segResults[key];
-          if (!translated) return part;
-          // Preserve original leading/trailing whitespace
-          const leadMatch = part.match(/^(\s*)/);
-          const trailMatch = part.match(/(\s*)$/);
-          const lead = leadMatch ? leadMatch[1] : "";
-          const trail = trailMatch ? trailMatch[1] : "";
-          return lead + translated.trim() + trail;
+          const finalPart = translated
+            ? (() => {
+                const leadMatch = part.match(/^(\s*)/);
+                const trailMatch = part.match(/(\s*)$/);
+                const lead = leadMatch ? leadMatch[1] : "";
+                const trail = trailMatch ? trailMatch[1] : "";
+                return lead + translated.trim() + trail;
+              })()
+            : part;
+
+          // Map each original char proportionally to new positions
+          const origLen = part.length;
+          const newLen = finalPart.length;
+          for (let c = 0; c < origLen; c++) {
+            charMap[origOffset + c] = newOffset + Math.round((c / Math.max(1, origLen)) * newLen);
+          }
+          origOffset += origLen;
+          newOffset += newLen;
+          return finalPart;
         }).join("");
+
+        // End sentinel
+        charMap[origOffset] = newOffset;
+
         results[`block:${blockId}`] = assembled;
+        results[`charmap:${blockId}`] = JSON.stringify(charMap);
       }
       // Include tag value translations (non-block entries)
       for (const [key, val] of Object.entries(segResults)) {
@@ -182,7 +224,22 @@ export default function VideoPreviewCanvas({ playerRef }: VideoPreviewCanvasProp
     return blocks.map((block): TextBlock => {
       const translitContent = translitCache[`block:${block.id}`];
       if (translitContent) {
-        return { ...block, content: translitContent };
+        // Remap format_ranges using character map
+        let remappedRanges = block.format_ranges;
+        const charMapStr = translitCache[`charmap:${block.id}`];
+        if (remappedRanges && remappedRanges.length > 0 && charMapStr) {
+          try {
+            const charMap: number[] = JSON.parse(charMapStr);
+            remappedRanges = remappedRanges.map((r: FormatRange): FormatRange => ({
+              ...r,
+              start: charMap[r.start] ?? r.start,
+              end: charMap[r.end] ?? r.end,
+            })).filter((r: FormatRange) => r.end > r.start);
+          } catch {
+            // Keep original ranges on error
+          }
+        }
+        return { ...block, content: translitContent, format_ranges: remappedRanges };
       }
       return block;
     });
@@ -282,24 +339,8 @@ export default function VideoPreviewCanvas({ playerRef }: VideoPreviewCanvasProp
 
   return (
     <div className="flex flex-col flex-1 min-h-0">
-      {/* Top toolbar */}
-      <div className="flex items-center justify-between mb-2">
-        <div className="flex items-center gap-2">
-          <h3 className="text-sm font-medium text-slate-500">Canvas</h3>
-          <span className="text-[10px] text-slate-400 tabular-nums">
-            {currentTime.toFixed(1)}s / {(totalFrames / fps).toFixed(1)}s
-          </span>
-        </div>
-        <div className="flex items-center gap-2">
-          <label className="btn-secondary text-xs cursor-pointer !px-3 !py-1.5 !rounded-lg">
-            {uploading ? "Uploading..." : videoUrl ? "Replace Video" : "Upload Video"}
-            <input type="file" accept="video/*" onChange={handleUpload} className="hidden" disabled={uploading} />
-          </label>
-        </div>
-      </div>
-
       {/* Canvas */}
-      <div className="flex-1 flex justify-center overflow-hidden min-h-0">
+      <div className="flex-1 flex justify-center overflow-hidden min-h-0 relative">
         <div
           ref={containerRef}
           className="relative bg-black rounded-lg overflow-hidden"
@@ -339,6 +380,8 @@ export default function VideoPreviewCanvas({ playerRef }: VideoPreviewCanvasProp
                     isPrimary={isSelected && selectedBlockIds?.[0] === block.id}
                     containerWidth={containerSize.width}
                     containerHeight={containerSize.height}
+                    fontFamily={fontFamilies[block.font_id ?? template?.default_font_id ?? ""] ?? defaultFontFamily}
+                    tagValues={sampleTagValues}
                   />
                 );
               })}
@@ -354,6 +397,17 @@ export default function VideoPreviewCanvas({ playerRef }: VideoPreviewCanvasProp
                   containerHeight={containerSize.height}
                 />
               ))}
+        </div>
+
+        {/* Overlay: time + upload */}
+        <div className="absolute top-2 left-2 right-2 flex items-center justify-between pointer-events-none z-20">
+          <span className="text-[10px] text-white/70 tabular-nums bg-black/40 rounded px-1.5 py-0.5 pointer-events-auto">
+            {currentTime.toFixed(1)}s / {(totalFrames / fps).toFixed(1)}s
+          </span>
+          <label className="text-[10px] text-white/80 bg-black/40 hover:bg-black/60 rounded px-2 py-1 cursor-pointer pointer-events-auto transition">
+            {uploading ? "Uploading..." : videoUrl ? "Replace Video" : "Upload Video"}
+            <input type="file" accept="video/*" onChange={handleUpload} className="hidden" disabled={uploading} />
+          </label>
         </div>
       </div>
     </div>

@@ -53,9 +53,11 @@ export default function TimelineFooter({ playerRef }: TimelineFooterProps) {
   } = useAdminTemplateStore();
 
   const timelineRef = useRef<HTMLDivElement>(null);
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
   const isDraggingScrubber = useRef(false);
   const dragEdge = useRef<{ blockId: string; edge: "start" | "end" } | null>(null);
   const [playing, setPlaying] = useState(false);
+  const [rubberBand, setRubberBand] = useState<{ startX: number; startY: number; currentX: number; currentY: number } | null>(null);
 
   const fps = template?.fps || 30;
   const totalFrames = template?.duration_frames || 300;
@@ -109,16 +111,85 @@ export default function TimelineFooter({ playerRef }: TimelineFooterProps) {
 
   const handleTimelineMouseDown = (e: React.MouseEvent) => {
     if ((e.target as HTMLElement).closest("[data-block-marker]")) return;
-    isDraggingScrubber.current = true;
-    playerRef.current?.pause();
-    seekToTime(xToTime(e.clientX));
+    if (!timelineRef.current) return;
 
-    const handleMouseMove = (ev: MouseEvent) => seekToTime(xToTime(ev.clientX));
-    const handleMouseUp = () => {
-      isDraggingScrubber.current = false;
+    const rect = timelineRef.current.getBoundingClientRect();
+    const startX = e.clientX;
+    const startY = e.clientY;
+    let moved = false;
+
+    const scrollEl = scrollContainerRef.current;
+    const scrollTopStart = scrollEl?.scrollTop ?? 0;
+
+    const handleMouseMove = (ev: MouseEvent) => {
+      const dx = Math.abs(ev.clientX - startX);
+      const dy = Math.abs(ev.clientY - startY);
+      if (!moved && (dx > 4 || dy > 4)) {
+        moved = true;
+      }
+      if (moved) {
+        const scrollOff = (scrollEl?.scrollTop ?? 0);
+        setRubberBand({
+          startX: startX - rect.left,
+          startY: startY - rect.top + scrollTopStart,
+          currentX: ev.clientX - rect.left,
+          currentY: ev.clientY - rect.top + scrollOff,
+        });
+      }
+    };
+
+    const handleMouseUp = (ev: MouseEvent) => {
       window.removeEventListener("mousemove", handleMouseMove);
       window.removeEventListener("mouseup", handleMouseUp);
+
+      if (!moved) {
+        // Simple click — seek to time
+        playerRef.current?.pause();
+        seekToTime(xToTime(ev.clientX));
+        // Deselect blocks
+        selectBlock(null);
+        setRubberBand(null);
+        return;
+      }
+
+      // Rubber band select — find all blocks within the rectangle
+      if (timelineRef.current) {
+        const r = timelineRef.current.getBoundingClientRect();
+        const scrollOff = scrollEl?.scrollTop ?? 0;
+        const x1 = Math.min(startX, ev.clientX) - r.left;
+        const x2 = Math.max(startX, ev.clientX) - r.left;
+        const y1 = Math.min(startY, ev.clientY) - r.top + Math.min(scrollTopStart, scrollOff);
+        const y2 = Math.max(startY, ev.clientY) - r.top + Math.max(scrollTopStart, scrollOff);
+        const width = r.width;
+
+        const matched: string[] = [];
+        for (const b of allTimelineBlocks) {
+          if (b.type !== "text") continue;
+          const lane = blockLanes.get(b.id) ?? 0;
+          const bLeft = (b.start_time / totalSeconds) * width;
+          const bRight = (b.end_time / totalSeconds) * width;
+          const bTop = lane * (LANE_HEIGHT + LANE_GAP);
+          const bBottom = bTop + LANE_HEIGHT;
+
+          // Check overlap
+          if (bRight >= x1 && bLeft <= x2 && bBottom >= y1 && bTop <= y2) {
+            matched.push(b.id);
+          }
+        }
+
+        if (matched.length > 0) {
+          // Select first, then add rest
+          selectBlock(matched[0]);
+          for (let i = 1; i < matched.length; i++) {
+            selectBlockMulti(matched[i], true);
+          }
+        } else {
+          selectBlock(null);
+        }
+      }
+      setRubberBand(null);
     };
+
     window.addEventListener("mousemove", handleMouseMove);
     window.addEventListener("mouseup", handleMouseUp);
   };
@@ -171,15 +242,22 @@ export default function TimelineFooter({ playerRef }: TimelineFooterProps) {
   };
 
   // --- Whole-block drag (move start+end keeping duration) ---
+  // If dragged block is part of multi-selection, move all selected blocks together
   const handleBlockDragStart = (e: React.MouseEvent, blockId: string) => {
     e.stopPropagation();
     const block = blocks.find((b) => b.id === blockId);
     if (!block) return;
 
     const shiftKey = e.shiftKey;
-    const duration = block.end_time - block.start_time;
+    const isMultiSelected = selectedBlockIds.includes(blockId) && selectedBlockIds.length > 1;
+    // Capture all blocks to drag: if multi-selected, move all; otherwise just this one
+    const dragBlockIds = isMultiSelected ? [...selectedBlockIds] : [blockId];
+    const origTimes = dragBlockIds.map((id) => {
+      const b = blocks.find((bl) => bl.id === id);
+      return { id, start: b?.start_time ?? 0, end: b?.end_time ?? 0, duration: (b?.end_time ?? 0) - (b?.start_time ?? 0) };
+    });
+
     const startX = e.clientX;
-    const origStart = block.start_time;
     let moved = false;
 
     const handleMouseMove = (ev: MouseEvent) => {
@@ -190,11 +268,21 @@ export default function TimelineFooter({ playerRef }: TimelineFooterProps) {
         useAdminTemplateStore.temporal.getState().pause();
       }
       if (!moved) return;
-      let newStart = Math.round((origStart + deltaTime) * 10) / 10;
-      newStart = Math.max(0, Math.min(totalSeconds - duration, newStart));
-      const newEnd = Math.round((newStart + duration) * 10) / 10;
-      updateBlock(blockId, { start_time: newStart, end_time: newEnd });
-      seekToTime(newStart);
+
+      // Clamp delta so no block goes out of bounds
+      let clampedDelta = deltaTime;
+      for (const orig of origTimes) {
+        const ns = orig.start + clampedDelta;
+        if (ns < 0) clampedDelta = -orig.start;
+        if (ns + orig.duration > totalSeconds) clampedDelta = totalSeconds - orig.start - orig.duration;
+      }
+
+      for (const orig of origTimes) {
+        const newStart = Math.round((orig.start + clampedDelta) * 10) / 10;
+        const newEnd = Math.round((newStart + orig.duration) * 10) / 10;
+        updateBlock(orig.id, { start_time: newStart, end_time: newEnd });
+      }
+      seekToTime(Math.round((origTimes[0].start + clampedDelta) * 10) / 10);
     };
 
     const handleMouseUp = async () => {
@@ -207,18 +295,20 @@ export default function TimelineFooter({ playerRef }: TimelineFooterProps) {
         return;
       }
       useAdminTemplateStore.temporal.getState().resume();
-      // Persist after drag
+      // Persist all dragged blocks
       if (templateId) {
-        const updatedBlock = blocks.find((b) => b.id === blockId);
-        if (updatedBlock) {
-          try {
-            await updateTextBlock(templateId, blockId, {
-              start_time: updatedBlock.start_time,
-              end_time: updatedBlock.end_time,
-            });
-            clearAdminDraft(templateId);
-          } catch (err) { console.error("Failed to persist timing", err); }
+        for (const orig of dragBlockIds) {
+          const updatedBlock = blocks.find((b) => b.id === orig);
+          if (updatedBlock) {
+            try {
+              await updateTextBlock(templateId, orig, {
+                start_time: updatedBlock.start_time,
+                end_time: updatedBlock.end_time,
+              });
+            } catch (err) { console.error("Failed to persist timing", err); }
+          }
         }
+        clearAdminDraft(templateId);
       }
     };
     window.addEventListener("mousemove", handleMouseMove);
@@ -247,8 +337,29 @@ export default function TimelineFooter({ playerRef }: TimelineFooterProps) {
     return result;
   }, [totalSeconds]);
 
+  // Preserve scroll position across re-renders (block selection changes etc.)
+  const savedScrollTop = useRef(0);
+  useEffect(() => {
+    const el = scrollContainerRef.current;
+    if (!el) return;
+    const onScroll = () => { savedScrollTop.current = el.scrollTop; };
+    el.addEventListener("scroll", onScroll, { passive: true });
+    return () => el.removeEventListener("scroll", onScroll);
+  }, []);
+
+  useEffect(() => {
+    const el = scrollContainerRef.current;
+    if (el && savedScrollTop.current > 0) {
+      el.scrollTop = savedScrollTop.current;
+    }
+  });
+
   const LANE_HEIGHT = 24;
   const LANE_GAP = 2;
+  const MAX_VISIBLE_LANES = 3;
+  const fullLanesHeight = laneCount * (LANE_HEIGHT + LANE_GAP);
+  const maxLanesHeight = MAX_VISIBLE_LANES * (LANE_HEIGHT + LANE_GAP);
+  const capped = laneCount > MAX_VISIBLE_LANES;
 
   return (
     <div className="bg-slate-900 border-t border-slate-700 flex-shrink-0">
@@ -280,6 +391,9 @@ export default function TimelineFooter({ playerRef }: TimelineFooterProps) {
             Preview Block
           </button>
         )}
+        {capped && (
+          <span className="text-[9px] text-white/30 ml-auto">{laneCount} lanes</span>
+        )}
       </div>
 
       {/* Time ruler — aligned with lanes below via same mx-4 */}
@@ -295,97 +409,132 @@ export default function TimelineFooter({ playerRef }: TimelineFooterProps) {
         ))}
       </div>
 
-      {/* Block lanes + scrubber */}
+      {/* Scrollable lanes container */}
       <div
-        ref={timelineRef}
-        className="relative mx-4 mb-2 cursor-pointer"
-        style={{ height: laneCount * (LANE_HEIGHT + LANE_GAP) + 12 }}
-        onMouseDown={handleTimelineMouseDown}
+        ref={scrollContainerRef}
+        className="mx-4 mb-1 overflow-y-auto timeline-scroll"
+        style={{ maxHeight: maxLanesHeight + 12 }}
       >
-        {/* Tick lines */}
-        {ticks.map((t) => (
-          <div
-            key={t}
-            className="absolute top-0 bottom-0 w-px bg-white/5"
-            style={{ left: `${(t / totalSeconds) * 100}%` }}
-          />
-        ))}
-
-        {/* Block markers in lanes */}
-        {allTimelineBlocks.map((b) => {
-          const lane = blockLanes.get(b.id) ?? 0;
-          const leftPct = (b.start_time / totalSeconds) * 100;
-          const widthPct = ((b.end_time - b.start_time) / totalSeconds) * 100;
-          const isSelected = selectedBlockIds?.includes(b.id) ?? b.id === selectedBlockId;
-          const isText = b.type === "text";
-          const label = ("content" in b ? b.content : "").replace(/\{(\w+)\}/g, (_, t) => t).slice(0, 30);
-
-          return (
-            <div
-              key={b.id}
-              data-block-marker
-              className={`absolute rounded-sm flex items-center overflow-hidden select-none group transition-colors ${
-                isSelected
-                  ? "bg-primary-500/50 border border-primary-400 z-10"
-                  : isText
-                    ? "bg-white/15 border border-white/20 hover:bg-white/25"
-                    : "bg-amber-500/20 border border-amber-500/40 hover:bg-amber-500/30"
-              }`}
-              onMouseDown={(e) => {
-                // Edge handles have their own onMouseDown with stopPropagation
-                if (isText) handleBlockDragStart(e, b.id);
-                else { selectBlock(b.id); seekToTime(b.start_time); }
-              }}
-              style={{
-                left: `${leftPct}%`,
-                width: `${Math.max(widthPct, 0.3)}%`,
-                top: lane * (LANE_HEIGHT + LANE_GAP),
-                height: LANE_HEIGHT,
-                cursor: isText ? "grab" : "pointer",
-              }}
-            >
-              {/* Left edge handle */}
-              {isText && (
-                <div
-                  className="absolute left-0 top-0 bottom-0 w-2 cursor-col-resize hover:bg-primary-400/50 z-20"
-                  onMouseDown={(e) => handleEdgeDragStart(e, b.id, "start")}
-                />
-              )}
-
-              {/* Type badge + label */}
-              <span className={`text-[9px] px-2 truncate flex-1 pointer-events-none ${isText ? "text-white/70" : "text-amber-300/80"}`}>
-                {!isText && <span className="text-[7px] uppercase font-bold mr-1 opacity-60">IMG</span>}
-                {label}
-              </span>
-
-              {/* Time badge */}
-              <span className="text-[7px] text-white/30 pr-1.5 pointer-events-none tabular-nums flex-shrink-0">
-                {b.start_time.toFixed(1)}-{b.end_time.toFixed(1)}
-              </span>
-
-              {/* Right edge handle */}
-              {isText && (
-                <div
-                  className="absolute right-0 top-0 bottom-0 w-2 cursor-col-resize hover:bg-primary-400/50 z-20"
-                  onMouseDown={(e) => handleEdgeDragStart(e, b.id, "end")}
-                />
-              )}
-            </div>
-          );
-        })}
-
-        {/* Scrubber track */}
-        <div className="absolute bottom-0 left-0 right-0 h-1 bg-white/10 rounded-full">
-          <div className="h-full bg-primary-500 rounded-full transition-[width]" style={{ width: `${progressPct}%` }} />
-        </div>
-
-        {/* Playhead line */}
+        {/* Block lanes + scrubber */}
         <div
-          className="absolute top-0 bottom-0 w-px bg-red-500 z-20 pointer-events-none"
-          style={{ left: `${progressPct}%` }}
+          ref={timelineRef}
+          className="relative cursor-pointer"
+          style={{ height: fullLanesHeight + 12 }}
+          onMouseDown={handleTimelineMouseDown}
         >
-          <div className="absolute -top-1 left-1/2 -translate-x-1/2 w-2.5 h-2.5 bg-red-500 rounded-full shadow" />
+          {/* Tick lines */}
+          {ticks.map((t) => (
+            <div
+              key={t}
+              className="absolute top-0 bottom-0 w-px bg-white/5"
+              style={{ left: `${(t / totalSeconds) * 100}%` }}
+            />
+          ))}
+
+          {/* Block markers in lanes */}
+          {allTimelineBlocks.map((b) => {
+            const lane = blockLanes.get(b.id) ?? 0;
+            const leftPct = (b.start_time / totalSeconds) * 100;
+            const widthPct = ((b.end_time - b.start_time) / totalSeconds) * 100;
+            const isSelected = selectedBlockIds?.includes(b.id) ?? b.id === selectedBlockId;
+            const isText = b.type === "text";
+            const label = ("content" in b ? b.content : "").replace(/\{(\w+)\}/g, (_, t) => t).slice(0, 30);
+
+            return (
+              <div
+                key={b.id}
+                data-block-marker
+                className={`absolute rounded-sm flex items-center overflow-hidden select-none group transition-colors ${
+                  isSelected
+                    ? "bg-primary-500/50 border border-primary-400 z-10"
+                    : isText
+                      ? "bg-white/15 border border-white/20 hover:bg-white/25"
+                      : "bg-amber-500/20 border border-amber-500/40 hover:bg-amber-500/30"
+                }`}
+                onMouseDown={(e) => {
+                  // Edge handles have their own onMouseDown with stopPropagation
+                  if (isText) handleBlockDragStart(e, b.id);
+                  else { selectBlock(b.id); seekToTime(b.start_time); }
+                }}
+                style={{
+                  left: `${leftPct}%`,
+                  width: `${Math.max(widthPct, 0.3)}%`,
+                  top: lane * (LANE_HEIGHT + LANE_GAP),
+                  height: LANE_HEIGHT,
+                  cursor: isText ? "grab" : "pointer",
+                }}
+              >
+                {/* Left edge handle */}
+                {isText && (
+                  <div
+                    className="absolute left-0 top-0 bottom-0 w-2 cursor-col-resize hover:bg-primary-400/50 z-20"
+                    onMouseDown={(e) => handleEdgeDragStart(e, b.id, "start")}
+                  />
+                )}
+
+                {/* Type badge + label */}
+                <span className={`text-[9px] px-2 truncate flex-1 pointer-events-none ${isText ? "text-white/70" : "text-amber-300/80"}`}>
+                  {!isText && <span className="text-[7px] uppercase font-bold mr-1 opacity-60">IMG</span>}
+                  {label}
+                </span>
+
+                {/* Time badge */}
+                <span className="text-[7px] text-white/30 pr-1.5 pointer-events-none tabular-nums flex-shrink-0">
+                  {b.start_time.toFixed(1)}-{b.end_time.toFixed(1)}
+                </span>
+
+                {/* Right edge handle */}
+                {isText && (
+                  <div
+                    className="absolute right-0 top-0 bottom-0 w-2 cursor-col-resize hover:bg-primary-400/50 z-20"
+                    onMouseDown={(e) => handleEdgeDragStart(e, b.id, "end")}
+                  />
+                )}
+              </div>
+            );
+          })}
+
+          {/* Playhead line */}
+          <div
+            className="absolute top-0 bottom-0 w-px bg-red-500 z-20 pointer-events-none"
+            style={{ left: `${progressPct}%` }}
+          >
+            <div className="absolute -top-1 left-1/2 -translate-x-1/2 w-2.5 h-2.5 bg-red-500 rounded-full shadow" />
+          </div>
+
+          {/* Rubber band selection rectangle */}
+          {rubberBand && (() => {
+            const x = Math.min(rubberBand.startX, rubberBand.currentX);
+            const y = Math.min(rubberBand.startY, rubberBand.currentY);
+            const w = Math.abs(rubberBand.currentX - rubberBand.startX);
+            const h = Math.abs(rubberBand.currentY - rubberBand.startY);
+            return (
+              <div
+                className="absolute pointer-events-none z-30"
+                style={{
+                  left: x,
+                  top: y,
+                  width: w,
+                  height: h,
+                  border: "1px solid rgba(99, 102, 241, 0.8)",
+                  backgroundColor: "rgba(99, 102, 241, 0.15)",
+                  borderRadius: 2,
+                }}
+              />
+            );
+          })()}
         </div>
+      </div>
+
+      {/* Scrubber track — always visible outside scroll */}
+      <div className="mx-4 mb-2 h-1 bg-white/10 rounded-full relative cursor-pointer"
+        onMouseDown={(e) => {
+          const rect = e.currentTarget.getBoundingClientRect();
+          const ratio = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+          seekToTime(ratio * totalSeconds);
+        }}
+      >
+        <div className="h-full bg-primary-500 rounded-full" style={{ width: `${progressPct}%` }} />
       </div>
     </div>
   );

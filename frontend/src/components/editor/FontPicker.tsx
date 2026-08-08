@@ -42,12 +42,14 @@ function useFontLoader(fonts: Font[]) {
 function FontOption({
   font,
   isSelected,
+  isHighlighted,
   onSelect,
   onObserve,
   isLoaded,
 }: {
   font: Font;
   isSelected: boolean;
+  isHighlighted?: boolean;
   onSelect: () => void;
   onObserve: (el: HTMLDivElement | null) => void;
   isLoaded: boolean;
@@ -58,9 +60,10 @@ function FontOption({
     <div
       ref={onObserve}
       data-font-id={font.id}
+      data-font-option
       onClick={onSelect}
-      className={`px-3 py-2 cursor-pointer hover:bg-primary-50 flex items-center justify-between gap-2 ${
-        isSelected ? "bg-primary-50 text-primary-700" : ""
+      className={`px-3 py-2 cursor-pointer flex items-center justify-between gap-2 ${
+        isHighlighted ? "bg-primary-100 text-primary-700" : isSelected ? "bg-primary-50 text-primary-700" : "hover:bg-primary-50"
       }`}
     >
       <span className="text-sm text-slate-700 flex-shrink-0 w-36 truncate">
@@ -83,20 +86,24 @@ function FontOption({
 export default function FontPicker({ fonts, selectedId, onSelect, compact, fallbackFontId }: FontPickerProps) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
+  const [highlightIdx, setHighlightIdx] = useState(-1);
   const containerRef = useRef<HTMLDivElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
+  const searchRef = useRef<HTMLInputElement>(null);
   const observerRef = useRef<IntersectionObserver | null>(null);
   const { loaded, loadFont } = useFontLoader(fonts);
 
   const selected = fonts.find((f) => f.id === selectedId) ?? null;
   const fallbackFont = fallbackFontId ? fonts.find((f) => f.id === fallbackFontId) ?? null : null;
 
-  // Close on outside click
+  // Close on outside click — revert to last committed font
   useEffect(() => {
     if (!open) return;
     const handler = (e: MouseEvent) => {
       if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        onSelect(lastCommittedId.current);
         setOpen(false);
+        setSearch("");
       }
     };
     document.addEventListener("mousedown", handler);
@@ -149,6 +156,86 @@ export default function FontPicker({ fonts, selectedId, onSelect, compact, fallb
       ),
     })).filter((g) => g.fonts.length > 0);
   }, [fonts, search]);
+
+  // Flat list of all visible fonts for keyboard navigation
+  // Index 0 = "Default" option, then fonts in grouped order
+  const flatFonts = useMemo(() => {
+    const result: (Font | null)[] = [null]; // null = default option
+    for (const g of grouped) {
+      for (const f of g.fonts) result.push(f);
+    }
+    return result;
+  }, [grouped]);
+
+  // Reset highlight when search changes
+  useEffect(() => { setHighlightIdx(-1); }, [search]);
+
+  // Reset highlight when opening
+  useEffect(() => {
+    if (open) {
+      // Set highlight to currently selected
+      const idx = flatFonts.findIndex((f) => (f === null ? selectedId === null : f.id === selectedId));
+      setHighlightIdx(idx >= 0 ? idx : -1);
+    }
+  }, [open]);
+
+  // Live preview: apply highlighted font to canvas without committing
+  const lastCommittedId = useRef(selectedId);
+  useEffect(() => { lastCommittedId.current = selectedId; }, [selectedId]);
+
+  useEffect(() => {
+    if (!open || highlightIdx < 0) return;
+    const font = flatFonts[highlightIdx];
+    const fontId = font?.id ?? null;
+    // Live preview — call onSelect but track that it's a preview
+    if (fontId !== selectedId) {
+      onSelect(fontId);
+    }
+  }, [highlightIdx, open]);
+
+  // On close without Enter (e.g. click outside), revert to last committed
+  const revertOnClose = useRef(false);
+
+  // Keyboard handler
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (!open) return;
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      setHighlightIdx((prev) => {
+        const next = Math.min(prev + 1, flatFonts.length - 1);
+        scrollToIdx(next);
+        return next;
+      });
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      setHighlightIdx((prev) => {
+        const next = Math.max(prev - 1, 0);
+        scrollToIdx(next);
+        return next;
+      });
+    } else if (e.key === "Enter") {
+      e.preventDefault();
+      if (highlightIdx >= 0) {
+        const font = flatFonts[highlightIdx];
+        lastCommittedId.current = font?.id ?? null;
+        onSelect(font?.id ?? null);
+      }
+      setOpen(false);
+      setSearch("");
+    } else if (e.key === "Escape") {
+      e.preventDefault();
+      // Revert to last committed
+      onSelect(lastCommittedId.current);
+      setOpen(false);
+      setSearch("");
+    }
+  };
+
+  const scrollToIdx = (idx: number) => {
+    if (!listRef.current) return;
+    const items = listRef.current.querySelectorAll<HTMLElement>("[data-font-option]");
+    items[idx]?.scrollIntoView({ block: "nearest" });
+  };
 
   const selectedFaceName = selected ? `picker-${selected.id.slice(0, 8)}` : "";
   const fallbackFaceName = fallbackFont ? `picker-${fallbackFont.id.slice(0, 8)}` : "";
@@ -220,7 +307,10 @@ export default function FontPicker({ fonts, selectedId, onSelect, compact, fallb
 
       {/* Dropdown */}
       {open && (
-        <div className={`absolute z-50 mt-1 bg-white border border-slate-100 rounded-2xl shadow-xl max-h-96 flex flex-col ${compact ? "w-80 right-0" : "w-full"}`}>
+        <div
+          className={`absolute z-50 mt-1 bg-white border border-slate-100 rounded-2xl shadow-xl max-h-96 flex flex-col ${compact ? "w-80 right-0" : "w-full"}`}
+          onKeyDown={handleKeyDown}
+        >
           {/* Search */}
           <div className="p-2 border-b border-slate-100">
             <div className="relative">
@@ -233,8 +323,9 @@ export default function FontPicker({ fonts, selectedId, onSelect, compact, fallb
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
               </svg>
               <input
+                ref={searchRef}
                 type="text"
-                placeholder="Search fonts..."
+                placeholder="Search fonts... (arrows to preview)"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 className="w-full rounded-xl pl-8 pr-3 py-1.5 text-sm ring-1 ring-slate-200 focus:outline-none focus:ring-2 focus:ring-primary-400"
@@ -247,39 +338,51 @@ export default function FontPicker({ fonts, selectedId, onSelect, compact, fallb
           <div ref={listRef} className="overflow-y-auto flex-1">
             {/* Default option */}
             <div
+              data-font-option
               onClick={() => {
+                lastCommittedId.current = null;
                 onSelect(null);
                 setOpen(false);
                 setSearch("");
               }}
-              className={`px-3 py-2 cursor-pointer hover:bg-slate-50 text-sm ${
-                !selectedId ? "bg-primary-50 text-primary-700" : "text-slate-600"
+              className={`px-3 py-2 cursor-pointer text-sm ${
+                highlightIdx === 0
+                  ? "bg-primary-100 text-primary-700"
+                  : !selectedId ? "bg-primary-50 text-primary-700" : "text-slate-600 hover:bg-slate-50"
               }`}
             >
               Default (template font)
             </div>
 
-            {grouped.map(({ lang, label, fonts: langFonts }) => (
-              <div key={lang}>
-                <div className="px-3 py-1.5 bg-slate-50 text-xs font-semibold text-slate-500 uppercase tracking-wider sticky top-0">
-                  {label}
+            {grouped.map(({ lang, label, fonts: langFonts }) => {
+              return (
+                <div key={lang}>
+                  <div className="px-3 py-1.5 bg-slate-50 text-xs font-semibold text-slate-500 uppercase tracking-wider sticky top-0">
+                    {label}
+                  </div>
+                  {langFonts.map((f) => {
+                    const flatIdx = flatFonts.findIndex((ff) => ff?.id === f.id);
+                    const isHighlighted = flatIdx === highlightIdx;
+                    return (
+                      <FontOption
+                        key={f.id}
+                        font={f}
+                        isSelected={isHighlighted || selectedId === f.id}
+                        isHighlighted={isHighlighted}
+                        onSelect={() => {
+                          lastCommittedId.current = f.id;
+                          onSelect(f.id);
+                          setOpen(false);
+                          setSearch("");
+                        }}
+                        onObserve={observeElement}
+                        isLoaded={loaded.has(f.id)}
+                      />
+                    );
+                  })}
                 </div>
-                {langFonts.map((f) => (
-                  <FontOption
-                    key={f.id}
-                    font={f}
-                    isSelected={selectedId === f.id}
-                    onSelect={() => {
-                      onSelect(f.id);
-                      setOpen(false);
-                      setSearch("");
-                    }}
-                    onObserve={observeElement}
-                    isLoaded={loaded.has(f.id)}
-                  />
-                ))}
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       )}

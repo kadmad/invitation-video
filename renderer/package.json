@@ -1,0 +1,23 @@
+{
+  "name": "invitation-video-renderer",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js"
+  },
+  "dependencies": {
+    "@remotion/bundler": "4.0.242",
+    "@remotion/renderer": "4.0.242",
+    "express": "^4.21.0",
+    "remotion": "4.0.242",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@types/express": "^4.17.21",
+    "@types/react": "^18.3.12",
+    "typescript": "^5.6.0"
+  }
+}

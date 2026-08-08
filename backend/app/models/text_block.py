@@ -36,6 +36,8 @@ class TextBlock(UUIDMixin, Base):
     animation_out: Mapped[str] = mapped_column(
         String(30), default="none"
     )  # exit animation
+    anim_in_direction: Mapped[str] = mapped_column(String(5), default="ltr")  # ltr or rtl
+    anim_out_direction: Mapped[str] = mapped_column(String(5), default="ltr")  # ltr or rtl
     anim_in_duration: Mapped[float] = mapped_column(Float, default=1.0)  # seconds
     anim_out_duration: Mapped[float] = mapped_column(Float, default=1.0)  # seconds
     start_time: Mapped[float] = mapped_column(Float, default=0.0)  # seconds
@@ -43,6 +45,7 @@ class TextBlock(UUIDMixin, Base):
 
     # Tag validation config
     tag_config: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    format_ranges: Mapped[list | None] = mapped_column(JSONB, nullable=True)
     # e.g. {"bride_name": {"min_chars": 2, "max_chars": 30, "label": "Bride's Name"}}
 
     template = relationship("Template", back_populates="text_blocks")

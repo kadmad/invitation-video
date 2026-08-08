@@ -91,9 +91,13 @@ export const useAdminTemplateStore = create<AdminTemplateState>()(
         }),
 
       expandBlock: (id) =>
-        set((state) => ({
-          expandedBlockId: state.expandedBlockId === id ? null : id,
-        })),
+        set((state) => {
+          const expanding = state.expandedBlockId !== id && id !== null;
+          return {
+            expandedBlockId: state.expandedBlockId === id ? null : id,
+            ...(expanding ? { selectedBlockId: id, selectedBlockIds: [id] } : {}),
+          };
+        }),
 
       triggerBlockPreview: () =>
         set((s) => ({ previewBlockTrigger: s.previewBlockTrigger + 1 })),

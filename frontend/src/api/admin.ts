@@ -50,8 +50,8 @@ export const getTemplateVideoUrl = async (templateId: string): Promise<string> =
   const baseUrl = import.meta.env.VITE_API_URL || "http://localhost:8000/api";
   const res = await fetch(`${baseUrl}/templates/${templateId}/video-token`);
   if (!res.ok) throw new Error("Failed to get video token");
-  const { token } = await res.json();
-  return `${baseUrl}/templates/${templateId}/video?token=${token}`;
+  const { video_url } = await res.json();
+  return video_url;
 };
 
 // ── Text Blocks ────────────────────────────────────────────────────────────────

@@ -1,24 +1,40 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Player } from "@remotion/player";
+import { Player, type PlayerRef } from "@remotion/player";
 import GenericTemplate from "@/remotion/compositions/GenericTemplate";
 import { useEditorStore } from "@/store/editorStore";
 import { listFonts, getFontFileUrl } from "@/api/fonts";
 import { fetchVideoUrl } from "@/api/templates";
 import { transliterateBatch } from "@/api/transliterate";
-import type { Font, TextBlock } from "@/types";
+import type { Font, TextBlock, FormatRange } from "@/types";
 
 export default function PreviewPlayer() {
-  const { template, font, fontUrl, fieldValues, transliteratedValues, textColorOverrides } = useEditorStore();
+  const { template, font, fontUrl, fieldValues, transliteratedValues, textColorOverrides, seekToTime } = useEditorStore();
 
-  // Use transliterated values when available
+  // Build placeholder map from tag_config
+  const placeholderValues = useMemo(() => {
+    if (!template) return {};
+    const map: Record<string, string> = {};
+    for (const block of template.text_blocks ?? []) {
+      if (!block.tag_config) continue;
+      for (const [tag, cfg] of Object.entries(block.tag_config)) {
+        if (cfg.placeholder && !map[tag]) map[tag] = cfg.placeholder;
+      }
+    }
+    return map;
+  }, [template]);
+
+  // Use transliterated values when available, fall back to placeholder
   const effectiveValues = useMemo(() => {
-    if (Object.keys(transliteratedValues).length === 0) return fieldValues;
-    const merged = { ...fieldValues };
+    // Start with placeholders, overlay only non-empty user values
+    const merged = { ...placeholderValues };
+    for (const [k, v] of Object.entries(fieldValues)) {
+      if (v) merged[k] = v;
+    }
     for (const [k, v] of Object.entries(transliteratedValues)) {
       if (v) merged[k] = v;
     }
     return merged;
-  }, [fieldValues, transliteratedValues]);
+  }, [fieldValues, transliteratedValues, placeholderValues]);
   const [fontList, setFontList] = useState<Font[]>([]);
   // Load font list so we can map font_id -> family_name
   useEffect(() => {
@@ -88,8 +104,11 @@ export default function PreviewPlayer() {
   }, [fontList]);
 
   // Transliterate static block content for regional fonts
+  const playerRef = useRef<PlayerRef>(null);
   const [blockTranslitCache, setBlockTranslitCache] = useState<Record<string, string>>({});
+  const [translitDone, setTranslitDone] = useState(false);
   const blockTranslitTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const wasPlayingRef = useRef(false);
 
   useEffect(() => {
     if (!template || fontList.length === 0) return;
@@ -120,8 +139,11 @@ export default function PreviewPlayer() {
 
     if (Object.keys(toTransliterate).length === 0) {
       setBlockTranslitCache({});
+      setTranslitDone(true);
       return;
     }
+
+    setTranslitDone(false);
 
     if (blockTranslitTimer.current) clearTimeout(blockTranslitTimer.current);
     blockTranslitTimer.current = setTimeout(async () => {
@@ -138,23 +160,50 @@ export default function PreviewPlayer() {
         } catch { /* skip */ }
       }
       // Reassemble block content: transliterated static parts + original tags
+      // Also build character position mapping for format_ranges
       const results: Record<string, string> = {};
       for (const [blockId, { parts }] of Object.entries(blockSegments)) {
+        let origOffset = 0;
+        let newOffset = 0;
+        const charMap: number[] = [];
+
         const assembled = parts.map((part, i) => {
-          if (i % 2 === 1) return part; // tag like {purush} — keep as-is
+          if (i % 2 === 1) {
+            for (let c = 0; c < part.length; c++) {
+              charMap[origOffset + c] = newOffset + c;
+            }
+            origOffset += part.length;
+            newOffset += part.length;
+            return part;
+          }
           const key = `seg:${blockId}:${i}`;
           const translated = segResults[key];
-          if (!translated) return part;
-          // Preserve original leading/trailing whitespace
-          const leadMatch = part.match(/^(\s*)/);
-          const trailMatch = part.match(/(\s*)$/);
-          const lead = leadMatch ? leadMatch[1] : "";
-          const trail = trailMatch ? trailMatch[1] : "";
-          return lead + translated.trim() + trail;
+          const finalPart = translated
+            ? (() => {
+                const leadMatch = part.match(/^(\s*)/);
+                const trailMatch = part.match(/(\s*)$/);
+                const lead = leadMatch ? leadMatch[1] : "";
+                const trail = trailMatch ? trailMatch[1] : "";
+                return lead + translated.trim() + trail;
+              })()
+            : part;
+
+          const origLen = part.length;
+          const newLen = finalPart.length;
+          for (let c = 0; c < origLen; c++) {
+            charMap[origOffset + c] = newOffset + Math.round((c / Math.max(1, origLen)) * newLen);
+          }
+          origOffset += origLen;
+          newOffset += newLen;
+          return finalPart;
         }).join("");
+
+        charMap[origOffset] = newOffset;
         results[`block:${blockId}`] = assembled;
+        results[`charmap:${blockId}`] = JSON.stringify(charMap);
       }
       setBlockTranslitCache(results);
+      setTranslitDone(true);
     }, 500);
 
     return () => { if (blockTranslitTimer.current) clearTimeout(blockTranslitTimer.current); };
@@ -167,9 +216,34 @@ export default function PreviewPlayer() {
     if (Object.keys(blockTranslitCache).length === 0) return blocks;
     return blocks.map((block): TextBlock => {
       const translitContent = blockTranslitCache[`block:${block.id}`];
-      return translitContent ? { ...block, content: translitContent } : block;
+      if (!translitContent) return block;
+
+      let remappedRanges = block.format_ranges;
+      const charMapStr = blockTranslitCache[`charmap:${block.id}`];
+      if (remappedRanges && remappedRanges.length > 0 && charMapStr) {
+        try {
+          const charMap: number[] = JSON.parse(charMapStr);
+          remappedRanges = remappedRanges.map((r: FormatRange): FormatRange => ({
+            ...r,
+            start: charMap[r.start] ?? r.start,
+            end: charMap[r.end] ?? r.end,
+          })).filter((r: FormatRange) => r.end > r.start);
+        } catch {
+          // Keep original on error
+        }
+      }
+      return { ...block, content: translitContent, format_ranges: remappedRanges };
     });
   }, [template, blockTranslitCache]);
+
+  // Tags currently showing placeholder (user hasn't typed)
+  const placeholderTags = useMemo(() => {
+    const set = new Set<string>();
+    for (const [tag, val] of Object.entries(placeholderValues)) {
+      if (!fieldValues[tag] && !transliteratedValues[tag]) set.add(tag);
+    }
+    return set;
+  }, [placeholderValues, fieldValues, transliteratedValues]);
 
   const inputProps = useMemo(
     () => ({
@@ -177,6 +251,7 @@ export default function PreviewPlayer() {
       textBlocks: previewBlocks,
       tagValues: effectiveValues,
       fontFamilies,
+      placeholderTags: placeholderTags.size > 0 ? Array.from(placeholderTags) : undefined,
       width: template?.width || 1080,
       height: template?.height || 1920,
       textColorOverrides: Object.keys(textColorOverrides).length > 0 ? textColorOverrides : undefined,
@@ -184,8 +259,54 @@ export default function PreviewPlayer() {
       defaultFontFamily: template?.default_font_id ? fontFamilies[template.default_font_id] : undefined,
       overrideFontFamily: font?.family_name,
     }),
-    [previewBlocks, effectiveValues, fontFamilies, videoUrl, textColorOverrides, font, template?.default_font_id, template?.width, template?.height, template?.default_text_color]
+    [previewBlocks, effectiveValues, fontFamilies, videoUrl, textColorOverrides, font, placeholderTags, template?.default_font_id, template?.width, template?.height, template?.default_text_color]
   );
+
+  // Check if template uses regional (non-English) font
+  const needsTransliteration = useMemo(() => {
+    if (!template || fontList.length === 0) return false;
+    const blocks = template.text_blocks ?? [];
+    for (const block of blocks) {
+      const effectiveFontId = block.font_id ?? template.default_font_id;
+      if (!effectiveFontId) continue;
+      const f = fontList.find((ft) => ft.id === effectiveFontId);
+      if (f && f.language !== "english") return true;
+    }
+    return false;
+  }, [template, fontList]);
+
+  // Tag values ready: either no transliteration needed, or transliterated values exist
+  const hasFieldInput = Object.values(fieldValues).some((v) => v.trim());
+  const tagValuesReady = !needsTransliteration || !hasFieldInput || Object.keys(transliteratedValues).length > 0;
+  const blockContentReady = !needsTransliteration || translitDone;
+  const previewReady = tagValuesReady && blockContentReady;
+
+  // Pause player while translating, resume when done
+  useEffect(() => {
+    const player = playerRef.current;
+    if (!player) return;
+    if (!previewReady) {
+      if (player.isPlaying()) {
+        wasPlayingRef.current = true;
+        player.pause();
+      }
+    } else if (wasPlayingRef.current) {
+      wasPlayingRef.current = false;
+      player.play();
+    }
+  }, [previewReady]);
+
+  // Seek to block start_time when user focuses an input
+  useEffect(() => {
+    if (seekToTime === null || !template || !playerRef.current) return;
+    const fps = template.fps || 30;
+    const frame = Math.round(seekToTime * fps);
+    playerRef.current.seekTo(frame);
+    if (!playerRef.current.isPlaying()) {
+      playerRef.current.play();
+    }
+    useEditorStore.getState().clearSeek();
+  }, [seekToTime, template]);
 
   if (!template) return null;
 
@@ -193,7 +314,18 @@ export default function PreviewPlayer() {
     <div className="card p-4 sticky top-20">
       <p className="text-sm font-medium text-slate-500 mb-3">Live Preview</p>
       <div style={{ position: "relative", width: 360, height: 640 }}>
+        {!previewReady && (
+          <div className="absolute inset-0 flex items-center justify-center rounded-xl z-10 pointer-events-none"
+            style={{ background: "rgba(0,0,0,0.3)", backdropFilter: "blur(2px)" }}
+          >
+            <div className="text-center">
+              <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin mx-auto mb-1.5" />
+              <p className="text-[10px] text-white/70">Translating...</p>
+            </div>
+          </div>
+        )}
         <Player
+          ref={playerRef as React.RefObject<PlayerRef>}
           component={GenericTemplate}
           inputProps={inputProps}
           durationInFrames={template.duration_frames}

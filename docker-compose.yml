@@ -33,6 +33,7 @@ services:
     environment:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin123}
+      MINIO_API_CORS_ALLOW_ORIGIN: "*"
     ports:
       - "9000:9000"
       - "9001:9001"
@@ -50,12 +51,13 @@ services:
       minio:
         condition: service_healthy
     entrypoint: >
-      /bin/sh -c "
+      /bin/sh -c '
       mc alias set local http://minio:9000 $${MINIO_ROOT_USER:-minioadmin} $${MINIO_ROOT_PASSWORD:-minioadmin123};
       mc mb local/$${S3_BUCKET_NAME:-invitation-video} --ignore-existing;
       mc anonymous set download local/$${S3_BUCKET_NAME:-invitation-video}/fonts;
+      echo CORS configured via MINIO_API_CORS_ALLOW_ORIGIN env var;
       exit 0;
-      "
+      '
 
   backend:
     build:
@@ -105,6 +107,29 @@ services:
       - /app/node_modules
     env_file:
       - .env
+
+  renderer:
+    build:
+      context: ./renderer
+      dockerfile: Dockerfile
+    ports:
+      - "3100:3100"
+    shm_size: "2gb"
+    volumes:
+      - ./renderer:/app
+      - ./frontend:/frontend
+      - /app/node_modules
+    environment:
+      RENDERER_PORT: 3100
+      RENDER_CONCURRENCY: ${RENDER_CONCURRENCY:-3}
+      MAX_PARALLEL_JOBS: ${MAX_PARALLEL_JOBS:-2}
+    deploy:
+      resources:
+        limits:
+          memory: 3g
+    depends_on:
+      minio-init:
+        condition: service_completed_successfully
 
 volumes:
   pg-data:

@@ -1,10 +1,11 @@
 import { useCurrentFrame, useVideoConfig, interpolate, Easing } from "remotion";
-import type { TextBlock } from "@/types";
+import type { TextBlock, FormatRange } from "@/types";
 
 interface AnimatedTextBlockProps {
   block: TextBlock;
   tagValues: Record<string, string>;
   fontFamilies: Record<string, string>;
+  placeholderTags?: Set<string> | null;
   videoWidth: number;
   videoHeight: number;
   textColorOverrides?: Record<string, string>;
@@ -185,6 +186,60 @@ function applyEntryAnim(
       });
       break;
     }
+
+    case "cinematic_zoom":
+      s.opacity = interpolate(frame, [inStart, inStart + Math.round((inEnd - inStart) * 0.3)], [0, 1], CLAMP);
+      s.scale = interpolate(frame, [inStart, inEnd], [3, 1], {
+        ...CLAMP, easing: Easing.out(Easing.cubic),
+      });
+      s.blur = interpolate(frame, [inStart, inStart + Math.round((inEnd - inStart) * 0.5)], [8, 0], CLAMP);
+      break;
+
+    case "rubber_band": {
+      const rp = interpolate(frame, [inStart, inEnd], [0, 1], CLAMP);
+      s.opacity = Math.min(1, rp * 3);
+      const bounce = rp < 0.4
+        ? interpolate(rp, [0, 0.2, 0.4], [0.3, 1.25, 0.9], CLAMP)
+        : rp < 0.6
+        ? interpolate(rp, [0.4, 0.5, 0.6], [0.9, 1.1, 0.95], CLAMP)
+        : interpolate(rp, [0.6, 0.8, 1], [0.95, 1.03, 1], CLAMP);
+      s.scale = bounce;
+      break;
+    }
+
+    case "shimmer_in":
+      s.opacity = interpolate(frame, [inStart, inEnd], [0, 1], CLAMP);
+      s.scale = interpolate(frame, [inStart, inEnd], [0.95, 1], {
+        ...CLAMP, easing: Easing.out(Easing.cubic),
+      });
+      s.blur = interpolate(frame, [inStart, inStart + Math.round((inEnd - inStart) * 0.4)], [6, 0], CLAMP);
+      s.letterSpacing = interpolate(frame, [inStart, inEnd], [fontSize * 0.2, 0], {
+        ...CLAMP, easing: Easing.out(Easing.cubic),
+      });
+      break;
+
+    case "drop_bounce": {
+      const dp = interpolate(frame, [inStart, inEnd], [0, 1], CLAMP);
+      s.opacity = Math.min(1, dp * 4);
+      s.translateY = dp < 0.5
+        ? interpolate(dp, [0, 0.5], [-fontSize * 3, 0], { ...CLAMP, easing: Easing.in(Easing.quad) })
+        : dp < 0.7
+        ? interpolate(dp, [0.5, 0.6, 0.7], [0, -fontSize * 0.4, 0], CLAMP)
+        : dp < 0.85
+        ? interpolate(dp, [0.7, 0.78, 0.85], [0, -fontSize * 0.15, 0], CLAMP)
+        : 0;
+      break;
+    }
+
+    case "spiral_in":
+      s.opacity = interpolate(frame, [inStart, inEnd], [0, 1], CLAMP);
+      s.scale = interpolate(frame, [inStart, inEnd], [0, 1], {
+        ...CLAMP, easing: Easing.out(Easing.cubic),
+      });
+      s.rotate = interpolate(frame, [inStart, inEnd], [180, 0], {
+        ...CLAMP, easing: Easing.out(Easing.cubic),
+      });
+      break;
   }
 }
 
@@ -286,11 +341,388 @@ function applyExitAnim(
         ...CLAMP, easing: Easing.in(Easing.cubic),
       });
       break;
+
+    case "cinematic_zoom_out":
+      s.opacity *= interpolate(frame, [outStart + Math.round((outEnd - outStart) * 0.7), outEnd], [1, 0], CLAMP);
+      s.scale *= interpolate(frame, [outStart, outEnd], [1, 3], {
+        ...CLAMP, easing: Easing.in(Easing.cubic),
+      });
+      s.blur = interpolate(frame, [outStart + Math.round((outEnd - outStart) * 0.5), outEnd], [0, 8], CLAMP);
+      break;
+
+    case "rubber_band_out": {
+      const rp = interpolate(frame, [outStart, outEnd], [0, 1], CLAMP);
+      s.opacity *= rp > 0.8 ? interpolate(rp, [0.8, 1], [1, 0], CLAMP) : 1;
+      const bounce = rp < 0.3
+        ? interpolate(rp, [0, 0.15, 0.3], [1, 1.2, 0.8], CLAMP)
+        : interpolate(rp, [0.3, 0.6, 1], [0.8, 1.1, 0], CLAMP);
+      s.scale *= bounce;
+      break;
+    }
+
+    case "spiral_out":
+      s.opacity *= interpolate(frame, [outStart, outEnd], [1, 0], CLAMP);
+      s.scale *= interpolate(frame, [outStart, outEnd], [1, 0], {
+        ...CLAMP, easing: Easing.in(Easing.cubic),
+      });
+      s.rotate += interpolate(frame, [outStart, outEnd], [0, 180], {
+        ...CLAMP, easing: Easing.in(Easing.cubic),
+      });
+      break;
+
+    // Per-char exit types handled in renderPerCharExit — skip here
+    case "type_blur_out":
+    case "pop_out":
+    case "wave_out":
+      break;
   }
 }
 
-/** Per-character animation — returns array of styled spans */
-function renderPerChar(
+/** Per-character EXIT animation (reverse order: last char disappears first) */
+function renderPerCharExit(
+  text: string,
+  frame: number,
+  outStart: number,
+  outEnd: number,
+  fps: number,
+  type: string,
+  fontSize: number,
+  direction: string = "ltr",
+) {
+  const graphemes = splitGraphemes(text);
+  const totalChars = graphemes.length;
+  if (totalChars === 0) return null;
+
+  const animFrames = outEnd - outStart;
+  const perCharFrames = Math.max(1, Math.floor(animFrames / totalChars));
+
+  return graphemes.map((char, i) => {
+    // ltr = first char exits first, rtl = last char exits first
+    const animIdx = direction === "rtl" ? totalChars - 1 - i : i;
+    const charStart = outStart + animIdx * perCharFrames;
+    const charEnd = Math.max(charStart + 1, Math.min(charStart + Math.round(fps * 0.35), outEnd));
+
+    let charOpacity = 1;
+    let charBlur = 0;
+    let charScale = 1;
+    let charTranslateY = 0;
+
+    if (frame < charStart) {
+      charOpacity = 1;
+    } else if (frame > charEnd) {
+      charOpacity = 0;
+    } else if (type === "type_blur_out") {
+      charOpacity = interpolate(frame, [charStart, charEnd], [1, 0], CLAMP);
+      charBlur = interpolate(frame, [charStart, charEnd], [0, 12], CLAMP);
+    } else if (type === "pop_out") {
+      const popMid = charStart + Math.round(fps * 0.15);
+      if (popMid < charEnd) {
+        charScale = interpolate(frame, [charStart, popMid, charEnd], [1, 1.3, 0], {
+          ...CLAMP, easing: Easing.in(Easing.cubic),
+        });
+      } else {
+        charScale = interpolate(frame, [charStart, charEnd], [1, 0], CLAMP);
+      }
+      charOpacity = frame >= charEnd ? 0 : 1;
+    } else if (type === "wave_out") {
+      charOpacity = interpolate(frame, [charStart, charEnd], [1, 0], CLAMP);
+      charTranslateY = interpolate(frame, [charStart, charEnd], [0, fontSize * 0.5], {
+        ...CLAMP, easing: Easing.in(Easing.sin),
+      });
+    }
+
+    return (
+      <span
+        key={i}
+        style={{
+          display: "inline-block",
+          opacity: charOpacity,
+          transform: `scale(${charScale}) translateY(${charTranslateY}px)`,
+          filter: charBlur > 0 ? `blur(${charBlur}px)` : undefined,
+          whiteSpace: char === " " ? "pre" : undefined,
+        }}
+      >
+        {char}
+      </span>
+    );
+  });
+}
+
+/** Per-character EXIT with rich format support */
+function renderPerCharRichExit(
+  text: string,
+  frame: number,
+  outStart: number,
+  outEnd: number,
+  fps: number,
+  type: string,
+  fontSize: number,
+  block: TextBlock,
+  tagValues: Record<string, string>,
+  fontFamilies: Record<string, string>,
+  direction: string = "ltr",
+) {
+  const graphemes = splitGraphemes(text);
+  const totalChars = graphemes.length;
+  if (totalChars === 0) return null;
+
+  // Get per-grapheme format info
+  let charFormats: Array<{ bold?: boolean; italic?: boolean; color?: string; stroke_color?: string; stroke_width?: number }> = [];
+  const rawRanges = block.format_ranges;
+  if (rawRanges && rawRanges.length > 0) {
+    let mappedRanges: FormatRange[];
+    try {
+      const { mapIndex } = expandTags(block.content, tagValues);
+      mappedRanges = mapRangesToExpanded(rawRanges, mapIndex);
+    } catch {
+      mappedRanges = [];
+    }
+    let codeIdx = 0;
+    charFormats = graphemes.map((g) => {
+      let bold: boolean | undefined;
+      let italic: boolean | undefined;
+      let color: string | undefined;
+      let stroke_color: string | undefined;
+      let stroke_width: number | undefined;
+      for (const r of mappedRanges) {
+        if (r.start <= codeIdx && r.end > codeIdx) {
+          if (r.bold !== undefined) bold = r.bold;
+          if (r.italic !== undefined) italic = r.italic;
+          if (r.color !== undefined) color = r.color;
+          if (r.stroke_color !== undefined) stroke_color = r.stroke_color;
+          if (r.stroke_width !== undefined) stroke_width = r.stroke_width;
+        }
+      }
+      codeIdx += g.length;
+      return { bold, italic, color, stroke_color, stroke_width };
+    });
+  }
+
+  const animFrames = outEnd - outStart;
+  const perCharFrames = Math.max(1, Math.floor(animFrames / totalChars));
+
+  return graphemes.map((char, i) => {
+    const animIdx = direction === "rtl" ? totalChars - 1 - i : i;
+    const charStart = outStart + animIdx * perCharFrames;
+    const charEnd = Math.max(charStart + 1, Math.min(charStart + Math.round(fps * 0.35), outEnd));
+
+    let charOpacity = 1;
+    let charBlur = 0;
+    let charScale = 1;
+    let charTranslateY = 0;
+
+    if (frame < charStart) {
+      charOpacity = 1;
+    } else if (frame > charEnd) {
+      charOpacity = 0;
+    } else if (type === "type_blur_out") {
+      charOpacity = interpolate(frame, [charStart, charEnd], [1, 0], CLAMP);
+      charBlur = interpolate(frame, [charStart, charEnd], [0, 12], CLAMP);
+    } else if (type === "pop_out") {
+      const popMid = charStart + Math.round(fps * 0.15);
+      if (popMid < charEnd) {
+        charScale = interpolate(frame, [charStart, popMid, charEnd], [1, 1.3, 0], {
+          ...CLAMP, easing: Easing.in(Easing.cubic),
+        });
+      } else {
+        charScale = interpolate(frame, [charStart, charEnd], [1, 0], CLAMP);
+      }
+      charOpacity = frame >= charEnd ? 0 : 1;
+    } else if (type === "wave_out") {
+      charOpacity = interpolate(frame, [charStart, charEnd], [1, 0], CLAMP);
+      charTranslateY = interpolate(frame, [charStart, charEnd], [0, fontSize * 0.5], {
+        ...CLAMP, easing: Easing.in(Easing.sin),
+      });
+    }
+
+    const fmt = charFormats[i];
+
+    return (
+      <span
+        key={i}
+        style={{
+          display: "inline-block",
+          opacity: charOpacity,
+          transform: `scale(${charScale}) translateY(${charTranslateY}px)`,
+          filter: charBlur > 0 ? `blur(${charBlur}px)` : undefined,
+          whiteSpace: char === " " ? "pre" : undefined,
+          fontWeight: fmt?.bold ? "bold" : undefined,
+          fontStyle: fmt?.italic ? "italic" : undefined,
+          color: fmt?.color || undefined,
+          WebkitTextStroke: fmt?.stroke_color ? `${fmt.stroke_width ?? 1}px ${fmt.stroke_color}` : undefined,
+          paintOrder: fmt?.stroke_color ? "stroke fill" : undefined,
+        }}
+      >
+        {char}
+      </span>
+    );
+  });
+}
+
+/**
+ * Build a mapping from raw content indices to expanded (tag-substituted) indices.
+ * Returns the expanded text and a function to map raw index -> expanded index.
+ */
+function expandTags(
+  content: string,
+  tagValues: Record<string, string>,
+): { expanded: string; mapIndex: (rawIdx: number) => number } {
+  const tagRegex = /\{(\w+)\}/g;
+  // Build offset array: for each raw position, how much to shift in expanded text
+  const offsets: number[] = new Array(content.length + 1).fill(0);
+  let cumulativeDelta = 0;
+  let match;
+
+  tagRegex.lastIndex = 0;
+  while ((match = tagRegex.exec(content)) !== null) {
+    const tagKey = match[1];
+    const replacement = tagValues[tagKey] ?? "";
+    const tagLen = match[0].length;
+    const repLen = replacement.length;
+    cumulativeDelta += repLen - tagLen;
+
+    // Set offset for positions from end of this tag onwards
+    // (positions inside the tag map to start of replacement)
+    for (let i = match.index + tagLen; i <= content.length; i++) {
+      offsets[i] = cumulativeDelta;
+    }
+    // Positions inside the tag itself: map to replacement start
+    for (let i = match.index + 1; i < match.index + tagLen; i++) {
+      offsets[i] = offsets[match.index]; // same as tag start position
+    }
+  }
+
+  // Build expanded text
+  let expanded = "";
+  let lastIndex = 0;
+  tagRegex.lastIndex = 0;
+  while ((match = tagRegex.exec(content)) !== null) {
+    expanded += content.slice(lastIndex, match.index);
+    expanded += tagValues[match[1]] ?? "";
+    lastIndex = match.index + match[0].length;
+  }
+  expanded += content.slice(lastIndex);
+
+  const mapIndex = (rawIdx: number): number => {
+    return rawIdx + (offsets[rawIdx] ?? 0);
+  };
+
+  return { expanded, mapIndex };
+}
+
+/** Map format ranges from raw content indices to expanded text indices */
+function mapRangesToExpanded(
+  ranges: FormatRange[],
+  mapIndex: (rawIdx: number) => number,
+): FormatRange[] {
+  return ranges.map((r) => ({
+    ...r,
+    start: mapIndex(r.start),
+    end: mapIndex(r.end),
+  }));
+}
+
+interface RichSegment {
+  text: string;
+  bold?: boolean;
+  italic?: boolean;
+  color?: string;
+  stroke_color?: string;
+  stroke_width?: number;
+}
+
+/** Split expanded text into segments based on format ranges */
+function splitRichSegments(text: string, ranges: FormatRange[]): RichSegment[] {
+  if (!text || ranges.length === 0) return [{ text }];
+
+  const boundaries = new Set<number>([0, text.length]);
+  for (const r of ranges) {
+    boundaries.add(Math.max(0, Math.min(r.start, text.length)));
+    boundaries.add(Math.max(0, Math.min(r.end, text.length)));
+  }
+  const sorted = Array.from(boundaries).sort((a, b) => a - b);
+  const segments: RichSegment[] = [];
+
+  for (let i = 0; i < sorted.length - 1; i++) {
+    const start = sorted[i];
+    const end = sorted[i + 1];
+    if (start === end) continue;
+
+    let bold: boolean | undefined;
+    let italic: boolean | undefined;
+    let color: string | undefined;
+    let stroke_color: string | undefined;
+    let stroke_width: number | undefined;
+
+    for (const r of ranges) {
+      if (r.start <= start && r.end >= end) {
+        if (r.bold !== undefined) bold = r.bold;
+        if (r.italic !== undefined) italic = r.italic;
+        if (r.color !== undefined) color = r.color;
+        if (r.stroke_color !== undefined) stroke_color = r.stroke_color;
+        if (r.stroke_width !== undefined) stroke_width = r.stroke_width;
+      }
+    }
+
+    segments.push({ text: text.slice(start, end), bold, italic, color, stroke_color, stroke_width });
+  }
+
+  return segments;
+}
+
+/** Render text with rich formatting spans */
+function renderRichText(
+  expandedText: string,
+  block: TextBlock,
+  tagValues: Record<string, string>,
+  fontFamilies: Record<string, string>,
+): React.ReactNode {
+  const rawRanges = block.format_ranges;
+  if (!rawRanges || rawRanges.length === 0) return expandedText;
+
+  let segments: RichSegment[];
+  try {
+    const { mapIndex } = expandTags(block.content, tagValues);
+    const mappedRanges = mapRangesToExpanded(rawRanges, mapIndex);
+    segments = splitRichSegments(expandedText, mappedRanges);
+  } catch {
+    return expandedText;
+  }
+
+  return segments.map((seg, i) => {
+    const hasStyle = seg.bold || seg.italic || seg.color || seg.stroke_color;
+    if (!hasStyle) return seg.text;
+    return (
+      <span
+        key={i}
+        style={{
+          fontWeight: seg.bold ? "bold" : undefined,
+          fontStyle: seg.italic ? "italic" : undefined,
+          color: seg.color || undefined,
+          WebkitTextStroke: seg.stroke_color
+            ? `${seg.stroke_width ?? 1}px ${seg.stroke_color}`
+            : undefined,
+          paintOrder: seg.stroke_color ? "stroke fill" : undefined,
+        }}
+      >
+        {seg.text}
+      </span>
+    );
+  });
+}
+
+/** Split text into grapheme clusters (keeps Gujarati conjuncts + matras intact) */
+function splitGraphemes(text: string): string[] {
+  if (typeof Intl !== "undefined" && Intl.Segmenter) {
+    const segmenter = new Intl.Segmenter(undefined, { granularity: "grapheme" });
+    return Array.from(segmenter.segment(text), (s) => s.segment);
+  }
+  // Fallback: spread handles surrogate pairs but not combining marks
+  return [...text];
+}
+
+/** Per-character rendering with rich format support */
+function renderPerCharRich(
   text: string,
   frame: number,
   inStart: number,
@@ -298,16 +730,54 @@ function renderPerChar(
   fps: number,
   type: string,
   fontSize: number,
+  block: TextBlock,
+  tagValues: Record<string, string>,
+  fontFamilies: Record<string, string>,
+  direction: string = "ltr",
 ) {
-  const totalChars = text.length;
+  const graphemes = splitGraphemes(text);
+  const totalChars = graphemes.length;
   if (totalChars === 0) return null;
+
+  // Get per-grapheme format info (map using code-point index)
+  let charFormats: Array<{ bold?: boolean; italic?: boolean; color?: string; stroke_color?: string; stroke_width?: number }> = [];
+  const rawRanges = block.format_ranges;
+  if (rawRanges && rawRanges.length > 0) {
+    let mappedRanges: FormatRange[];
+    try {
+      const { mapIndex } = expandTags(block.content, tagValues);
+      mappedRanges = mapRangesToExpanded(rawRanges, mapIndex);
+    } catch {
+      mappedRanges = [];
+    }
+    let codeIdx = 0;
+    charFormats = graphemes.map((g) => {
+      let bold: boolean | undefined;
+      let italic: boolean | undefined;
+      let color: string | undefined;
+      let stroke_color: string | undefined;
+      let stroke_width: number | undefined;
+      for (const r of mappedRanges) {
+        if (r.start <= codeIdx && r.end > codeIdx) {
+          if (r.bold !== undefined) bold = r.bold;
+          if (r.italic !== undefined) italic = r.italic;
+          if (r.color !== undefined) color = r.color;
+          if (r.stroke_color !== undefined) stroke_color = r.stroke_color;
+          if (r.stroke_width !== undefined) stroke_width = r.stroke_width;
+        }
+      }
+      codeIdx += g.length;
+      return { bold, italic, color, stroke_color, stroke_width };
+    });
+  }
 
   const animFrames = inEnd - inStart;
   const perCharFrames = Math.max(1, Math.floor(animFrames / totalChars));
 
-  return text.split("").map((char, i) => {
-    const charStart = inStart + i * perCharFrames;
-    const charEnd = Math.min(charStart + Math.round(fps * 0.35), inEnd);
+  return graphemes.map((char, i) => {
+    const animIdx = direction === "rtl" ? totalChars - 1 - i : i;
+    const charStart = inStart + animIdx * perCharFrames;
+    const charEnd = Math.max(charStart + 1, Math.min(charStart + Math.round(fps * 0.35), inEnd));
 
     let charOpacity = 0;
     let charBlur = 0;
@@ -321,9 +791,88 @@ function renderPerChar(
       charBlur = interpolate(frame, [charStart, charEnd], [12, 0], CLAMP);
     } else if (type === "pop_reveal") {
       charOpacity = frame >= charStart ? 1 : 0;
-      charScale = interpolate(frame, [charStart, charStart + Math.round(fps * 0.15), charEnd], [0, 1.3, 1], {
-        ...CLAMP, easing: Easing.out(Easing.cubic),
+      const popMid = charStart + Math.round(fps * 0.15);
+      if (popMid < charEnd) {
+        charScale = interpolate(frame, [charStart, popMid, charEnd], [0, 1.3, 1], {
+          ...CLAMP, easing: Easing.out(Easing.cubic),
+        });
+      } else {
+        charScale = interpolate(frame, [charStart, charEnd], [0, 1], CLAMP);
+      }
+    } else if (type === "wave_in") {
+      charOpacity = interpolate(frame, [charStart, charEnd], [0, 1], CLAMP);
+      charTranslateY = interpolate(frame, [charStart, charEnd], [fontSize * 0.5, 0], {
+        ...CLAMP, easing: Easing.out(Easing.sin),
       });
+    }
+
+    const fmt = charFormats[i];
+
+    return (
+      <span
+        key={i}
+        style={{
+          display: "inline-block",
+          opacity: charOpacity,
+          transform: `scale(${charScale}) translateY(${charTranslateY}px)`,
+          filter: charBlur > 0 ? `blur(${charBlur}px)` : undefined,
+          whiteSpace: char === " " ? "pre" : undefined,
+          fontWeight: fmt?.bold ? "bold" : undefined,
+          fontStyle: fmt?.italic ? "italic" : undefined,
+          color: fmt?.color || undefined,
+          WebkitTextStroke: fmt?.stroke_color ? `${fmt.stroke_width ?? 1}px ${fmt.stroke_color}` : undefined,
+          paintOrder: fmt?.stroke_color ? "stroke fill" : undefined,
+        }}
+      >
+        {char}
+      </span>
+    );
+  });
+}
+
+/** Per-character animation — returns array of styled spans */
+function renderPerChar(
+  text: string,
+  frame: number,
+  inStart: number,
+  inEnd: number,
+  fps: number,
+  type: string,
+  fontSize: number,
+  direction: string = "ltr",
+) {
+  const graphemes = splitGraphemes(text);
+  const totalChars = graphemes.length;
+  if (totalChars === 0) return null;
+
+  const animFrames = inEnd - inStart;
+  const perCharFrames = Math.max(1, Math.floor(animFrames / totalChars));
+
+  return graphemes.map((char, i) => {
+    const animIdx = direction === "rtl" ? totalChars - 1 - i : i;
+    const charStart = inStart + animIdx * perCharFrames;
+    const charEnd = Math.max(charStart + 1, Math.min(charStart + Math.round(fps * 0.35), inEnd));
+
+    let charOpacity = 0;
+    let charBlur = 0;
+    let charScale = 1;
+    let charTranslateY = 0;
+
+    if (frame < charStart) {
+      charOpacity = 0;
+    } else if (type === "type_blur_reveal") {
+      charOpacity = interpolate(frame, [charStart, charEnd], [0, 1], CLAMP);
+      charBlur = interpolate(frame, [charStart, charEnd], [12, 0], CLAMP);
+    } else if (type === "pop_reveal") {
+      charOpacity = frame >= charStart ? 1 : 0;
+      const popMid = charStart + Math.round(fps * 0.15);
+      if (popMid < charEnd) {
+        charScale = interpolate(frame, [charStart, popMid, charEnd], [0, 1.3, 1], {
+          ...CLAMP, easing: Easing.out(Easing.cubic),
+        });
+      } else {
+        charScale = interpolate(frame, [charStart, charEnd], [0, 1], CLAMP);
+      }
     } else if (type === "wave_in") {
       charOpacity = interpolate(frame, [charStart, charEnd], [0, 1], CLAMP);
       charTranslateY = interpolate(frame, [charStart, charEnd], [fontSize * 0.5, 0], {
@@ -352,6 +901,7 @@ export default function AnimatedTextBlock({
   block,
   tagValues,
   fontFamilies,
+  placeholderTags,
   videoWidth,
   videoHeight,
   textColorOverrides,
@@ -363,6 +913,11 @@ export default function AnimatedTextBlock({
   const { fps } = useVideoConfig();
 
   const text = block.content.replace(/\{(\w+)\}/g, (_, tag) => tagValues[tag] ?? "");
+
+  // Check if any tag in this block is showing placeholder
+  const isPlaceholder = placeholderTags
+    ? /\{(\w+)\}/g.test(block.content) && Array.from(block.content.matchAll(/\{(\w+)\}/g)).some((m) => placeholderTags.has(m[1]))
+    : false;
   if (!text) return null;
 
   const fontSize = block.font_size_ratio * videoHeight;
@@ -386,9 +941,11 @@ export default function AnimatedTextBlock({
   const inEndFrame = Math.min(startFrame + Math.round(inDuration * fps), endFrame);
   const outStartFrame = Math.max(endFrame - Math.round(outDuration * fps), startFrame);
 
-  // Per-character entry animations
+  // Per-character entry/exit animations
   const perCharTypes = ["type_blur_reveal", "pop_reveal", "wave_in"];
+  const perCharOutTypes = ["type_blur_out", "pop_out", "wave_out"];
   const isPerChar = perCharTypes.includes(animationType);
+  const isPerCharOut = perCharOutTypes.includes(animationOut);
 
   const s: AnimState = {
     opacity: 1,
@@ -429,10 +986,11 @@ export default function AnimatedTextBlock({
     : block.text_align === "right" ? "right center"
     : "left center";
 
-  // For per-char entry: wrapper handles exit anim, chars handle entry
-  const wrapperOpacity = isPerChar ? (animationOut !== "none" && frame >= outStartFrame ? s.opacity : 1) : s.opacity;
-  const wrapperTransform = isPerChar
-    ? (animationOut !== "none" && frame >= outStartFrame
+  // For per-char entry/exit: wrapper handles non-per-char anim, chars handle per-char anim
+  const hasNonPerCharExit = animationOut !== "none" && !isPerCharOut && frame >= outStartFrame;
+  const wrapperOpacity = (isPerChar || isPerCharOut) ? (hasNonPerCharExit ? s.opacity : 1) : s.opacity;
+  const wrapperTransform = (isPerChar || isPerCharOut)
+    ? (hasNonPerCharExit
       ? `translate(${s.translateX}px, ${s.translateY}px) scale(${s.scale}) rotate(${s.rotate}deg)`
       : undefined)
     : `translate(${s.translateX}px, ${s.translateY}px) scale(${s.scale}) rotate(${s.rotate}deg)`;
@@ -452,7 +1010,7 @@ export default function AnimatedTextBlock({
         fontFamily,
         color: textColorOverrides?.[block.id] || textColorOverrides?._default || block.text_color || defaultTextColor || "#FFFFFF",
         textAlign: textAlignMap[block.text_align] as any,
-        opacity: wrapperOpacity,
+        opacity: isPlaceholder ? wrapperOpacity * 0.35 : wrapperOpacity,
         transform: wrapperTransform,
         transformOrigin,
         whiteSpace: "pre-wrap",
@@ -466,8 +1024,10 @@ export default function AnimatedTextBlock({
       }}
     >
       {isPerChar && frame < inEndFrame
-        ? renderPerChar(text, frame, startFrame, inEndFrame, fps, animationType, fontSize)
-        : s.displayText}
+        ? renderPerCharRich(text, frame, startFrame, inEndFrame, fps, animationType, fontSize, block, tagValues, fontFamilies, block.anim_in_direction ?? "ltr")
+        : isPerCharOut && frame >= outStartFrame
+        ? renderPerCharRichExit(text, frame, outStartFrame, endFrame, fps, animationOut, fontSize, block, tagValues, fontFamilies, block.anim_out_direction ?? "ltr")
+        : renderRichText(text, block, tagValues, fontFamilies)}
     </div>
   );
 }

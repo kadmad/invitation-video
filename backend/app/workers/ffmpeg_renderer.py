@@ -17,10 +17,11 @@ class FFmpegRenderer:
         height: int,
         text_color_override: dict[str, str] | None = None,
         default_text_color: str | None = None,
+        fallback_font_path: str | None = None,
     ):
         self.source_path = source_path
         self.output_path = output_path
-        self.default_font_path = default_font_path
+        self.default_font_path = default_font_path  # User-selected override — wins over everything
         self.font_paths = font_paths
         self.text_blocks = text_blocks
         self.tag_values = tag_values
@@ -28,12 +29,14 @@ class FFmpegRenderer:
         self.height = height
         self.text_color_override = text_color_override
         self.default_text_color = default_text_color or "#FFFFFF"
+        self.fallback_font_path = fallback_font_path  # Template default — used when block has no font
 
     @staticmethod
     def _escape_drawtext(text: str) -> str:
         """Escape text for FFmpeg drawtext filter."""
         # FFmpeg drawtext needs these chars escaped with backslash
         text = text.replace("\\", "\\\\")
+        text = text.replace("\n", " ")  # drawtext doesn't support multiline; flatten
         text = text.replace("'", "\u2019")  # Replace apostrophe with unicode right quote
         text = text.replace(":", "\\:")
         text = text.replace(";", "\\;")
@@ -58,11 +61,13 @@ class FFmpegRenderer:
         return re.sub(r"\{(\w+)\}", replacer, block.content)
 
     def _get_font_path(self, block: TextBlock) -> str:
-        """Font priority: user-selected override > per-block font > no font."""
+        """Font priority: user override > per-block font > template default > none."""
         if self.default_font_path:
             return self.default_font_path
         if block.font_id and str(block.font_id) in self.font_paths:
             return self.font_paths[str(block.font_id)]
+        if self.fallback_font_path:
+            return self.fallback_font_path
         return ""
 
     def _get_text_color(self, block: TextBlock) -> str:
@@ -145,7 +150,7 @@ class FFmpegRenderer:
 
         return ",".join(filters) if filters else ""
 
-    def render(self):
+    def render(self, crf: int = 23, preset: str = "medium"):
         filter_str = self.build_filter_complex()
 
         cmd = [
@@ -158,8 +163,8 @@ class FFmpegRenderer:
 
         cmd.extend([
             "-c:v", "libx264",
-            "-crf", "23",
-            "-preset", "medium",
+            "-crf", str(crf),
+            "-preset", preset,
             "-c:a", "copy",
             self.output_path,
         ])

@@ -9,6 +9,7 @@ import {
 } from "@/api/admin";
 import { transliterateBatch } from "@/api/transliterate";
 import ConfirmModal from "@/components/admin/ConfirmModal";
+import RichTextEditor from "@/components/admin/RichTextEditor";
 import FontPicker from "@/components/editor/FontPicker";
 import type { Font, TextBlock } from "@/types";
 import { clearAdminDraft } from "@/lib/adminDraft";
@@ -38,6 +39,11 @@ const ANIMATION_TYPES = [
   { value: "elastic_in", label: "Elastic In" },
   { value: "split_reveal", label: "Split Reveal" },
   { value: "flip_in", label: "Flip In" },
+  { value: "cinematic_zoom", label: "Cinematic Zoom" },
+  { value: "rubber_band", label: "Rubber Band" },
+  { value: "shimmer_in", label: "Shimmer In" },
+  { value: "drop_bounce", label: "Drop Bounce" },
+  { value: "spiral_in", label: "Spiral In" },
 ];
 
 const ANIMATION_OUT_TYPES = [
@@ -55,6 +61,12 @@ const ANIMATION_OUT_TYPES = [
   { value: "reveal_out_down", label: "Reveal Down" },
   { value: "split_close", label: "Split Close" },
   { value: "flip_out", label: "Flip Out" },
+  { value: "type_blur_out", label: "Blur Reveal Out" },
+  { value: "pop_out", label: "Pop Out" },
+  { value: "wave_out", label: "Wave Out" },
+  { value: "cinematic_zoom_out", label: "Cinematic Zoom" },
+  { value: "rubber_band_out", label: "Rubber Band" },
+  { value: "spiral_out", label: "Spiral Out" },
 ];
 
 const TEXT_ALIGNS = ["left", "center", "right"];
@@ -138,6 +150,11 @@ const ANIMATION_CSS: Record<string, string> = {
   elastic_in: "anim-elastic-in",
   split_reveal: "anim-split-reveal",
   flip_in: "anim-flip-in",
+  cinematic_zoom: "anim-scale-pop",
+  rubber_band: "anim-elastic-in",
+  shimmer_in: "anim-blur-in",
+  drop_bounce: "anim-bounce-in",
+  spiral_in: "anim-rotate-in",
 };
 
 const ANIMATION_OUT_CSS: Record<string, string> = {
@@ -155,6 +172,12 @@ const ANIMATION_OUT_CSS: Record<string, string> = {
   reveal_out_down: "anim-reveal-out-down",
   split_close: "anim-split-close",
   flip_out: "anim-flip-out",
+  type_blur_out: "anim-blur-out",
+  pop_out: "anim-scale-out",
+  wave_out: "anim-fade-out-down",
+  cinematic_zoom_out: "anim-scale-out",
+  rubber_band_out: "anim-scale-out",
+  spiral_out: "anim-rotate-in",
 };
 
 function AnimationPickerItem({
@@ -263,12 +286,12 @@ function BlockEditForm({
     onUpdateField("tag_config", Object.keys(updated).length > 0 ? updated : null);
   };
 
-  const updateTag = (oldKey: string, newKey: string, label: string) => {
+  const updateTag = (oldKey: string, newKey: string, patch: Record<string, any>) => {
     if (!block.tag_config) return;
     const updated = { ...block.tag_config };
     const config = updated[oldKey] ?? {};
     if (newKey !== oldKey) delete updated[oldKey];
-    updated[newKey] = { ...config, label };
+    updated[newKey] = { ...config, ...patch };
     onUpdateField("tag_config", updated);
   };
 
@@ -293,19 +316,50 @@ function BlockEditForm({
 
       <CollapsibleSection title="Content" defaultOpen={false}>
         <div>
-          <label className="block text-xs text-slate-500 mb-1">Text</label>
-          <textarea
-            ref={contentRef}
-            value={block.content}
-            onChange={(e) => onUpdateField("content", e.target.value)}
-            rows={2}
-            className="input-field text-sm w-full"
+          <RichTextEditor
+            content={block.content}
+            formatRanges={block.format_ranges ?? null}
+            onChange={(newContent, newRanges) => {
+              onUpdateField("content", newContent);
+              onUpdateField("format_ranges", newRanges.length > 0 ? newRanges : null);
+            }}
+            tagKeys={tagKeys}
           />
           {isRegionalFont && transliteratedPreview && (
             <p className="bg-primary-50 px-3 py-1.5 rounded-lg text-primary-500 text-sm font-medium mt-1">
               {transliteratedPreview}
             </p>
           )}
+          {/* Auto-detected tag placeholders */}
+          {(() => {
+            const detectedTags = Array.from(block.content.matchAll(/\{(\w+)\}/g), (m) => m[1]);
+            const unique = [...new Set(detectedTags)];
+            if (unique.length === 0) return null;
+            return (
+              <div className="mt-2 space-y-1.5">
+                {unique.map((tag) => (
+                  <div key={tag} className="flex items-center gap-2">
+                    <span className="text-xs text-slate-400 font-mono shrink-0 w-20 truncate" title={tag}>{`{${tag}}`}</span>
+                    <input
+                      type="text"
+                      value={block.tag_config?.[tag]?.placeholder ?? ""}
+                      onChange={(e) => {
+                        const existing = block.tag_config ?? {};
+                        const cfg = existing[tag] ?? {};
+                        onUpdateField("tag_config", {
+                          ...existing,
+                          [tag]: { ...cfg, placeholder: e.target.value },
+                        });
+                      }}
+                      className="input-field text-xs flex-1 text-slate-500"
+                      placeholder={`Default for ${tag}`}
+                    />
+                  </div>
+                ))}
+                <p className="text-[10px] text-slate-300">Leave empty to show tag name as-is</p>
+              </div>
+            );
+          })()}
         </div>
       </CollapsibleSection>
 
@@ -340,12 +394,30 @@ function BlockEditForm({
         </div>
         <div>
           <label className="block text-xs text-slate-500 mb-1">Text Color</label>
-          <input
-            type="color"
-            value={block.text_color || "#ffffff"}
-            onChange={(e) => onUpdateField("text_color", e.target.value)}
-            className="w-full h-8 rounded-xl border border-slate-200 cursor-pointer"
-          />
+          <div className="flex items-center gap-1.5">
+            <input
+              type="color"
+              value={block.text_color || "#ffffff"}
+              onChange={(e) => onUpdateField("text_color", e.target.value)}
+              className="flex-1 h-8 rounded-xl border border-slate-200 cursor-pointer"
+            />
+            {"EyeDropper" in window && (
+              <button
+                type="button"
+                onClick={async () => {
+                  try {
+                    const dropper = new (window as any).EyeDropper();
+                    const result = await dropper.open();
+                    onUpdateField("text_color", result.sRGBHex);
+                  } catch {}
+                }}
+                className="w-8 h-8 rounded border border-slate-200 flex items-center justify-center hover:bg-slate-50 transition shrink-0"
+                title="Pick color from screen"
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m2 22 1-1h3l9-9"/><path d="M3 21v-3l9-9"/><path d="m15 6 3.4-3.4a2.1 2.1 0 1 1 3 3L18 9l.4.4a2.1 2.1 0 1 1-3 3l-3.8-3.8a2.1 2.1 0 1 1 3-3L15 6"/></svg>
+              </button>
+            )}
+          </div>
         </div>
         <div>
           <label className="block text-xs text-slate-500 mb-1">Text Align</label>
@@ -379,6 +451,27 @@ function BlockEditForm({
             ))}
           </div>
         </div>
+        {["type_blur_reveal", "pop_reveal", "wave_in"].includes(block.animation_type) && (
+          <div className="flex items-center gap-2">
+            <label className="text-xs text-slate-500">Direction</label>
+            <div className="flex rounded-lg border border-slate-200 overflow-hidden">
+              <button
+                onClick={() => { onUpdateField("anim_in_direction", "ltr"); onPreviewAnimation(); }}
+                className={`px-2.5 py-1 text-xs font-medium transition ${
+                  (block.anim_in_direction ?? "ltr") === "ltr" ? "bg-primary-500 text-white" : "bg-white text-slate-500 hover:bg-slate-50"
+                }`}
+                title="Left to Right"
+              >A → Z</button>
+              <button
+                onClick={() => { onUpdateField("anim_in_direction", "rtl"); onPreviewAnimation(); }}
+                className={`px-2.5 py-1 text-xs font-medium transition ${
+                  (block.anim_in_direction ?? "ltr") === "rtl" ? "bg-primary-500 text-white" : "bg-white text-slate-500 hover:bg-slate-50"
+                }`}
+                title="Right to Left"
+              >Z → A</button>
+            </div>
+          </div>
+        )}
         <div>
           <label className="block text-xs text-slate-500 mb-1">
             Duration: {(block.anim_in_duration ?? 1.0).toFixed(1)}s
@@ -411,6 +504,27 @@ function BlockEditForm({
             ))}
           </div>
         </div>
+        {["type_blur_out", "pop_out", "wave_out"].includes(block.animation_out ?? "none") && (
+          <div className="flex items-center gap-2">
+            <label className="text-xs text-slate-500">Direction</label>
+            <div className="flex rounded-lg border border-slate-200 overflow-hidden">
+              <button
+                onClick={() => { onUpdateField("anim_out_direction", "ltr"); onPreviewAnimation(); }}
+                className={`px-2.5 py-1 text-xs font-medium transition ${
+                  (block.anim_out_direction ?? "ltr") === "ltr" ? "bg-primary-500 text-white" : "bg-white text-slate-500 hover:bg-slate-50"
+                }`}
+                title="Left to Right (first char exits first)"
+              >A → Z</button>
+              <button
+                onClick={() => { onUpdateField("anim_out_direction", "rtl"); onPreviewAnimation(); }}
+                className={`px-2.5 py-1 text-xs font-medium transition ${
+                  (block.anim_out_direction ?? "ltr") === "rtl" ? "bg-primary-500 text-white" : "bg-white text-slate-500 hover:bg-slate-50"
+                }`}
+                title="Right to Left (last char exits first)"
+              >Z → A</button>
+            </div>
+          </div>
+        )}
         <div>
           <label className="block text-xs text-slate-500 mb-1">
             Duration: {(block.anim_out_duration ?? 1.0).toFixed(1)}s
@@ -471,30 +585,39 @@ function BlockEditForm({
           ) : (
             <div className="space-y-2">
               {tagKeys.map((key) => (
-                <div key={key} className="flex items-center gap-2 bg-slate-50 rounded-lg p-2">
+                <div key={key} className="bg-slate-50 rounded-lg p-2 space-y-1.5">
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="text"
+                      value={key}
+                      onChange={(e) =>
+                        updateTag(key, e.target.value, { label: block.tag_config?.[key]?.label ?? "" })
+                      }
+                      className="input-field text-xs flex-1 font-mono"
+                      placeholder="tag_key"
+                    />
+                    <input
+                      type="text"
+                      value={block.tag_config?.[key]?.label ?? ""}
+                      onChange={(e) => updateTag(key, key, { label: e.target.value })}
+                      className="input-field text-xs flex-1"
+                      placeholder="Label"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => removeTag(key)}
+                      className="text-red-400 hover:text-red-600 text-xs"
+                    >
+                      x
+                    </button>
+                  </div>
                   <input
                     type="text"
-                    value={key}
-                    onChange={(e) =>
-                      updateTag(key, e.target.value, block.tag_config?.[key]?.label ?? "")
-                    }
-                    className="input-field text-xs flex-1 font-mono"
-                    placeholder="tag_key"
+                    value={block.tag_config?.[key]?.placeholder ?? ""}
+                    onChange={(e) => updateTag(key, key, { placeholder: e.target.value })}
+                    className="input-field text-xs w-full text-slate-400"
+                    placeholder="Placeholder text (e.g. Rahul & Priya)"
                   />
-                  <input
-                    type="text"
-                    value={block.tag_config?.[key]?.label ?? ""}
-                    onChange={(e) => updateTag(key, key, e.target.value)}
-                    className="input-field text-xs flex-1"
-                    placeholder="Label"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => removeTag(key)}
-                    className="text-red-400 hover:text-red-600 text-xs"
-                  >
-                    x
-                  </button>
                 </div>
               ))}
             </div>
@@ -600,6 +723,8 @@ export default function TextBlockPanel() {
         text_align: "center",
         animation_type: "none",
         animation_out: "none",
+        anim_in_direction: "ltr",
+        anim_out_direction: "ltr",
         anim_in_duration: 1.0,
         anim_out_duration: 1.0,
         start_time: startTime,
@@ -619,11 +744,12 @@ export default function TextBlockPanel() {
     if (!templateId || !target) return;
     try {
       await deleteTextBlock(templateId, target);
-      removeBlock(target);
-      if (deleteTarget) setDeleteTarget(null);
     } catch (err) {
-      console.error("Failed to delete block", err);
+      console.error("Failed to delete block from server", err);
+      // Still remove from UI even if server fails (block may not be saved yet)
     }
+    removeBlock(target);
+    if (deleteTarget) setDeleteTarget(null);
   };
 
   const handleDeleteAllVisible = async () => {
@@ -672,11 +798,14 @@ export default function TextBlockPanel() {
         font_id: source.font_id,
         animation_type: source.animation_type,
         animation_out: source.animation_out,
+        anim_in_direction: source.anim_in_direction,
+        anim_out_direction: source.anim_out_direction,
         anim_in_duration: source.anim_in_duration,
         anim_out_duration: source.anim_out_duration,
         start_time: source.start_time,
         end_time: source.end_time,
         tag_config: source.tag_config,
+        format_ranges: source.format_ranges,
       });
       addBlock(cloned);
     } catch (err) {

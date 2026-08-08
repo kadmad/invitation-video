@@ -43,6 +43,13 @@ from app.services.storage_service import storage_service
 router = APIRouter()
 
 
+def _queue_preview_if_published(template: Template):
+    """Queue preview video re-render if template is published and has source video."""
+    if template.is_published and template.video_key:
+        from app.workers.tasks import render_preview_task
+        render_preview_task.delay(str(template.id))
+
+
 # --- Dashboard ---
 
 @router.get("/stats")
@@ -303,10 +310,15 @@ async def update_template(
     template = result.scalar_one_or_none()
     if not template:
         raise HTTPException(status_code=404, detail="Template not found")
-    for key, value in body.model_dump(exclude_unset=True).items():
+    should_render = body.render_preview
+    update_data = body.model_dump(exclude_unset=True, exclude={"render_preview"})
+    for key, value in update_data.items():
         setattr(template, key, value)
     await db.commit()
     await db.refresh(template)
+
+    if should_render:
+        _queue_preview_if_published(template)
     return template
 
 

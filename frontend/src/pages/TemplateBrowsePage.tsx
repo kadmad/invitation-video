@@ -1,9 +1,41 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import { Link } from "react-router-dom";
 import { listTemplates } from "@/api/templates";
 import { listCategories } from "@/api/categories";
 import PageTransition from "@/components/common/PageTransition";
 import type { Template, Category } from "@/types";
+
+/* ── Shared token cache across all cards ── */
+const BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:8000/api";
+
+interface CachedToken { url: string; expiresAt: number }
+const tokenCache = new Map<string, CachedToken>();
+const inflight = new Map<string, Promise<CachedToken>>();
+
+async function getVideoUrl(templateId: string): Promise<CachedToken> {
+  const cached = tokenCache.get(templateId);
+  const now = Math.floor(Date.now() / 1000);
+  if (cached && cached.expiresAt > now + 30) return cached;
+
+  // Deduplicate concurrent requests for same template
+  const pending = inflight.get(templateId);
+  if (pending) return pending;
+
+  const promise = (async () => {
+    const res = await fetch(`${BASE_URL}/templates/${templateId}/video-token`);
+    const { expires_at, has_preview, video_url, preview_url } = await res.json();
+    const entry: CachedToken = {
+      url: has_preview && preview_url ? preview_url : video_url,
+      expiresAt: expires_at,
+    };
+    tokenCache.set(templateId, entry);
+    inflight.delete(templateId);
+    return entry;
+  })();
+
+  inflight.set(templateId, promise);
+  return promise;
+}
 
 function TemplateCard({
   template: t,
@@ -16,38 +48,60 @@ function TemplateCard({
 }) {
   const [hovered, setHovered] = useState(false);
   const [videoSrc, setVideoSrc] = useState<string | null>(null);
+  const [videoReady, setVideoReady] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
-  const tokenExpiresRef = useRef(0);
+  const cardRef = useRef<HTMLAnchorElement>(null);
   const isTouchRef = useRef(false);
   const hoveredRef = useRef(false);
 
-  const startPreview = async () => {
+  // Prefetch token + preload metadata when card enters viewport
+  useEffect(() => {
+    if (!t.video_key || !cardRef.current) return;
+    const el = cardRef.current;
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          // Prefetch token in background
+          getVideoUrl(t.id).then((cached) => {
+            setVideoSrc(cached.url);
+          }).catch(() => {});
+          observer.disconnect();
+        }
+      },
+      { rootMargin: "200px" } // start 200px before visible
+    );
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [t.id, t.video_key]);
+
+  const startPreview = useCallback(async () => {
     hoveredRef.current = true;
     setHovered(true);
     if (!t.video_key) return;
-    const now = Math.floor(Date.now() / 1000);
-    if (videoSrc && tokenExpiresRef.current > now + 10) {
-      videoRef.current?.play().catch(() => {});
-    } else {
-      try {
-        const baseUrl = import.meta.env.VITE_API_URL || "http://localhost:8000/api";
-        const res = await fetch(`${baseUrl}/templates/${t.id}/video-token`);
-        if (!hoveredRef.current) return; // mouse left during fetch
-        const { token, expires_at } = await res.json();
-        tokenExpiresRef.current = expires_at;
-        setVideoSrc(`${baseUrl}/templates/${t.id}/video?token=${token}`);
-      } catch { /* ignore */ }
-    }
-  };
 
-  const stopPreview = () => {
+    // If already have src and video ready, just play
+    if (videoSrc && videoReady) {
+      videoRef.current?.play().catch(() => {});
+      return;
+    }
+
+    // Token might already be cached from prefetch
+    try {
+      const cached = await getVideoUrl(t.id);
+      if (!hoveredRef.current) return;
+      setVideoSrc(cached.url);
+      // Video element will auto-play via onCanPlay
+    } catch { /* ignore */ }
+  }, [t.id, t.video_key, videoSrc, videoReady]);
+
+  const stopPreview = useCallback(() => {
     hoveredRef.current = false;
     setHovered(false);
     if (videoRef.current) {
       videoRef.current.pause();
       videoRef.current.currentTime = 0;
     }
-  };
+  }, []);
 
   const handleMouseEnter = () => {
     if (isTouchRef.current) return;
@@ -69,6 +123,7 @@ function TemplateCard({
 
   return (
     <Link
+      ref={cardRef}
       to={`/editor/${t.slug}`}
       className="card overflow-hidden group opacity-0 animate-slide-up select-none"
       style={{
@@ -86,18 +141,19 @@ function TemplateCard({
         {/* Static thumbnail */}
         {t.thumbnail_key ? (
           <img
-            src={`${import.meta.env.VITE_API_URL}/templates/${t.slug}/thumbnail`}
+            src={`${BASE_URL}/templates/${t.slug}/thumbnail`}
             alt={t.name}
+            loading="lazy"
             draggable={false}
             onContextMenu={(e) => e.preventDefault()}
             className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-200 pointer-events-none select-none ${
-              hovered && videoSrc ? "opacity-0" : "opacity-100"
+              hovered && videoReady ? "opacity-0" : "opacity-100"
             }`}
           />
         ) : (
           <div
             className={`absolute inset-0 w-full h-full flex items-center justify-center text-slate-300 transition-opacity duration-200 ${
-              hovered && videoSrc ? "opacity-0" : "opacity-100"
+              hovered && videoReady ? "opacity-0" : "opacity-100"
             }`}
           >
             <svg
@@ -116,29 +172,33 @@ function TemplateCard({
           </div>
         )}
 
-        {/* Video on hover — token-gated, no controls, no download */}
-        {t.video_key && (
+        {/* Video — preloaded metadata, plays on hover */}
+        {t.video_key && videoSrc && (
           <video
             ref={videoRef}
-            src={videoSrc ?? undefined}
+            src={videoSrc}
             muted
             loop
             playsInline
-            preload="none"
+            preload="metadata"
             controlsList="nodownload nofullscreen noremoteplayback"
             disablePictureInPicture
             onContextMenu={(e) => e.preventDefault()}
-            onCanPlay={() => { if (hoveredRef.current) videoRef.current?.play().catch(() => {}); }}
+            onLoadedData={() => setVideoReady(true)}
+            onCanPlay={() => {
+              setVideoReady(true);
+              if (hoveredRef.current) videoRef.current?.play().catch(() => {});
+            }}
             className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-200 pointer-events-none select-none ${
-              hovered && videoSrc ? "opacity-100" : "opacity-0"
+              hovered && videoReady ? "opacity-100" : "opacity-0"
             }`}
           />
         )}
 
-        {/* Hover shadow veil — dim the video preview */}
+        {/* Hover shadow veil */}
         <div
           className={`absolute inset-0 bg-black transition-opacity duration-200 pointer-events-none z-[5] ${
-            hovered && videoSrc ? "opacity-30" : "opacity-0"
+            hovered && videoReady ? "opacity-30" : "opacity-0"
           }`}
         />
 
@@ -166,11 +226,47 @@ function TemplateCard({
   );
 }
 
+const USER_PER_PAGE = 12;
+
+function Pagination({
+  page,
+  totalPages,
+  onPageChange,
+}: {
+  page: number;
+  totalPages: number;
+  onPageChange: (p: number) => void;
+}) {
+  if (totalPages <= 1) return null;
+  const pages: (number | "...")[] = [];
+  for (let i = 1; i <= totalPages; i++) {
+    if (i === 1 || i === totalPages || Math.abs(i - page) <= 1) {
+      pages.push(i);
+    } else if (pages[pages.length - 1] !== "...") {
+      pages.push("...");
+    }
+  }
+  return (
+    <div className="flex items-center justify-center gap-1 mt-8">
+      <button onClick={() => onPageChange(page - 1)} disabled={page === 1} className="px-3 py-1.5 text-sm rounded-lg border border-slate-200 disabled:opacity-40 hover:bg-slate-50">Prev</button>
+      {pages.map((p, i) =>
+        p === "..." ? (
+          <span key={`d${i}`} className="px-2 text-slate-400">...</span>
+        ) : (
+          <button key={p} onClick={() => onPageChange(p)} className={`px-3 py-1.5 text-sm rounded-lg border ${p === page ? "bg-primary-500 text-white border-primary-500" : "border-slate-200 hover:bg-slate-50"}`}>{p}</button>
+        ),
+      )}
+      <button onClick={() => onPageChange(page + 1)} disabled={page === totalPages} className="px-3 py-1.5 text-sm rounded-lg border border-slate-200 disabled:opacity-40 hover:bg-slate-50">Next</button>
+    </div>
+  );
+}
+
 export default function TemplateBrowsePage() {
   const [templates, setTemplates] = useState<Template[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [selectedCategory, setSelectedCategory] = useState<string>("");
   const [search, setSearch] = useState("");
+  const [page, setPage] = useState(1);
 
   useEffect(() => {
     listCategories().then(setCategories);
@@ -181,6 +277,12 @@ export default function TemplateBrowsePage() {
       setTemplates
     );
   }, [selectedCategory, search]);
+
+  // Reset page when filters change
+  useEffect(() => { setPage(1); }, [selectedCategory, search]);
+
+  const totalPages = Math.max(1, Math.ceil(templates.length / USER_PER_PAGE));
+  const paginated = templates.slice((page - 1) * USER_PER_PAGE, page * USER_PER_PAGE);
 
   return (
     <PageTransition>
@@ -241,14 +343,17 @@ export default function TemplateBrowsePage() {
       {templates.length === 0 ? (
         <p className="text-slate-400 text-center py-12">No templates found</p>
       ) : (
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-5">
-          {templates.map((t, i) => {
-            const category = categories.find((c) => c.id === t.category_id);
-            return (
-              <TemplateCard key={t.id} template={t} category={category} index={i} />
-            );
-          })}
-        </div>
+        <>
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-5">
+            {paginated.map((t, i) => {
+              const category = categories.find((c) => c.id === t.category_id);
+              return (
+                <TemplateCard key={t.id} template={t} category={category} index={i} />
+              );
+            })}
+          </div>
+          <Pagination page={page} totalPages={totalPages} onPageChange={setPage} />
+        </>
       )}
     </PageTransition>
   );

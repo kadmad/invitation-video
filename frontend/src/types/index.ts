@@ -45,6 +45,16 @@ export interface TemplateField {
   duration_frames: number;
 }
 
+export interface FormatRange {
+  start: number;
+  end: number;
+  bold?: boolean;
+  italic?: boolean;
+  color?: string;
+  stroke_color?: string;
+  stroke_width?: number;
+}
+
 export interface TextBlock {
   id: string;
   sort_order: number;
@@ -58,11 +68,14 @@ export interface TextBlock {
   text_align: string;
   animation_type: string;
   animation_out: string;
+  anim_in_direction: string;
+  anim_out_direction: string;
   anim_in_duration: number;
   anim_out_duration: number;
   start_time: number;
   end_time: number;
-  tag_config: Record<string, { label?: string; min_chars?: number; max_chars?: number }> | null;
+  tag_config: Record<string, { label?: string; placeholder?: string; min_chars?: number; max_chars?: number }> | null;
+  format_ranges: FormatRange[] | null;
 }
 
 export interface ImageBlock {
@@ -94,6 +107,7 @@ export interface Template {
   category_id: string;
   thumbnail_key: string | null;
   video_key: string | null;
+  preview_key: string | null;
   duration_frames: number;
   fps: number;
   width: number;
@@ -107,6 +121,7 @@ export interface Template {
   default_text_color: string;
   default_font_id: string | null;
   render_notes: string | null;
+  price: number;
 }
 
 export interface RenderJob {

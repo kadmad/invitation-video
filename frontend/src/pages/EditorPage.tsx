@@ -62,6 +62,7 @@ export default function EditorPage() {
     consumePrefill,
     imageUploads,
     setImageUpload,
+    seekTo,
     reset,
   } = useEditorStore();
   const { token, openAuthModal } = useAuthStore();
@@ -214,6 +215,19 @@ export default function EditorPage() {
     return "english";
   }, [font, template, fonts]);
 
+  // Build placeholder map from tag_config
+  const placeholderMap = useMemo(() => {
+    if (!template) return {};
+    const map: Record<string, string> = {};
+    for (const block of template.text_blocks ?? []) {
+      if (!block.tag_config) continue;
+      for (const [tag, cfg] of Object.entries(block.tag_config)) {
+        if (cfg.placeholder && !map[tag]) map[tag] = cfg.placeholder;
+      }
+    }
+    return map;
+  }, [template]);
+
   // Debounced transliteration on field value or font change
   useEffect(() => {
     if (effectiveLanguage === "english") {
@@ -222,10 +236,15 @@ export default function EditorPage() {
     }
     clearTimeout(debounceTimer.current);
     debounceTimer.current = setTimeout(() => {
-      doTransliterate(fieldValues, effectiveLanguage);
+      // Merge placeholders for unfilled tags so they get transliterated too
+      const merged = { ...placeholderMap };
+      for (const [k, v] of Object.entries(fieldValues)) {
+        if (v) merged[k] = v;
+      }
+      doTransliterate(merged, effectiveLanguage);
     }, 400);
     return () => clearTimeout(debounceTimer.current);
-  }, [fieldValues, effectiveLanguage, doTransliterate]);
+  }, [fieldValues, effectiveLanguage, doTransliterate, placeholderMap]);
 
   const handleFontChange = (fontId: string) => {
     const selected = fonts.find((f) => f.id === fontId);
@@ -332,15 +351,17 @@ export default function EditorPage() {
   // Group blocks: those with tags (user inputs) and static-only blocks
   const blocksWithTags = useMemo(() => {
     if (!template) return [];
-    return (template.text_blocks ?? []).map((block) => {
-      const blockTags: string[] = [];
-      const re = /\{(\w+)\}/g;
-      let m: RegExpExecArray | null;
-      while ((m = re.exec(block.content)) !== null) {
-        blockTags.push(m[1]);
-      }
-      return { block, tags: blockTags };
-    });
+    return [...(template.text_blocks ?? [])]
+      .sort((a, b) => (a.start_time ?? 0) - (b.start_time ?? 0))
+      .map((block) => {
+        const blockTags: string[] = [];
+        const re = /\{(\w+)\}/g;
+        let m: RegExpExecArray | null;
+        while ((m = re.exec(block.content)) !== null) {
+          blockTags.push(m[1]);
+        }
+        return { block, tags: blockTags };
+      });
   }, [template]);
 
   const uploadableImageBlocks = useMemo(() => {
@@ -351,61 +372,7 @@ export default function EditorPage() {
   // Deduplicate: only show input for a tag in first block that uses it
   const seenTags = useMemo(() => new Set<string>(), [template]);
 
-  // Group blocks into carousel steps by 3-second time windows
-  const carouselSteps = useMemo(() => {
-    if (!template || blocksWithTags.length === 0) return [];
-
-    // Sort by start_time
-    const sorted = [...blocksWithTags].sort(
-      (a, b) => (a.block.start_time ?? 0) - (b.block.start_time ?? 0)
-    );
-
-    // Group by fixed 3-second time windows based on start_time
-    const WINDOW = 3; // seconds
-    const rawGroups: typeof sorted[] = [];
-    const bucketMap = new Map<number, typeof sorted>();
-    for (const item of sorted) {
-      const bucket = Math.floor((item.block.start_time ?? 0) / WINDOW);
-      if (!bucketMap.has(bucket)) {
-        const arr: typeof sorted = [];
-        bucketMap.set(bucket, arr);
-        rawGroups.push(arr);
-      }
-      bucketMap.get(bucket)!.push(item);
-    }
-
-    // Merge groups that have no editable tags into nearest adjacent group
-    const hasEditableTags = (group: typeof sorted) =>
-      group.some((item) => item.tags.length > 0);
-
-    const mergedGroups: typeof sorted[] = [];
-    for (let i = 0; i < rawGroups.length; i++) {
-      if (hasEditableTags(rawGroups[i])) {
-        mergedGroups.push(rawGroups[i]);
-      } else {
-        // Merge with nearest adjacent group
-        if (mergedGroups.length > 0) {
-          // Merge with previous group
-          mergedGroups[mergedGroups.length - 1].push(...rawGroups[i]);
-        } else if (i + 1 < rawGroups.length) {
-          // No previous group, prepend to next group
-          rawGroups[i + 1].unshift(...rawGroups[i]);
-        } else {
-          // Only group, keep it
-          mergedGroups.push(rawGroups[i]);
-        }
-      }
-    }
-
-    return mergedGroups.length > 0 ? mergedGroups : [sorted];
-  }, [template, blocksWithTags]);
-
-  const [currentStep, setCurrentStep] = useState(0);
-
-  // Reset step to 0 when template changes
-  useEffect(() => {
-    setCurrentStep(0);
-  }, [template]);
+  const [showCustomize, setShowCustomize] = useState(false);
 
   if (!template) return <div className="text-center py-12 text-slate-500">Loading...</div>;
 
@@ -438,267 +405,157 @@ export default function EditorPage() {
     <div className="flex flex-col lg:flex-row gap-8">
       {/* Form Panel — order-2 on mobile (preview first), order-1 on desktop (form left) */}
       <div className="w-full lg:w-[420px] lg:flex-shrink-0 lg:overflow-y-auto lg:max-h-[calc(100vh-5rem)] order-2 lg:order-1">
-        <h1 className="text-2xl font-bold text-slate-800 mb-6">{template.name}</h1>
+        <h1 className="text-lg font-bold text-slate-800 mb-3">{template.name}</h1>
 
-        {/* Universal color override */}
-        <div className="card p-4 mb-4">
-          <div className="flex items-center gap-3">
-            <input
-              type="color"
-              value={textColorOverrides._default || template.default_text_color || "#FFFFFF"}
-              onChange={(e) => setTextColorOverride("_default", e.target.value)}
-              className="w-8 h-8 rounded-lg border border-slate-200 cursor-pointer flex-shrink-0"
-            />
-            <span className="text-sm text-slate-600 flex-1">All text color</span>
-            {textColorOverrides._default && (
-              <button
-                onClick={() => clearTextColorOverride("_default")}
-                className="text-xs text-red-400 hover:text-red-500 font-medium"
-              >
-                Reset
-              </button>
-            )}
-          </div>
-        </div>
-
-        {/* Carousel step navigation + block inputs */}
-        {(() => {
-          const totalSteps = carouselSteps.length;
-          const step = Math.min(currentStep, totalSteps - 1);
-
-          // Compute which tags belong to each step (for subtitle & seenTags dedup)
-          const stepSeenTags = new Set<string>();
-          const stepTagLabels: string[][] = [];
-          for (let s = 0; s < totalSteps; s++) {
-            const labels: string[] = [];
-            for (const { tags: blockTags } of carouselSteps[s]) {
-              for (const tag of blockTags) {
-                if (!stepSeenTags.has(tag)) {
-                  stepSeenTags.add(tag);
-                  const cfg = tagConfigs[tag] ?? {};
-                  labels.push(cfg.label ?? humanizeTag(tag));
-                }
-              }
-            }
-            stepTagLabels.push(labels);
-          }
-
-          // Reset the global seenTags for rendering, then mark all tags from steps before current
-          seenTags.clear();
-          for (let s = 0; s < step; s++) {
-            for (const { tags: blockTags } of carouselSteps[s]) {
-              blockTags.forEach((t) => seenTags.add(t));
-            }
-          }
-
-          const currentBlocks = carouselSteps[step] ?? [];
-          const subtitle = stepTagLabels[step]?.join(", ") || "";
-
-          return (
-            <div className="mb-6">
-              {/* Step indicator + navigation */}
-              {totalSteps > 1 && (
-                <div className="flex items-center justify-between mb-4">
-                  <button
-                    className="btn-secondary text-sm"
-                    disabled={step === 0}
-                    onClick={() => setCurrentStep((s) => Math.max(0, s - 1))}
-                  >
-                    &larr; Prev
-                  </button>
-                  <div className="text-center">
-                    <span className="text-sm font-medium text-slate-700">
-                      Step {step + 1} of {totalSteps}
-                    </span>
-                    {subtitle && (
-                      <p className="text-xs text-slate-400 mt-0.5 max-w-[180px] truncate mx-auto">
-                        {subtitle}
+        {/* All tag inputs — flat list, compact */}
+        <div className="space-y-2.5 mb-4">
+          {(() => {
+            seenTags.clear();
+            return blocksWithTags.map(({ block, tags: blockTags }) => {
+              const newTags = blockTags.filter((t) => !seenTags.has(t));
+              newTags.forEach((t) => seenTags.add(t));
+              if (newTags.length === 0) return null;
+              return newTags.map((tag) => {
+                const cfg = tagConfigs[tag] ?? {};
+                const label = cfg.label ?? humanizeTag(tag);
+                const transVal = transliteratedValues[tag];
+                return (
+                  <div key={tag}>
+                    <label className="block text-xs font-medium text-slate-600 mb-0.5">
+                      {label}
+                    </label>
+                    <textarea
+                      placeholder={cfg.placeholder || label}
+                      value={fieldValues[tag] || ""}
+                      onChange={(e) => setFieldValue(tag, e.target.value)}
+                      onFocus={() => seekTo(block.start_time ?? 0)}
+                      minLength={cfg.min_chars}
+                      maxLength={cfg.max_chars}
+                      rows={1}
+                      className="input-field w-full text-center resize-y placeholder:text-slate-300 text-sm py-2"
+                    />
+                    {isRegionalFont && transVal && (
+                      <p className="bg-primary-50 px-2 py-1 rounded text-primary-500 text-xs font-medium mt-0.5">
+                        {transVal}
                       </p>
                     )}
-                    <div className="flex gap-1.5 justify-center mt-1">
-                      {Array.from({ length: totalSteps }, (_, i) => (
-                        <button
-                          key={i}
-                          onClick={() => setCurrentStep(i)}
-                          className={`w-2 h-2 rounded-full transition-colors ${
-                            i === step
-                              ? "bg-primary-500"
-                              : "bg-slate-200 hover:bg-slate-300 cursor-pointer"
-                          }`}
-                        />
-                      ))}
-                    </div>
                   </div>
-                  <button
-                    className="btn-secondary text-sm"
-                    disabled={step === totalSteps - 1}
-                    onClick={() => setCurrentStep((s) => Math.min(totalSteps - 1, s + 1))}
-                  >
-                    Next &rarr;
-                  </button>
+                );
+              });
+            });
+          })()}
+
+          {/* Image uploads */}
+          {uploadableImageBlocks.map((block) => (
+            <div key={block.id}>
+              <label className="block text-xs font-medium text-slate-600 mb-0.5">
+                {block.label}
+              </label>
+              {imageUploads[block.id] ? (
+                <div className="relative">
+                  <img
+                    src={imageUploads[block.id]}
+                    alt={block.label}
+                    className="w-full h-24 object-cover rounded-lg"
+                  />
+                  <label className="absolute bottom-1.5 right-1.5 btn-secondary text-[10px] cursor-pointer bg-white/90 backdrop-blur-sm px-2 py-0.5">
+                    Replace
+                    <input
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={async (e) => {
+                        const file = e.target.files?.[0];
+                        if (!file || !template) return;
+                        try {
+                          const result = await uploadUserImage(template.id, block.id, file);
+                          setImageUpload(block.id, result.url);
+                        } catch (err) {
+                          console.error("Failed to upload image", err);
+                        }
+                      }}
+                    />
+                  </label>
                 </div>
-              )}
-
-              {/* Current step's blocks */}
-              <div
-                className="space-y-5 transition-all duration-300 ease-in-out"
-                key={step}
-                style={{ animation: "fadeSlideIn 0.3s ease-out" }}
-              >
-                {currentBlocks.map(({ block, tags: blockTags }) => {
-                  const newTags = blockTags.filter((t) => !seenTags.has(t));
-                  newTags.forEach((t) => seenTags.add(t));
-
-                  const blockPreview = block.content.replace(/\{(\w+)\}/g, (_, t) => t);
-
-                  return (
-                    <div key={block.id} className="card p-4 space-y-3">
-                      {/* Block header with color picker */}
-                      <div className="flex items-center gap-2">
-                        <input
-                          type="color"
-                          value={textColorOverrides[block.id] || textColorOverrides._default || block.text_color || template.default_text_color || "#FFFFFF"}
-                          onChange={(e) => setTextColorOverride(block.id, e.target.value)}
-                          className="w-7 h-7 rounded-lg border border-slate-200 cursor-pointer flex-shrink-0"
-                        />
-                        <span className="text-xs text-slate-400 truncate flex-1" title={block.content}>
-                          {blockPreview}
-                        </span>
-                        {(() => {
-                          const bFont = block.font_id ? fonts.find((f) => f.id === block.font_id) : (template.default_font_id ? fonts.find((f) => f.id === template.default_font_id) : null);
-                          return bFont ? (
-                            <span className="text-[10px] text-slate-300 bg-slate-50 px-1.5 py-0.5 rounded flex-shrink-0">
-                              {bFont.name}
-                            </span>
-                          ) : null;
-                        })()}
-                        {textColorOverrides[block.id] && (
-                          <button
-                            onClick={() => clearTextColorOverride(block.id)}
-                            className="text-xs text-red-400 hover:text-red-500 font-medium"
-                          >
-                            Reset
-                          </button>
-                        )}
-                      </div>
-
-                      {/* Tag inputs for this block */}
-                      {newTags.map((tag) => {
-                        const cfg = tagConfigs[tag] ?? {};
-                        const label = cfg.label ?? humanizeTag(tag);
-                        const transVal = transliteratedValues[tag];
-                        return (
-                          <div key={tag}>
-                            <label className="block text-sm font-medium text-slate-700 mb-1">
-                              {label}
-                              <span className="text-red-400 ml-1">*</span>
-                            </label>
-                            <input
-                              type="text"
-                              placeholder={label}
-                              value={fieldValues[tag] || ""}
-                              onChange={(e) => setFieldValue(tag, e.target.value)}
-                              minLength={cfg.min_chars}
-                              maxLength={cfg.max_chars}
-                              className="input-field w-full"
-                            />
-                            {isRegionalFont && transVal && (
-                              <p className="bg-primary-50 px-3 py-1.5 rounded-lg text-primary-500 text-sm font-medium mt-1">
-                                {transVal}
-                              </p>
-                            )}
-                            {cfg.min_chars != null && cfg.max_chars != null && (
-                              <p className="text-xs text-slate-400 mt-1">
-                                {cfg.min_chars}&ndash;{cfg.max_chars} characters
-                              </p>
-                            )}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  );
-                })}
-              </div>
-
-              {/* Image upload inputs */}
-              {uploadableImageBlocks.length > 0 && (
-                <div className="space-y-3 mt-4">
-                  {uploadableImageBlocks.map((block) => (
-                    <div key={block.id} className="card p-4">
-                      <label className="block text-sm font-medium text-slate-700 mb-2">
-                        {block.label}
-                        <span className="text-red-400 ml-1">*</span>
-                      </label>
-                      {imageUploads[block.id] ? (
-                        <div className="relative">
-                          <img
-                            src={imageUploads[block.id]}
-                            alt={block.label}
-                            className="w-full h-32 object-cover rounded-lg"
-                          />
-                          <label className="absolute bottom-2 right-2 btn-secondary text-xs cursor-pointer bg-white/90 backdrop-blur-sm">
-                            Replace
-                            <input
-                              type="file"
-                              accept="image/*"
-                              className="hidden"
-                              onChange={async (e) => {
-                                const file = e.target.files?.[0];
-                                if (!file || !template) return;
-                                try {
-                                  const result = await uploadUserImage(template.id, block.id, file);
-                                  setImageUpload(block.id, result.url);
-                                } catch (err) {
-                                  console.error("Failed to upload image", err);
-                                }
-                              }}
-                            />
-                          </label>
-                        </div>
-                      ) : (
-                        <label className="flex flex-col items-center justify-center w-full h-32 border-2 border-dashed border-slate-200 rounded-lg cursor-pointer hover:border-primary-300 hover:bg-primary-50/50 transition-all">
-                          <svg className="w-8 h-8 text-slate-300 mb-1" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1}>
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.41a2.25 2.25 0 013.182 0l2.909 2.91m-18 3.75h16.5a1.5 1.5 0 001.5-1.5V6a1.5 1.5 0 00-1.5-1.5H3.75A1.5 1.5 0 002.25 6v12a1.5 1.5 0 001.5 1.5zm10.5-11.25h.008v.008h-.008V8.25zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z" />
-                          </svg>
-                          <span className="text-xs text-slate-400">Upload {block.label}</span>
-                          <input
-                            type="file"
-                            accept="image/*"
-                            className="hidden"
-                            onChange={async (e) => {
-                              const file = e.target.files?.[0];
-                              if (!file || !template) return;
-                              try {
-                                const result = await uploadUserImage(template.id, block.id, file);
-                                setImageUpload(block.id, result.url);
-                              } catch (err) {
-                                console.error("Failed to upload image", err);
-                              }
-                            }}
-                          />
-                        </label>
-                      )}
-                    </div>
-                  ))}
-                </div>
+              ) : (
+                <label className="flex flex-col items-center justify-center w-full h-20 border-2 border-dashed border-slate-200 rounded-lg cursor-pointer hover:border-primary-300 hover:bg-primary-50/50 transition-all">
+                  <svg className="w-6 h-6 text-slate-300 mb-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.41a2.25 2.25 0 013.182 0l2.909 2.91m-18 3.75h16.5a1.5 1.5 0 001.5-1.5V6a1.5 1.5 0 00-1.5-1.5H3.75A1.5 1.5 0 002.25 6v12a1.5 1.5 0 001.5 1.5zm10.5-11.25h.008v.008h-.008V8.25zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z" />
+                  </svg>
+                  <span className="text-[10px] text-slate-400">Upload {block.label}</span>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={async (e) => {
+                      const file = e.target.files?.[0];
+                      if (!file || !template) return;
+                      try {
+                        const result = await uploadUserImage(template.id, block.id, file);
+                        setImageUpload(block.id, result.url);
+                      } catch (err) {
+                        console.error("Failed to upload image", err);
+                      }
+                    }}
+                  />
+                </label>
               )}
             </div>
-          );
-        })()}
+          ))}
+        </div>
 
-        {/* Font Selector */}
-        <FontPicker
-          fonts={fonts}
-          selectedId={font?.id ?? null}
-          fallbackFontId={template.default_font_id}
-          onSelect={(fontId) => {
-            if (!fontId) {
-              clearFont();
-            } else {
-              handleFontChange(fontId);
-            }
-          }}
-        />
+        {/* Customize Colors & Font — hidden by default */}
+        <button
+          onClick={() => setShowCustomize((v) => !v)}
+          className="w-full flex items-center justify-center gap-2 text-sm text-slate-500 hover:text-slate-700 py-2 mb-2 transition-colors"
+        >
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" />
+          </svg>
+          {showCustomize ? "Hide" : "Customize"} Colors & Font
+          <svg className={`w-3 h-3 transition-transform ${showCustomize ? "rotate-180" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+          </svg>
+        </button>
+
+        {showCustomize && (
+          <div className="space-y-4 mb-4" style={{ animation: "fadeSlideIn 0.3s ease-out" }}>
+            {/* Universal color override */}
+            <div className="card p-4">
+              <div className="flex items-center gap-3">
+                <input
+                  type="color"
+                  value={textColorOverrides._default || template.default_text_color || "#FFFFFF"}
+                  onChange={(e) => setTextColorOverride("_default", e.target.value)}
+                  className="w-8 h-8 rounded-lg border border-slate-200 cursor-pointer flex-shrink-0"
+                />
+                <span className="text-sm text-slate-600 flex-1">All text color</span>
+                {textColorOverrides._default && (
+                  <button
+                    onClick={() => clearTextColorOverride("_default")}
+                    className="text-xs text-red-400 hover:text-red-500 font-medium"
+                  >
+                    Reset
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* Font Selector */}
+            <FontPicker
+              fonts={fonts}
+              selectedId={font?.id ?? null}
+              fallbackFontId={template.default_font_id}
+              onSelect={(fontId) => {
+                if (!fontId) {
+                  clearFont();
+                } else {
+                  handleFontChange(fontId);
+                }
+              }}
+            />
+          </div>
+        )}
 
         <button
           onClick={handleRenderClick}
@@ -765,7 +622,7 @@ export default function EditorPage() {
                 onClick={handleProceedToPayment}
                 className="btn-primary w-full py-3 text-base"
               >
-                Proceed to Payment — ₹99
+                Proceed to Payment — ₹{template ? (template.price / 100).toFixed(0) : "99"}
               </button>
 
               <p className="text-xs text-slate-400 text-center mt-3">

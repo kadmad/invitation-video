@@ -1,4 +1,5 @@
-import { AbsoluteFill, Video, staticFile } from "remotion";
+import { useEffect, useState, useCallback } from "react";
+import { AbsoluteFill, Video, delayRender, continueRender } from "remotion";
 import AnimatedText from "../components/AnimatedText";
 import AnimatedTextBlock from "../components/AnimatedTextBlock";
 import AnimatedImageBlock from "../components/AnimatedImageBlock";
@@ -12,6 +13,8 @@ interface GenericTemplateProps {
   textBlocks?: TextBlock[];
   tagValues?: Record<string, string>;
   fontFamilies?: Record<string, string>;
+  fontUrls?: Record<string, string>;
+  placeholderTags?: string[];
   textColorOverrides?: Record<string, string>;
   defaultTextColor?: string;
   defaultFontFamily?: string;
@@ -31,6 +34,8 @@ export default function GenericTemplate({
   textBlocks,
   tagValues,
   fontFamilies,
+  fontUrls,
+  placeholderTags,
   textColorOverrides,
   defaultTextColor,
   defaultFontFamily,
@@ -43,9 +48,58 @@ export default function GenericTemplate({
 }: GenericTemplateProps) {
   // Use new text_blocks path if available, otherwise fall back to legacy fields
   const useBlocks = textBlocks && textBlocks.length > 0;
+  const placeholderSet = placeholderTags ? new Set(placeholderTags) : null;
+
+  // Build @font-face CSS for SSR rendering (when fontUrls provided by renderer service)
+  const fontFaceCSS = fontUrls
+    ? Object.entries(fontUrls)
+        .map(([fontId, url]) => {
+          const family = fontFamilies?.[fontId] || fontId;
+          return `@font-face { font-family: '${family}'; src: url('${url}'); font-display: block; }`;
+        })
+        .join("\n")
+    : "";
+
+  // Delay render until all fonts are loaded (critical for SSR pixel-perfect match)
+  const hasFontUrls = fontUrls && Object.keys(fontUrls).length > 0;
+  const [handle] = useState(() => {
+    if (hasFontUrls) {
+      return delayRender("Loading fonts for pixel-perfect render...");
+    }
+    return null;
+  });
+
+  useEffect(() => {
+    if (!hasFontUrls || handle === null) return;
+
+    const loadedFamilies = new Set<string>();
+    const fontPromises = Object.entries(fontUrls!).map(([fontId, url]) => {
+      const family = fontFamilies?.[fontId] || fontId;
+      if (loadedFamilies.has(family)) return Promise.resolve();
+      loadedFamilies.add(family);
+      const face = new FontFace(family, `url(${url})`);
+      return face.load().then((loaded) => {
+        document.fonts.add(loaded);
+      });
+    });
+
+    Promise.all(fontPromises)
+      .then(() => {
+        // Wait one frame for browser to apply font metrics
+        return document.fonts.ready;
+      })
+      .then(() => {
+        continueRender(handle);
+      })
+      .catch((err) => {
+        console.error("Font loading failed:", err);
+        continueRender(handle);
+      });
+  }, [fontUrls, fontFamilies, handle, hasFontUrls]);
 
   return (
     <AbsoluteFill style={{ backgroundColor: "#1a1a2e" }}>
+      {fontFaceCSS && <style dangerouslySetInnerHTML={{ __html: fontFaceCSS }} />}
       {videoUrl && (
         <Video
           src={videoUrl}
@@ -76,6 +130,7 @@ export default function GenericTemplate({
               block={block}
               tagValues={tagValues ?? {}}
               fontFamilies={fontFamilies ?? {}}
+              placeholderTags={placeholderSet}
               videoWidth={width}
               videoHeight={height}
               textColorOverrides={textColorOverrides}

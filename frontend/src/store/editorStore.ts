@@ -29,6 +29,7 @@ interface EditorState {
   textColorOverrides: Record<string, string>;
   prefill: PrefillData | null;
   imageUploads: Record<string, string>;
+  seekToTime: number | null;
   setImageUpload: (blockId: string, url: string) => void;
   clearImageUpload: (blockId: string) => void;
   setTemplate: (template: Template) => void;
@@ -41,6 +42,8 @@ interface EditorState {
   clearFont: () => void;
   setPrefill: (data: PrefillData) => void;
   consumePrefill: () => PrefillData | null;
+  seekTo: (time: number) => void;
+  clearSeek: () => void;
   reset: () => void;
 }
 
@@ -53,6 +56,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   textColorOverrides: {},
   prefill: null,
   imageUploads: {},
+  seekToTime: null,
 
   setTemplate: (template) => {
     const fieldValues: Record<string, string> = {};
@@ -110,6 +114,9 @@ export const useEditorStore = create<EditorState>((set, get) => ({
       return { imageUploads: next };
     }),
 
+  seekTo: (time) => set({ seekToTime: time }),
+  clearSeek: () => set({ seekToTime: null }),
+
   reset: () =>
     set((state) => ({
       template: null,
@@ -119,6 +126,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
       transliteratedValues: {},
       textColorOverrides: {},
       imageUploads: {},
+      seekToTime: null,
       prefill: state.prefill, // preserve
     })),
 }));

@@ -44,8 +44,8 @@ async def create_order(
     if not template.video_key:
         raise HTTPException(status_code=400, detail="Template has no source video uploaded yet")
 
-    # Create Razorpay order
-    amount = settings.RENDER_PRICE_PAISE
+    # Use per-template price, fallback to global default
+    amount = template.price or settings.RENDER_PRICE_PAISE
     rz_order = payment_service.create_order(amount)
 
     # Save payment record with render params

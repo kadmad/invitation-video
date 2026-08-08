@@ -57,6 +57,8 @@ class AdminTemplateUpdate(BaseModel):
     default_text_color: str | None = None
     default_font_id: uuid.UUID | None = None
     render_notes: str | None = None
+    price: int | None = None
+    render_preview: bool = False  # explicit flag — only queue preview render when True
 
 
 # --- Text Blocks ---
@@ -73,11 +75,14 @@ class TextBlockCreate(BaseModel):
     text_align: str = "center"
     animation_type: str = "fade_in"
     animation_out: str = "none"
+    anim_in_direction: str = "ltr"
+    anim_out_direction: str = "ltr"
     anim_in_duration: float = 1.0
     anim_out_duration: float = 1.0
     start_time: float = 0.0
     end_time: float = 2.0
     tag_config: dict | None = None
+    format_ranges: list[dict] | None = None
 
 
 class TextBlockUpdate(BaseModel):
@@ -92,11 +97,14 @@ class TextBlockUpdate(BaseModel):
     text_align: str | None = None
     animation_type: str | None = None
     animation_out: str | None = None
+    anim_in_direction: str | None = None
+    anim_out_direction: str | None = None
     anim_in_duration: float | None = None
     anim_out_duration: float | None = None
     start_time: float | None = None
     end_time: float | None = None
     tag_config: dict | None = None
+    format_ranges: list[dict] | None = None
 
 
 class TextBlockResponse(BaseModel):
@@ -113,11 +121,14 @@ class TextBlockResponse(BaseModel):
     text_align: str
     animation_type: str
     animation_out: str
+    anim_in_direction: str
+    anim_out_direction: str
     anim_in_duration: float
     anim_out_duration: float
     start_time: float
     end_time: float
     tag_config: dict | None
+    format_ranges: list[dict] | None
 
     model_config = {"from_attributes": True}
 
@@ -204,6 +215,7 @@ class AdminTemplateListResponse(BaseModel):
     default_text_color: str
     default_font_id: uuid.UUID | None
     render_notes: str | None
+    preview_key: str | None = None
     created_at: datetime
 
     model_config = {"from_attributes": True}

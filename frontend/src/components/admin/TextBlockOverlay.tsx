@@ -11,6 +11,8 @@ interface Props {
   isPrimary?: boolean;
   containerWidth: number;
   containerHeight: number;
+  fontFamily?: string;
+  tagValues?: Record<string, string>;
 }
 
 export default function TextBlockOverlay({
@@ -19,11 +21,15 @@ export default function TextBlockOverlay({
   isPrimary = false,
   containerWidth,
   containerHeight,
+  fontFamily,
+  tagValues = {},
 }: Props) {
   const { id: templateId } = useParams<{ id: string }>();
   const { selectBlock, selectBlockMulti, makePrimary, updateBlock } = useAdminTemplateStore();
   const targetRef = useRef<HTMLDivElement>(null);
+  const textRef = useRef<HTMLDivElement>(null);
   const [mounted, setMounted] = useState(false);
+  const [measuredHeight, setMeasuredHeight] = useState<number | null>(null);
 
   // Force re-render after ref mounts so Moveable can find target
   useEffect(() => {
@@ -33,8 +39,27 @@ export default function TextBlockOverlay({
     if (!selected || !isPrimary) setMounted(false);
   }, [selected, isPrimary, mounted]);
 
+  // Expand tags for display text
+  const displayText = block.content.replace(/\{(\w+)\}/g, (_, tag) => {
+    return tagValues[tag] ?? tag;
+  });
+
+  // Match Remotion: fontSize = font_size_ratio * videoHeight (containerHeight here)
+  const fontSize = (block.font_size_ratio ?? 0.04) * containerHeight;
+  // Match Remotion lineHeight: 1.5 for Indic scripts, 1.2 for others
+  const needsExtraPadding = /[\u0A80-\u0AFF\u0900-\u097F]/.test(displayText) || (fontFamily && fontFamily !== "sans-serif");
+  const lineHeight = needsExtraPadding ? 1.5 : 1.2;
+
+  // Measure text height
+  useEffect(() => {
+    if (textRef.current) {
+      setMeasuredHeight(textRef.current.scrollHeight);
+    }
+  }, [displayText, fontSize, fontFamily, block.max_width, containerWidth, block.text_align]);
+
   const boxWidth = block.max_width * containerWidth;
-  const boxHeight = Math.max(24, (block.font_size_ratio ?? 0.04) * containerWidth * 1.6);
+  const extraPad = needsExtraPadding ? fontSize * 0.25 : 0;
+  const boxHeight = measuredHeight ?? Math.max(24, fontSize * lineHeight);
   const rawLeft = block.position_x * containerWidth;
   const boxLeft =
     block.text_align === "center"
@@ -42,7 +67,7 @@ export default function TextBlockOverlay({
       : block.text_align === "right"
         ? rawLeft - boxWidth
         : rawLeft;
-  const boxTop = block.position_y * containerHeight;
+  const boxTop = block.position_y * containerHeight - extraPad;
 
   const label = block.content.replace(/\{(\w+)\}/g, (_, t) => t).slice(0, 40);
 
@@ -70,12 +95,60 @@ export default function TextBlockOverlay({
     );
   }, [templateId, block.id]);
 
+  // Alignment helpers
+  const alignBlock = useCallback((axis: "left" | "center" | "right" | "vcenter") => {
+    let updates: Partial<TextBlock> = {};
+    switch (axis) {
+      case "left":
+        updates.position_x = block.text_align === "center"
+          ? block.max_width / 2
+          : block.text_align === "right"
+            ? block.max_width
+            : 0;
+        break;
+      case "center":
+        updates.position_x = block.text_align === "center"
+          ? 0.5
+          : block.text_align === "right"
+            ? 1 - block.max_width / 2
+            : block.max_width / 2;
+        // For center alignment, always set position_x to 0.5
+        updates.position_x = 0.5;
+        break;
+      case "right":
+        updates.position_x = block.text_align === "center"
+          ? 1 - block.max_width / 2
+          : block.text_align === "right"
+            ? 1
+            : 1 - block.max_width;
+        break;
+      case "vcenter": {
+        const halfHeight = boxHeight / containerHeight / 2;
+        updates.position_y = 0.5 - halfHeight;
+        break;
+      }
+    }
+    updateBlock(block.id, updates);
+    // Persist after alignment
+    setTimeout(() => {
+      if (!templateId) return;
+      const store = useAdminTemplateStore.getState();
+      const b = store.template?.text_blocks?.find((x) => x.id === block.id);
+      if (b) {
+        updateTextBlock(templateId, block.id, {
+          position_x: b.position_x,
+          position_y: b.position_y,
+        }).catch(console.error);
+      }
+    }, 50);
+  }, [block, boxHeight, containerHeight, containerWidth, templateId, updateBlock]);
+
   // Track original positions of all selected blocks at drag start
   const dragOriginsRef = useRef<Record<string, { posX: number; posY: number }>>({});
 
   return (
     <>
-      {/* Target element */}
+      {/* Target element with hidden text for measurement */}
       <div
         ref={targetRef}
         data-block-id={block.id}
@@ -83,7 +156,6 @@ export default function TextBlockOverlay({
           e.stopPropagation();
           const store = useAdminTemplateStore.getState();
           if (!e.shiftKey && store.selectedBlockIds.includes(block.id)) {
-            // Already selected — make primary so Moveable handles appear here
             if (store.selectedBlockIds[0] !== block.id) makePrimary(block.id);
             return;
           }
@@ -94,11 +166,28 @@ export default function TextBlockOverlay({
           left: boxLeft,
           top: boxTop,
           width: boxWidth,
-          height: boxHeight,
           pointerEvents: "auto",
         }}
         className={selected ? "" : "group/block cursor-pointer"}
       >
+        {/* Hidden text for measurement — matches Remotion render style */}
+        <div
+          ref={textRef}
+          style={{
+            fontSize,
+            fontFamily: fontFamily || "sans-serif",
+            lineHeight,
+            textAlign: block.text_align as CanvasTextAlign,
+            color: "transparent",
+            wordBreak: "break-word",
+            whiteSpace: "pre-wrap",
+            pointerEvents: "none",
+            userSelect: "none",
+          }}
+        >
+          {displayText}
+        </div>
+
         {/* Label tooltip above selected block */}
         {selected && (
           <div
@@ -110,6 +199,57 @@ export default function TextBlockOverlay({
             }}
           >
             {label}
+          </div>
+        )}
+
+        {/* Alignment buttons — shown when selected */}
+        {selected && isPrimary && (
+          <div
+            className="absolute top-full left-1/2 -translate-x-1/2 mt-1 flex items-center gap-0.5 bg-black/70 rounded px-1 py-0.5 z-30"
+            onMouseDown={(e) => e.stopPropagation()}
+          >
+            {/* Align Left */}
+            <button
+              onClick={() => alignBlock("left")}
+              className="p-1 text-white/60 hover:text-white transition rounded hover:bg-white/10"
+              title="Align left"
+            >
+              <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" d="M3 4v16M7 8h10M7 12h14M7 16h8" />
+              </svg>
+            </button>
+            {/* Align Center */}
+            <button
+              onClick={() => alignBlock("center")}
+              className="p-1 text-white/60 hover:text-white transition rounded hover:bg-white/10"
+              title="Align center"
+            >
+              <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" d="M12 4v16M5 8h14M3 12h18M7 16h10" />
+              </svg>
+            </button>
+            {/* Align Right */}
+            <button
+              onClick={() => alignBlock("right")}
+              className="p-1 text-white/60 hover:text-white transition rounded hover:bg-white/10"
+              title="Align right"
+            >
+              <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" d="M21 4v16M7 8h10M3 12h14M9 16h8" />
+              </svg>
+            </button>
+            {/* Vertical divider */}
+            <div className="w-px h-3 bg-white/20 mx-0.5" />
+            {/* Vertical Center */}
+            <button
+              onClick={() => alignBlock("vcenter")}
+              className="p-1 text-white/60 hover:text-white transition rounded hover:bg-white/10"
+              title="Vertical center"
+            >
+              <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" d="M4 12h16M12 5v4M12 15v4M9 7l3-3 3 3M9 17l3 3 3-3" />
+              </svg>
+            </button>
           </div>
         )}
 
@@ -203,7 +343,7 @@ export default function TextBlockOverlay({
               position_x: Math.max(0, Math.min(1, posX)),
               position_y: Math.max(0, Math.min(1, drag.top / containerHeight)),
               max_width: Math.max(0.05, Math.min(1, width / containerWidth)),
-              font_size_ratio: Math.max(0.01, height / (containerWidth * 1.6)),
+              font_size_ratio: Math.max(0.01, height / containerHeight),
             });
           }}
           onResizeEnd={() => {

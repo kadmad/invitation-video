@@ -14,25 +14,32 @@ GOOGLE_URL = "https://inputtools.google.com/request"
 
 async def _google_transliterate(text: str, itc: str) -> str:
     """Transliterate using Google Input Tools API. Returns best suggestion."""
-    # Split into words, transliterate each
-    words = text.strip().split()
-    if not words:
+    if not text.strip():
         return text
 
-    results = []
+    # Preserve line breaks: split by lines, transliterate words within each line
+    lines = text.split("\n")
+    result_lines = []
     async with httpx.AsyncClient(timeout=10) as client:
-        for word in words:
-            resp = await client.get(
-                GOOGLE_URL,
-                params={"text": word, "itc": itc, "num": 1},
-            )
-            data = resp.json()
-            if data[0] == "SUCCESS" and data[1] and data[1][0][1]:
-                results.append(data[1][0][1][0])  # First suggestion
-            else:
-                results.append(word)  # Keep original if API fails
+        for line in lines:
+            words = line.strip().split()
+            if not words:
+                result_lines.append(line)
+                continue
+            line_results = []
+            for word in words:
+                resp = await client.get(
+                    GOOGLE_URL,
+                    params={"text": word, "itc": itc, "num": 1},
+                )
+                data = resp.json()
+                if data[0] == "SUCCESS" and data[1] and data[1][0][1]:
+                    line_results.append(data[1][0][1][0])
+                else:
+                    line_results.append(word)
+            result_lines.append(" ".join(line_results))
 
-    return " ".join(results)
+    return "\n".join(result_lines)
 
 
 class TransliterateRequest(BaseModel):

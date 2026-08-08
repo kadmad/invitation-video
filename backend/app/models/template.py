@@ -29,6 +29,8 @@ class Template(UUIDMixin, TimestampMixin, Base):
         UUID(as_uuid=True), ForeignKey("fonts.id"), nullable=True
     )
     render_notes: Mapped[str | None] = mapped_column(String(1000), nullable=True)
+    price: Mapped[int] = mapped_column(Integer, default=9900)
+    preview_key: Mapped[str | None] = mapped_column(String(500), nullable=True)
 
     category = relationship("Category", back_populates="templates")
     default_font = relationship("Font", foreign_keys=[default_font_id])
