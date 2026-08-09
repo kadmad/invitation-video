@@ -25,11 +25,13 @@ def send_render_ready(phone_number: str, user_name: str, render_job_id: str):
             msg_kwargs["content_sid"] = settings.TWILIO_CONTENT_SID
             msg_kwargs["content_variables"] = f'{{"1":"{user_name}","2":"{download_url}"}}'
         else:
-            # Fallback to plain text (works in sandbox)
+            # Freeform message (works in sandbox within 24hr session window)
             msg_kwargs["body"] = (
-                f"Hi {user_name}! Your invitation video is ready.\n\n"
-                f"Download your video here:\n{download_url}\n\n"
-                f"Thank you for using {settings.APP_NAME}!"
+                f"Hey {user_name}! \u2728\n\n"
+                f"Your invitation video is ready and looks amazing!\n\n"
+                f"\U0001F3AC *Download your video:*\n{download_url}\n\n"
+                f"Share it with your loved ones and make your celebration special! \U0001F389\n\n"
+                f"\u2014 {settings.APP_NAME}"
             )
 
         message = client.messages.create(**msg_kwargs)

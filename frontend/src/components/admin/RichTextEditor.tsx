@@ -6,6 +6,7 @@ interface RichTextEditorProps {
   formatRanges: FormatRange[] | null;
   onChange: (content: string, formatRanges: FormatRange[]) => void;
   tagKeys?: string[];
+  showLabel?: boolean;
 }
 
 interface Segment {
@@ -136,72 +137,177 @@ function clearFormat(ranges: FormatRange[], selStart: number, selEnd: number): F
   const result: FormatRange[] = [];
   for (const r of ranges) {
     if (r.end <= selStart || r.start >= selEnd) {
-      // Completely outside cleared region — keep
       result.push(r);
     } else if (r.start < selStart && r.end > selEnd) {
-      // Range spans beyond both sides — split into two
       result.push({ ...r, end: selStart });
       result.push({ ...r, start: selEnd });
     } else if (r.start < selStart) {
-      // Overlaps left side — trim right
       result.push({ ...r, end: selStart });
     } else if (r.end > selEnd) {
-      // Overlaps right side — trim left
       result.push({ ...r, start: selEnd });
     }
-    // else: completely inside cleared region — remove
   }
   return result;
 }
 
-/** Save and restore cursor position across re-renders */
-function saveCursorPosition(editor: HTMLElement): number {
-  const sel = window.getSelection();
-  if (!sel || sel.rangeCount === 0 || !editor.contains(sel.anchorNode)) return 0;
+/** Calculate character offset from Range */
+function getCaretPositionFromRange(container: HTMLElement, range: Range): number {
+  if (!container.contains(range.startContainer)) return 0;
+  let pos = 0;
 
-  const range = sel.getRangeAt(0);
-  const preRange = document.createRange();
-  preRange.selectNodeContents(editor);
-  preRange.setEnd(range.startContainer, range.startOffset);
-  return preRange.toString().length;
-}
-
-function restoreCursorPosition(editor: HTMLElement, pos: number) {
-  try {
-    const walker = document.createTreeWalker(editor, NodeFilter.SHOW_TEXT);
-    let offset = 0;
-    let node: Node | null;
-    let lastNode: Text | null = null;
-
-    while ((node = walker.nextNode())) {
-      const textNode = node as Text;
-      lastNode = textNode;
-      if (offset + textNode.length >= pos) {
-        const sel = window.getSelection();
-        if (!sel) return;
-        const range = document.createRange();
-        const clampedOffset = Math.min(pos - offset, textNode.length);
-        range.setStart(textNode, clampedOffset);
-        range.collapse(true);
-        sel.removeAllRanges();
-        sel.addRange(range);
-        return;
+  function walk(node: Node): boolean {
+    if (node === range.startContainer) {
+      if (node.nodeType === Node.TEXT_NODE) {
+        pos += range.startOffset;
+      } else if (node.nodeType === Node.ELEMENT_NODE) {
+        for (let i = 0; i < range.startOffset && i < node.childNodes.length; i++) {
+          const child = node.childNodes[i];
+          if (child.nodeType === Node.TEXT_NODE) {
+            pos += (child as Text).length;
+          } else if (child.nodeType === Node.ELEMENT_NODE) {
+            if ((child as HTMLElement).tagName === "BR") {
+              pos += 1;
+            } else {
+              pos += child.textContent?.length || 0;
+            }
+          }
+        }
       }
-      offset += textNode.length;
+      return true;
     }
 
-    // pos beyond total text — place cursor at end
-    if (lastNode) {
-      const sel = window.getSelection();
-      if (!sel) return;
+    if (node.nodeType === Node.TEXT_NODE) {
+      pos += (node as Text).length;
+    } else if (node.nodeType === Node.ELEMENT_NODE) {
+      if ((node as HTMLElement).tagName === "BR") {
+        pos += 1;
+      } else {
+        for (let i = 0; i < node.childNodes.length; i++) {
+          if (walk(node.childNodes[i])) return true;
+        }
+      }
+    }
+    return false;
+  }
+
+  walk(container);
+  return pos;
+}
+
+/** Get character offset of current caret position */
+function getCaretPosition(container: HTMLElement): number {
+  const sel = window.getSelection();
+  if (!sel || sel.rangeCount === 0) return 0;
+  return getCaretPositionFromRange(container, sel.getRangeAt(0));
+}
+
+/** Extract plain text content from DOM element including line breaks */
+function getContentFromDOM(element: HTMLElement): string {
+  if (element.childNodes.length === 1 && (element.firstChild as HTMLElement)?.tagName === "BR") {
+    return "";
+  }
+
+  let result = "";
+
+  function walk(node: Node) {
+    if (node.nodeType === Node.TEXT_NODE) {
+      result += node.nodeValue;
+    } else if (node.nodeType === Node.ELEMENT_NODE) {
+      const elem = node as HTMLElement;
+      if (elem.tagName === "BR") {
+        const parentNode: Node | null = node.parentNode;
+        const isLastChild = node === element.lastChild || (parentNode === element.lastChild && node === parentNode?.lastChild);
+        if (isLastChild && result.endsWith("\n")) {
+          return;
+        }
+        result += "\n";
+      } else if (elem.tagName === "DIV" || elem.tagName === "P") {
+        if (result.length > 0 && !result.endsWith("\n")) {
+          result += "\n";
+        }
+        for (let i = 0; i < node.childNodes.length; i++) {
+          walk(node.childNodes[i]);
+        }
+      } else {
+        for (let i = 0; i < node.childNodes.length; i++) {
+          walk(node.childNodes[i]);
+        }
+      }
+    }
+  }
+
+  walk(element);
+  return result;
+}
+
+/** Find DOM node and offset for target character position */
+function getNodeAndOffset(container: HTMLElement, targetOffset: number): { node: Node; offset: number } | null {
+  let currentOffset = 0;
+  let result: { node: Node; offset: number } | null = null;
+
+  function walk(node: Node): boolean {
+    if (node.nodeType === Node.TEXT_NODE) {
+      const len = (node as Text).length;
+      if (currentOffset + len >= targetOffset) {
+        result = { node, offset: Math.max(0, Math.min(targetOffset - currentOffset, len)) };
+        return true;
+      }
+      currentOffset += len;
+    } else if (node.nodeType === Node.ELEMENT_NODE) {
+      const elem = node as HTMLElement;
+      if (elem.tagName === "BR") {
+        if (currentOffset === targetOffset || currentOffset + 1 === targetOffset) {
+          const parent = elem.parentNode || container;
+          const idx = Array.from(parent.childNodes).indexOf(elem as ChildNode);
+          result = { node: parent, offset: idx + 1 };
+          return true;
+        }
+        currentOffset += 1;
+      } else {
+        for (let i = 0; i < node.childNodes.length; i++) {
+          if (walk(node.childNodes[i])) return true;
+        }
+      }
+    }
+    return false;
+  }
+
+  walk(container);
+  return result;
+}
+
+/** Set selection range or collapsed caret */
+function setSelectionRange(container: HTMLElement, startOffset: number, endOffset: number) {
+  const sel = window.getSelection();
+  if (!sel) return;
+
+  const start = getNodeAndOffset(container, startOffset);
+  const end = startOffset === endOffset ? start : getNodeAndOffset(container, endOffset);
+
+  if (start) {
+    try {
       const range = document.createRange();
-      range.setStart(lastNode, lastNode.length);
-      range.collapse(true);
+      range.setStart(start.node, start.offset);
+      if (end) {
+        range.setEnd(end.node, end.offset);
+      } else {
+        range.collapse(true);
+      }
+      sel.removeAllRanges();
+      sel.addRange(range);
+    } catch {
+      const range = document.createRange();
+      range.selectNodeContents(container);
+      range.collapse(false);
       sel.removeAllRanges();
       sel.addRange(range);
     }
-  } catch {
-    // Cursor restore failed — non-critical, skip
+  } else {
+    const range = document.createRange();
+    range.selectNodeContents(container);
+    range.collapse(false);
+    sel.removeAllRanges();
+    sel.addRange(range);
   }
 }
 
@@ -210,6 +316,7 @@ export default function RichTextEditor({
   formatRanges,
   onChange,
   tagKeys = [],
+  showLabel = true,
 }: RichTextEditorProps) {
   const editorRef = useRef<HTMLDivElement>(null);
   const [selection, setSelection] = useState<{ start: number; end: number } | null>(null);
@@ -221,8 +328,8 @@ export default function RichTextEditor({
   const [showTagMenu, setShowTagMenu] = useState(false);
   const prevContentRef = useRef(content);
   const isComposingRef = useRef(false);
-  const cursorPosRef = useRef(0);
-  const isInputtingRef = useRef(false);
+  const pendingCaretRef = useRef<number | null>(null);
+  const pendingSelectionRef = useRef<{ start: number; end: number } | null>(null);
 
   const ranges = useMemo(() => formatRanges ?? [], [formatRanges]);
   const segments = useMemo(() => buildSegments(content, ranges), [content, ranges]);
@@ -247,7 +354,7 @@ export default function RichTextEditor({
     return { bold, italic, color, stroke_color, stroke_width };
   }, [selection, ranges]);
 
-  const hasSelection = selection !== null;
+  const hasSelection = selection !== null && selection.start !== selection.end;
 
   // Convert DOM selection to character offsets
   const getSelectionOffsets = useCallback((): { start: number; end: number } | null => {
@@ -257,32 +364,16 @@ export default function RichTextEditor({
     const range = sel.getRangeAt(0);
     if (!editorRef.current.contains(range.startContainer)) return null;
 
-    const walker = document.createTreeWalker(editorRef.current, NodeFilter.SHOW_TEXT);
-    let offset = 0;
-    let startOffset = 0;
-    let endOffset = 0;
-    let foundStart = false;
-    let foundEnd = false;
+    const startRange = range.cloneRange();
+    startRange.collapse(true);
+    const endRange = range.cloneRange();
+    endRange.collapse(false);
 
-    let node: Node | null;
-    while ((node = walker.nextNode())) {
-      const textNode = node as Text;
-      if (textNode === range.startContainer) {
-        startOffset = offset + range.startOffset;
-        foundStart = true;
-      }
-      if (textNode === range.endContainer) {
-        endOffset = offset + range.endOffset;
-        foundEnd = true;
-        break;
-      }
-      offset += textNode.length;
-    }
+    const start = getCaretPositionFromRange(editorRef.current, startRange);
+    const end = getCaretPositionFromRange(editorRef.current, endRange);
 
-    if (!foundStart || !foundEnd) return null;
-    if (startOffset === endOffset) return null;
-
-    return { start: Math.min(startOffset, endOffset), end: Math.max(startOffset, endOffset) };
+    if (start === end) return null;
+    return { start: Math.min(start, end), end: Math.max(start, end) };
   }, []);
 
   // Track selection changes
@@ -299,15 +390,12 @@ export default function RichTextEditor({
 
   const handleInput = useCallback(() => {
     if (!editorRef.current || isComposingRef.current) return;
-    // innerText can have trailing newlines from <br> — normalize
-    const newContent = (editorRef.current.innerText || "").replace(/\n$/, "");
+
+    const caretPos = getCaretPosition(editorRef.current);
+    const newContent = getContentFromDOM(editorRef.current);
     const oldContent = prevContentRef.current;
 
     if (newContent === oldContent) return;
-
-    // Save cursor before React re-renders
-    cursorPosRef.current = saveCursorPosition(editorRef.current);
-    isInputtingRef.current = true;
 
     let editStart = 0;
     while (editStart < oldContent.length && editStart < newContent.length && oldContent[editStart] === newContent[editStart]) {
@@ -323,20 +411,54 @@ export default function RichTextEditor({
 
     const adjusted = adjustRanges(ranges, editStart, oldEnd - editStart, newEnd - editStart);
     prevContentRef.current = newContent;
-    setSelection(null);
+    pendingCaretRef.current = caretPos;
     onChange(newContent, adjusted);
   }, [ranges, onChange]);
 
+  const handleKeyDown = useCallback((e: React.KeyboardEvent<HTMLDivElement>) => {
+    if (e.key !== "Enter") return;
+    e.preventDefault();
+    if (!editorRef.current) return;
+
+    const caretPos = getCaretPosition(editorRef.current);
+    const before = content.slice(0, caretPos);
+    const after = content.slice(caretPos);
+    const newContent = before + "\n" + after;
+    const adjusted = adjustRanges(ranges, caretPos, 0, 1);
+    prevContentRef.current = newContent;
+    pendingCaretRef.current = caretPos + 1;
+    onChange(newContent, adjusted);
+  }, [content, ranges, onChange]);
+
   const handlePaste = useCallback((e: React.ClipboardEvent) => {
     e.preventDefault();
-    const text = e.clipboardData.getData("text/plain");
-    document.execCommand("insertText", false, text);
-  }, []);
+    const text = e.clipboardData.getData("text/plain").replace(/\r\n/g, "\n");
+    if (!editorRef.current) return;
+
+    const selection = window.getSelection();
+    if (!selection || selection.rangeCount === 0) return;
+
+    const range = selection.getRangeAt(0);
+    range.deleteContents();
+
+    const textNode = document.createTextNode(text);
+    range.insertNode(textNode);
+
+    range.setStartAfter(textNode);
+    range.setEndAfter(textNode);
+    selection.removeAllRanges();
+    selection.addRange(range);
+
+    editorRef.current.normalize();
+    handleInput();
+  }, [handleInput]);
 
   // Build HTML from segments
   const segmentsHtml = useMemo(() => {
-    if (segments.length === 0) return content || "\u200B";
-    return segments.map((seg) => {
+    if (segments.length === 0) {
+      return !content ? "<br>" : "";
+    }
+    const html = segments.map((seg) => {
       const styles: string[] = [];
       if (seg.bold) styles.push("font-weight:bold");
       if (seg.italic) styles.push("font-style:italic");
@@ -349,27 +471,29 @@ export default function RichTextEditor({
         ? ' class="bg-purple-100 text-purple-700 rounded px-0.5 mx-0.5 font-mono text-xs inline-block"'
         : "";
       const style = styles.length > 0 ? ` style="${styles.join(";")}"` : "";
-      // Escape HTML entities in text
-      const escaped = seg.text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+      const escaped = seg.text
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;");
       return `<span${cls}${style}>${escaped}</span>`;
     }).join("");
+
+    return html || "<br>";
   }, [segments, content]);
 
-  // Imperatively update editor DOM — avoids React reconciliation errors with contentEditable
+  // Imperatively update editor DOM and restore caret / selection
   useLayoutEffect(() => {
     if (!editorRef.current) return;
-    if (isInputtingRef.current) {
-      // During active input, restore cursor instead of replacing DOM
-      try {
-        restoreCursorPosition(editorRef.current, cursorPosRef.current);
-      } catch {
-        // Non-critical
-      }
-      isInputtingRef.current = false;
-      return;
-    }
-    // External update (format apply, tag insert, prop change) — replace innerHTML
     editorRef.current.innerHTML = segmentsHtml;
+
+    if (pendingSelectionRef.current) {
+      const { start, end } = pendingSelectionRef.current;
+      setSelectionRange(editorRef.current, start, end);
+      pendingSelectionRef.current = null;
+    } else if (pendingCaretRef.current !== null) {
+      setSelectionRange(editorRef.current, pendingCaretRef.current, pendingCaretRef.current);
+      pendingCaretRef.current = null;
+    }
   }, [segmentsHtml]);
 
   // Sync prevContentRef when content changes externally
@@ -382,6 +506,7 @@ export default function RichTextEditor({
     (format: Partial<Pick<FormatRange, "bold" | "italic" | "color" | "stroke_color" | "stroke_width">>) => {
       if (!selection) return;
       const updated = applyFormat(ranges, selection.start, selection.end, format);
+      pendingSelectionRef.current = { start: selection.start, end: selection.end };
       onChange(content, updated);
     },
     [selection, ranges, content, onChange],
@@ -390,6 +515,7 @@ export default function RichTextEditor({
   const handleClearFormat = useCallback(() => {
     if (!selection) return;
     const updated = clearFormat(ranges, selection.start, selection.end);
+    pendingSelectionRef.current = { start: selection.start, end: selection.end };
     onChange(content, updated);
   }, [selection, ranges, content, onChange]);
 
@@ -398,15 +524,18 @@ export default function RichTextEditor({
       if (!editorRef.current) return;
       const tag = `{${tagKey}}`;
 
-      // Insert at cursor position
-      cursorPosRef.current = saveCursorPosition(editorRef.current);
+      let cursorPos = content.length;
+      const sel = window.getSelection();
+      if (sel && sel.rangeCount > 0 && editorRef.current.contains(sel.anchorNode)) {
+        cursorPos = getCaretPosition(editorRef.current);
+      }
 
-      const before = content.slice(0, cursorPosRef.current);
-      const after = content.slice(cursorPosRef.current);
+      const before = content.slice(0, cursorPos);
+      const after = content.slice(cursorPos);
       const newContent = before + tag + after;
+      const adjusted = adjustRanges(ranges, cursorPos, 0, tag.length);
 
-      const adjusted = adjustRanges(ranges, cursorPosRef.current, 0, tag.length);
-      cursorPosRef.current += tag.length;
+      pendingCaretRef.current = cursorPos + tag.length;
       prevContentRef.current = newContent;
       onChange(newContent, adjusted);
       setShowTagMenu(false);
@@ -438,7 +567,7 @@ export default function RichTextEditor({
 
   return (
     <div className="relative">
-      <label className="block text-xs text-slate-500 mb-1">Content</label>
+      {showLabel && <label className="block text-xs text-slate-500 mb-1">Content</label>}
 
       {/* ── Persistent Word-like Toolbar ── */}
       <div className="flex items-center gap-0.5 px-2 py-1.5 bg-slate-50 border border-slate-200 rounded-t-lg border-b-0 flex-wrap">
@@ -733,6 +862,7 @@ export default function RichTextEditor({
         ref={editorRef}
         contentEditable
         suppressContentEditableWarning
+        onKeyDown={handleKeyDown}
         onInput={handleInput}
         onMouseUp={updateSelection}
         onKeyUp={updateSelection}
@@ -743,7 +873,6 @@ export default function RichTextEditor({
           handleInput();
         }}
         onBlur={() => {
-          // Delay to allow toolbar clicks to fire first
           setTimeout(() => {
             if (!document.activeElement?.closest("[data-richtext-dropdown]")) {
               setSelection(null);

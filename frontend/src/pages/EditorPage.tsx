@@ -12,6 +12,7 @@ import type { Font, TextBlock, ImageBlock } from "@/types";
 import PreviewPlayer from "@/components/editor/PreviewPlayer";
 import FontPicker from "@/components/editor/FontPicker";
 import PageTransition from "@/components/common/PageTransition";
+import RichTextEditor from "@/components/admin/RichTextEditor";
 
 /** Convert snake_case tag to human-readable label. */
 function humanizeTag(tag: string): string {
@@ -24,10 +25,10 @@ function humanizeTag(tag: string): string {
 function getTagConfigs(
   textBlocks: TextBlock[],
   tags: string[]
-): Record<string, { label?: string; min_chars?: number; max_chars?: number }> {
+): Record<string, { label?: string; placeholder?: string; min_chars?: number; max_chars?: number }> {
   const configs: Record<
     string,
-    { label?: string; min_chars?: number; max_chars?: number }
+    { label?: string; placeholder?: string; min_chars?: number; max_chars?: number }
   > = {};
   for (const tag of tags) {
     for (const block of textBlocks) {
@@ -51,6 +52,10 @@ export default function EditorPage() {
     fieldValues,
     transliteratedValues,
     textColorOverrides,
+    editorMode,
+    blockOverrides,
+    blockFormatOverrides,
+    transliteratedBlockOverrides,
     setTemplate,
     setFont,
     setFieldValue,
@@ -63,6 +68,13 @@ export default function EditorPage() {
     imageUploads,
     setImageUpload,
     seekTo,
+    initAdvancedMode,
+    exitAdvancedMode,
+    setBlockOverride,
+    setBlockOverrides,
+    setBlockFormatOverrides,
+    setBlockFormatOverride,
+    setTransliteratedBlockOverrides,
     reset,
   } = useEditorStore();
   const { token, openAuthModal } = useAuthStore();
@@ -70,8 +82,11 @@ export default function EditorPage() {
   const [fonts, setFonts] = useState<Font[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [showConfirmPopup, setShowConfirmPopup] = useState(false);
+  const [transliteratedLabels, setTransliteratedLabels] = useState<Record<string, string>>({});
+  const labelTranslitTimer = useRef<ReturnType<typeof setTimeout>>();
   const [linkCopied, setLinkCopied] = useState(false);
   const debounceTimer = useRef<ReturnType<typeof setTimeout>>();
+  const blockOverrideDebounceTimer = useRef<ReturnType<typeof setTimeout>>();
   const saveDraftTimer = useRef<ReturnType<typeof setTimeout>>();
   const draftApplied = useRef(false);
 
@@ -102,13 +117,13 @@ export default function EditorPage() {
     if (isLoggedIn) {
       getDraft(template.id).then((draft) => {
         if (draft) {
-          applyDraftData(draft.field_values, draft.font_id, draft.text_color_override);
+          applyDraftData(draft.field_values, draft.font_id, draft.text_color_override, draft.editor_mode, draft.block_overrides, draft.block_format_overrides);
         }
       });
     } else {
       const draft = getGuestDraft(template.id);
       if (draft) {
-        applyDraftData(draft.field_values, draft.font_id, draft.text_color_override);
+        applyDraftData(draft.field_values, draft.font_id, draft.text_color_override, draft.editor_mode, draft.block_overrides, draft.block_format_overrides);
       }
     }
   }, [template, fonts]);
@@ -116,7 +131,10 @@ export default function EditorPage() {
   const applyDraftData = (
     values: Record<string, string>,
     fontId: string | null,
-    colorOverrides: Record<string, string> | null
+    colorOverrides: Record<string, string> | null,
+    savedEditorMode?: string,
+    savedBlockOverrides?: Record<string, string>,
+    savedBlockFormatOverrides?: Record<string, any[]>
   ) => {
     if (!template) return;
     const tags = extractTags(template);
@@ -138,6 +156,14 @@ export default function EditorPage() {
         setFont(match, getFontFileUrl(match.id));
       }
     }
+
+    // Restore advanced mode if saved
+    if (savedEditorMode === "advanced" && savedBlockOverrides && Object.keys(savedBlockOverrides).length > 0) {
+      initAdvancedMode(savedBlockOverrides);
+      if (savedBlockFormatOverrides && Object.keys(savedBlockFormatOverrides).length > 0) {
+        setBlockFormatOverrides(savedBlockFormatOverrides);
+      }
+    }
   };
 
   // Auto-save draft on changes (debounced)
@@ -146,13 +172,29 @@ export default function EditorPage() {
     clearTimeout(saveDraftTimer.current);
     saveDraftTimer.current = setTimeout(() => {
       const hasValues = Object.values(fieldValues).some((v) => v.trim());
-      if (!hasValues) return;
+      const hasBlockOverrides = editorMode === "advanced" && Object.values(blockOverrides).some((v) => v.trim());
+      if (!hasValues && !hasBlockOverrides) return;
 
-      const draftData = {
+      const draftData: {
+        field_values: Record<string, string>;
+        font_id: string | null;
+        text_color_override: Record<string, string> | null;
+        editor_mode?: string;
+        block_overrides?: Record<string, string>;
+        block_format_overrides?: Record<string, any[]>;
+      } = {
         field_values: fieldValues,
         font_id: font?.id ?? null,
         text_color_override: Object.keys(textColorOverrides).length > 0 ? textColorOverrides : null,
       };
+
+      if (editorMode === "advanced") {
+        draftData.editor_mode = editorMode;
+        draftData.block_overrides = blockOverrides;
+        if (Object.keys(blockFormatOverrides).length > 0) {
+          draftData.block_format_overrides = blockFormatOverrides;
+        }
+      }
 
       if (isLoggedIn) {
         saveDraft(template.id, draftData).catch(() => {});
@@ -161,7 +203,7 @@ export default function EditorPage() {
       }
     }, 1000);
     return () => clearTimeout(saveDraftTimer.current);
-  }, [fieldValues, font, textColorOverrides, template, isLoggedIn]);
+  }, [fieldValues, font, textColorOverrides, template, isLoggedIn, editorMode, blockOverrides, blockFormatOverrides]);
 
   const tags = useMemo(
     () => (template ? extractTags(template) : []),
@@ -246,6 +288,62 @@ export default function EditorPage() {
     return () => clearTimeout(debounceTimer.current);
   }, [fieldValues, effectiveLanguage, doTransliterate, placeholderMap]);
 
+  // Debounced transliteration for block overrides in advanced mode
+  useEffect(() => {
+    if (editorMode !== "advanced" || effectiveLanguage === "english") {
+      setTransliteratedBlockOverrides({});
+      return;
+    }
+    clearTimeout(blockOverrideDebounceTimer.current);
+    blockOverrideDebounceTimer.current = setTimeout(() => {
+      const nonEmpty: Record<string, string> = {};
+      for (const [k, v] of Object.entries(blockOverrides)) {
+        if (v.trim()) nonEmpty[k] = v;
+      }
+      if (Object.keys(nonEmpty).length === 0) {
+        setTransliteratedBlockOverrides({});
+        return;
+      }
+      transliterateBatch(nonEmpty, effectiveLanguage)
+        .then(setTransliteratedBlockOverrides)
+        .catch((err) => console.error("Block override transliteration failed:", err));
+    }, 400);
+    return () => clearTimeout(blockOverrideDebounceTimer.current);
+  }, [blockOverrides, editorMode, effectiveLanguage, setTransliteratedBlockOverrides]);
+
+  // Transliterate UI labels when regional font selected
+  useEffect(() => {
+    if (effectiveLanguage === "english" || !template) {
+      setTransliteratedLabels({});
+      return;
+    }
+    clearTimeout(labelTranslitTimer.current);
+    labelTranslitTimer.current = setTimeout(() => {
+      const labelsToTranslate: Record<string, string> = {};
+
+      // Express mode: tag labels
+      const allTags = extractTags(template);
+      const configs = getTagConfigs(template.text_blocks ?? [], allTags);
+      for (const tag of allTags) {
+        const label = configs[tag]?.label ?? humanizeTag(tag);
+        labelsToTranslate[`label:${tag}`] = label;
+      }
+
+      // Advanced mode: "Block 1", "Block 2", etc.
+      const blocks = [...(template.text_blocks ?? [])]
+        .filter((b) => b.content?.trim())
+        .sort((a, b) => (a.start_time ?? 0) - (b.start_time ?? 0));
+      blocks.forEach((_, idx) => {
+        labelsToTranslate[`block:${idx}`] = `Block ${idx + 1}`;
+      });
+
+      transliterateBatch(labelsToTranslate, effectiveLanguage)
+        .then(setTransliteratedLabels)
+        .catch(() => {});
+    }, 300);
+    return () => clearTimeout(labelTranslitTimer.current);
+  }, [effectiveLanguage, template]);
+
   const handleFontChange = (fontId: string) => {
     const selected = fonts.find((f) => f.id === fontId);
     if (selected) {
@@ -264,7 +362,29 @@ export default function EditorPage() {
     return merged;
   }, [fieldValues, transliteratedValues]);
 
-  // Step 1: Auth gate → show confirm/share popup
+  // --- Mode switch handlers ---
+  const handleSwitchToAdvanced = () => {
+    if (!template) return;
+    // Reuse existing block overrides if user already edited in Advanced mode
+    if (Object.keys(blockOverrides).length > 0) {
+      initAdvancedMode(blockOverrides);
+      return;
+    }
+    const textBlocks = template.text_blocks ?? [];
+    const expanded: Record<string, string> = {};
+    for (const block of textBlocks) {
+      if (!block.content) continue;
+      const expandedText = block.content.replace(/\{(\w+)\}/g, (_, tag) => effectiveValues[tag] ?? "");
+      expanded[block.id] = expandedText;
+    }
+    initAdvancedMode(expanded);
+  };
+
+  const handleSwitchToExpress = () => {
+    exitAdvancedMode();
+  };
+
+  // Step 1: Auth gate -> show confirm/share popup
   const handleRenderClick = () => {
     if (!template) return;
     if (!isLoggedIn) {
@@ -291,11 +411,19 @@ export default function EditorPage() {
       const colorOverride = Object.keys(textColorOverrides).length > 0
         ? textColorOverrides
         : undefined;
+      const advancedBlockOverrides = editorMode === "advanced"
+        ? blockOverrides
+        : undefined;
+      const advancedBlockFormatOverrides = editorMode === "advanced" && Object.keys(blockFormatOverrides).length > 0
+        ? blockFormatOverrides
+        : undefined;
       const order = await createOrder(
         template.id,
         font?.id ?? null,
         effectiveValues,
-        colorOverride
+        colorOverride,
+        advancedBlockOverrides,
+        advancedBlockFormatOverrides
       );
 
       const options = {
@@ -364,6 +492,14 @@ export default function EditorPage() {
       });
   }, [template]);
 
+  // Text blocks with content, sorted by start_time (for advanced mode)
+  const textBlocksWithContent = useMemo(() => {
+    if (!template) return [];
+    return [...(template.text_blocks ?? [])]
+      .filter((b) => b.content && b.content.trim())
+      .sort((a, b) => (a.start_time ?? 0) - (b.start_time ?? 0));
+  }, [template]);
+
   const uploadableImageBlocks = useMemo(() => {
     if (!template) return [];
     return (template.image_blocks ?? []).filter((b) => b.is_user_uploadable);
@@ -403,36 +539,106 @@ export default function EditorPage() {
   return (
     <PageTransition>
     <div className="flex flex-col lg:flex-row gap-8">
-      {/* Form Panel — order-2 on mobile (preview first), order-1 on desktop (form left) */}
+      {/* Form Panel -- order-2 on mobile (preview first), order-1 on desktop (form left) */}
       <div className="w-full lg:w-[420px] lg:flex-shrink-0 lg:overflow-y-auto lg:max-h-[calc(100vh-5rem)] order-2 lg:order-1">
         <h1 className="text-lg font-bold text-slate-800 mb-3">{template.name}</h1>
 
-        {/* All tag inputs — flat list, compact */}
+        {/* Express / Advanced mode toggle */}
+        <div style={{ display: "flex", gap: 0, marginBottom: 16 }}>
+          <button
+            onClick={() => { if (editorMode === "advanced") handleSwitchToExpress(); }}
+            style={{
+              flex: 1,
+              padding: "8px 16px",
+              border: "1px solid #d1d5db",
+              borderRadius: "8px 0 0 8px",
+              background: editorMode === "express" ? "#6366f1" : "#fff",
+              color: editorMode === "express" ? "#fff" : "#374151",
+              fontWeight: 600,
+              cursor: "pointer",
+            }}
+          >
+            Express
+          </button>
+          <button
+            onClick={() => { if (editorMode === "express") handleSwitchToAdvanced(); }}
+            style={{
+              flex: 1,
+              padding: "8px 16px",
+              border: "1px solid #d1d5db",
+              borderLeft: "none",
+              borderRadius: "0 8px 8px 0",
+              background: editorMode === "advanced" ? "#6366f1" : "#fff",
+              color: editorMode === "advanced" ? "#fff" : "#374151",
+              fontWeight: 600,
+              cursor: "pointer",
+            }}
+          >
+            Advanced
+          </button>
+        </div>
+
+        {/* Form fields */}
         <div className="space-y-2.5 mb-4">
-          {(() => {
-            seenTags.clear();
-            return blocksWithTags.map(({ block, tags: blockTags }) => {
-              const newTags = blockTags.filter((t) => !seenTags.has(t));
-              newTags.forEach((t) => seenTags.add(t));
-              if (newTags.length === 0) return null;
-              return newTags.map((tag) => {
-                const cfg = tagConfigs[tag] ?? {};
-                const label = cfg.label ?? humanizeTag(tag);
-                const transVal = transliteratedValues[tag];
+          {editorMode === "express" ? (
+            /* Express mode: tag-based inputs */
+            <>
+              {(() => {
+                seenTags.clear();
+                return blocksWithTags.map(({ block, tags: blockTags }) => {
+                  const newTags = blockTags.filter((t) => !seenTags.has(t));
+                  newTags.forEach((t) => seenTags.add(t));
+                  if (newTags.length === 0) return null;
+                  return newTags.map((tag) => {
+                    const cfg = tagConfigs[tag] ?? {};
+                    const label = cfg.label ?? humanizeTag(tag);
+                    const regionalLabel = transliteratedLabels[`label:${tag}`];
+                    const transVal = transliteratedValues[tag];
+                    return (
+                      <div key={tag}>
+                        <label className="block text-xs font-medium text-slate-600 mb-0.5">
+                          {regionalLabel || label}
+                        </label>
+                        <textarea
+                          placeholder={cfg.placeholder || label}
+                          value={fieldValues[tag] || ""}
+                          onChange={(e) => setFieldValue(tag, e.target.value)}
+                          onFocus={() => seekTo(block.start_time ?? 0)}
+                          minLength={cfg.min_chars}
+                          maxLength={cfg.max_chars}
+                          rows={1}
+                          className="input-field w-full text-center resize-y placeholder:text-slate-300 text-sm py-2"
+                        />
+                        {isRegionalFont && transVal && (
+                          <p className="bg-primary-50 px-2 py-1 rounded text-primary-500 text-xs font-medium mt-0.5">
+                            {transVal}
+                          </p>
+                        )}
+                      </div>
+                    );
+                  });
+                });
+              })()}
+            </>
+          ) : (
+            /* Advanced mode: one textarea per text block */
+            <>
+              {textBlocksWithContent.map((block, idx) => {
+                const regionalBlockLabel = transliteratedLabels[`block:${idx}`];
+                const transVal = transliteratedBlockOverrides[block.id];
                 return (
-                  <div key={tag}>
+                  <div key={block.id} onClick={() => seekTo(block.start_time ?? 0)}>
                     <label className="block text-xs font-medium text-slate-600 mb-0.5">
-                      {label}
+                      {regionalBlockLabel || `Block ${idx + 1}`}
                     </label>
-                    <textarea
-                      placeholder={cfg.placeholder || label}
-                      value={fieldValues[tag] || ""}
-                      onChange={(e) => setFieldValue(tag, e.target.value)}
-                      onFocus={() => seekTo(block.start_time ?? 0)}
-                      minLength={cfg.min_chars}
-                      maxLength={cfg.max_chars}
-                      rows={1}
-                      className="input-field w-full text-center resize-y placeholder:text-slate-300 text-sm py-2"
+                    <RichTextEditor
+                      content={blockOverrides[block.id] ?? ""}
+                      formatRanges={blockFormatOverrides[block.id] ?? null}
+                      onChange={(content, ranges) => {
+                        setBlockOverride(block.id, content);
+                        setBlockFormatOverride(block.id, ranges);
+                      }}
+                      showLabel={false}
                     />
                     {isRegionalFont && transVal && (
                       <p className="bg-primary-50 px-2 py-1 rounded text-primary-500 text-xs font-medium mt-0.5">
@@ -441,9 +647,9 @@ export default function EditorPage() {
                     )}
                   </div>
                 );
-              });
-            });
-          })()}
+              })}
+            </>
+          )}
 
           {/* Image uploads */}
           {uploadableImageBlocks.map((block) => (
@@ -504,7 +710,7 @@ export default function EditorPage() {
           ))}
         </div>
 
-        {/* Customize Colors & Font — hidden by default */}
+        {/* Customize Colors & Font -- hidden by default */}
         <button
           onClick={() => setShowCustomize((v) => !v)}
           className="w-full flex items-center justify-center gap-2 text-sm text-slate-500 hover:text-slate-700 py-2 mb-2 transition-colors"
@@ -633,7 +839,7 @@ export default function EditorPage() {
         )}
       </div>
 
-      {/* Preview Panel — order-1 on mobile (shown first), order-2 on desktop (right side) */}
+      {/* Preview Panel -- order-1 on mobile (shown first), order-2 on desktop (right side) */}
       <div className="flex-1 flex justify-center order-1 lg:order-2">
         <PreviewPlayer />
       </div>

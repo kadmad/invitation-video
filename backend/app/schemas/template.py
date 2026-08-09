@@ -69,6 +69,7 @@ class TemplateListResponse(BaseModel):
     default_font_id: uuid.UUID | None
     render_notes: str | None
     preview_key: str | None = None
+    preview_status: str | None = None
     price: int
     created_at: datetime
 

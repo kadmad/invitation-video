@@ -59,6 +59,8 @@ async def create_order(
         font_id=body.font_id,
         field_values=body.field_values,
         text_color_override=body.text_color_override,
+        block_overrides=body.block_overrides,
+        block_format_overrides=body.block_format_overrides,
     )
     db.add(payment)
     await db.commit()
@@ -112,6 +114,8 @@ async def verify_payment(
         font_id=payment.font_id,
         field_values=payment.field_values,
         text_color_override=payment.text_color_override,
+        block_overrides=payment.block_overrides,
+        block_format_overrides=payment.block_format_overrides,
         status="pending",
     )
     db.add(job)

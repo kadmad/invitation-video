@@ -24,6 +24,9 @@ class UserDraft(UUIDMixin, TimestampMixin, Base):
     )
     field_values: Mapped[dict] = mapped_column(JSONB, default=dict)
     text_color_override: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    block_overrides: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    block_format_overrides: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    editor_mode: Mapped[str | None] = mapped_column(String, nullable=True)
 
     user = relationship("User")
     template = relationship("Template")

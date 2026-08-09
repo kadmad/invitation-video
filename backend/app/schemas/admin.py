@@ -216,6 +216,7 @@ class AdminTemplateListResponse(BaseModel):
     default_font_id: uuid.UUID | None
     render_notes: str | None
     preview_key: str | None = None
+    preview_status: str | None = None
     created_at: datetime
 
     model_config = {"from_attributes": True}

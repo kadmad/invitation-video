@@ -27,6 +27,8 @@ class RenderJob(UUIDMixin, TimestampMixin, Base):
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
     celery_task_id: Mapped[str | None] = mapped_column(String(100), nullable=True)
     text_color_override: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    block_overrides: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    block_format_overrides: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     progress: Mapped[int] = mapped_column(Integer, default=0)
 
     user = relationship("User", back_populates="render_jobs")

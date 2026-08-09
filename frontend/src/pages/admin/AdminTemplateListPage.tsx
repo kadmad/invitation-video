@@ -167,6 +167,28 @@ function AdminTemplateCard({
           <div className="absolute inset-0 bg-black/20 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center z-10">
             <span className="btn-primary text-sm pointer-events-none">Edit Template</span>
           </div>
+
+          {/* Hover preview generating status notice */}
+          {hovered && (t.preview_status === "processing" || t.preview_status === "pending") && (
+            <div className="absolute inset-0 bg-slate-950/65 backdrop-blur-xs flex flex-col items-center justify-center p-3 text-center transition-all z-20 pointer-events-none">
+              <div className="flex items-center gap-2 text-amber-300 font-medium text-xs bg-amber-950/85 px-3.5 py-2 rounded-full border border-amber-500/30 shadow-lg animate-pulse">
+                <svg className="w-4 h-4 animate-spin text-amber-400 flex-shrink-0" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                </svg>
+                <span>Preview is getting ready...</span>
+              </div>
+            </div>
+          )}
+          {/* Loading spinner when video is buffering */}
+          {hovered && !videoReady && !(t.preview_status === "processing" || t.preview_status === "pending") && videoSrc && (
+            <div className="absolute inset-0 flex items-center justify-center z-20 pointer-events-none">
+              <svg className="w-8 h-8 animate-spin text-white/60" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+              </svg>
+            </div>
+          )}
         </div>
 
         {/* Info */}
@@ -291,6 +313,14 @@ export default function AdminTemplateListPage() {
   };
 
   useEffect(() => { load(true); }, []);
+
+  // Poll for preview status updates when any template is processing
+  useEffect(() => {
+    const hasProcessing = templates.some((t) => t.preview_status === "processing" || t.preview_status === "pending");
+    if (!hasProcessing) return;
+    const interval = setInterval(() => load(), 5000);
+    return () => clearInterval(interval);
+  }, [templates]);
 
   const filtered = templates.filter((t) => {
     const matchesSearch =

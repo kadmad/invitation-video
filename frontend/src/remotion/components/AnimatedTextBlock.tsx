@@ -12,6 +12,8 @@ interface AnimatedTextBlockProps {
   defaultTextColor?: string;
   defaultFontFamily?: string;
   overrideFontFamily?: string;
+  blockOverride?: string;
+  blockFormatRanges?: FormatRange[];
 }
 
 interface AnimState {
@@ -397,6 +399,7 @@ function renderPerCharExit(
   const perCharFrames = Math.max(1, Math.floor(animFrames / totalChars));
 
   return graphemes.map((char, i) => {
+    if (char === "\n") return <br key={i} />;
     // ltr = first char exits first, rtl = last char exits first
     const animIdx = direction === "rtl" ? totalChars - 1 - i : i;
     const charStart = outStart + animIdx * perCharFrames;
@@ -461,6 +464,7 @@ function renderPerCharRichExit(
   tagValues: Record<string, string>,
   fontFamilies: Record<string, string>,
   direction: string = "ltr",
+  precomputedRanges?: FormatRange[],
 ) {
   const graphemes = splitGraphemes(text);
   const totalChars = graphemes.length;
@@ -468,15 +472,17 @@ function renderPerCharRichExit(
 
   // Get per-grapheme format info
   let charFormats: Array<{ bold?: boolean; italic?: boolean; color?: string; stroke_color?: string; stroke_width?: number }> = [];
-  const rawRanges = block.format_ranges;
-  if (rawRanges && rawRanges.length > 0) {
-    let mappedRanges: FormatRange[];
+  const effectiveRanges = precomputedRanges ?? (() => {
+    const rawRanges = block.format_ranges;
+    if (!rawRanges || rawRanges.length === 0) return [];
     try {
       const { mapIndex } = expandTags(block.content, tagValues);
-      mappedRanges = mapRangesToExpanded(rawRanges, mapIndex);
+      return mapRangesToExpanded(rawRanges, mapIndex);
     } catch {
-      mappedRanges = [];
+      return [];
     }
+  })();
+  if (effectiveRanges.length > 0) {
     let codeIdx = 0;
     charFormats = graphemes.map((g) => {
       let bold: boolean | undefined;
@@ -484,7 +490,7 @@ function renderPerCharRichExit(
       let color: string | undefined;
       let stroke_color: string | undefined;
       let stroke_width: number | undefined;
-      for (const r of mappedRanges) {
+      for (const r of effectiveRanges) {
         if (r.start <= codeIdx && r.end > codeIdx) {
           if (r.bold !== undefined) bold = r.bold;
           if (r.italic !== undefined) italic = r.italic;
@@ -502,6 +508,7 @@ function renderPerCharRichExit(
   const perCharFrames = Math.max(1, Math.floor(animFrames / totalChars));
 
   return graphemes.map((char, i) => {
+    if (char === "\n") return <br key={i} />;
     const animIdx = direction === "rtl" ? totalChars - 1 - i : i;
     const charStart = outStart + animIdx * perCharFrames;
     const charEnd = Math.max(charStart + 1, Math.min(charStart + Math.round(fps * 0.35), outEnd));
@@ -670,24 +677,14 @@ function splitRichSegments(text: string, ranges: FormatRange[]): RichSegment[] {
   return segments;
 }
 
-/** Render text with rich formatting spans */
-function renderRichText(
-  expandedText: string,
-  block: TextBlock,
-  tagValues: Record<string, string>,
-  fontFamilies: Record<string, string>,
+/** Render text with rich formatting from pre-mapped ranges */
+function renderRichTextFromRanges(
+  text: string,
+  ranges: FormatRange[],
 ): React.ReactNode {
-  const rawRanges = block.format_ranges;
-  if (!rawRanges || rawRanges.length === 0) return expandedText;
+  if (!ranges || ranges.length === 0) return text;
 
-  let segments: RichSegment[];
-  try {
-    const { mapIndex } = expandTags(block.content, tagValues);
-    const mappedRanges = mapRangesToExpanded(rawRanges, mapIndex);
-    segments = splitRichSegments(expandedText, mappedRanges);
-  } catch {
-    return expandedText;
-  }
+  const segments = splitRichSegments(text, ranges);
 
   return segments.map((seg, i) => {
     const hasStyle = seg.bold || seg.italic || seg.color || seg.stroke_color;
@@ -711,11 +708,32 @@ function renderRichText(
   });
 }
 
+/** Render text with rich formatting spans */
+function renderRichText(
+  expandedText: string,
+  block: TextBlock,
+  tagValues: Record<string, string>,
+  fontFamilies: Record<string, string>,
+): React.ReactNode {
+  const rawRanges = block.format_ranges;
+  if (!rawRanges || rawRanges.length === 0) return expandedText;
+
+  let mappedRanges: FormatRange[];
+  try {
+    const { mapIndex } = expandTags(block.content, tagValues);
+    mappedRanges = mapRangesToExpanded(rawRanges, mapIndex);
+  } catch {
+    return expandedText;
+  }
+
+  return renderRichTextFromRanges(expandedText, mappedRanges);
+}
+
 /** Split text into grapheme clusters (keeps Gujarati conjuncts + matras intact) */
 function splitGraphemes(text: string): string[] {
-  if (typeof Intl !== "undefined" && Intl.Segmenter) {
-    const segmenter = new Intl.Segmenter(undefined, { granularity: "grapheme" });
-    return Array.from(segmenter.segment(text), (s) => s.segment);
+  if (typeof Intl !== "undefined" && (Intl as any).Segmenter) {
+    const segmenter = new (Intl as any).Segmenter(undefined, { granularity: "grapheme" });
+    return Array.from(segmenter.segment(text), (s: any) => s.segment);
   }
   // Fallback: spread handles surrogate pairs but not combining marks
   return [...text];
@@ -734,6 +752,7 @@ function renderPerCharRich(
   tagValues: Record<string, string>,
   fontFamilies: Record<string, string>,
   direction: string = "ltr",
+  precomputedRanges?: FormatRange[],
 ) {
   const graphemes = splitGraphemes(text);
   const totalChars = graphemes.length;
@@ -741,15 +760,17 @@ function renderPerCharRich(
 
   // Get per-grapheme format info (map using code-point index)
   let charFormats: Array<{ bold?: boolean; italic?: boolean; color?: string; stroke_color?: string; stroke_width?: number }> = [];
-  const rawRanges = block.format_ranges;
-  if (rawRanges && rawRanges.length > 0) {
-    let mappedRanges: FormatRange[];
+  const effectiveRanges = precomputedRanges ?? (() => {
+    const rawRanges = block.format_ranges;
+    if (!rawRanges || rawRanges.length === 0) return [];
     try {
       const { mapIndex } = expandTags(block.content, tagValues);
-      mappedRanges = mapRangesToExpanded(rawRanges, mapIndex);
+      return mapRangesToExpanded(rawRanges, mapIndex);
     } catch {
-      mappedRanges = [];
+      return [];
     }
+  })();
+  if (effectiveRanges.length > 0) {
     let codeIdx = 0;
     charFormats = graphemes.map((g) => {
       let bold: boolean | undefined;
@@ -757,7 +778,7 @@ function renderPerCharRich(
       let color: string | undefined;
       let stroke_color: string | undefined;
       let stroke_width: number | undefined;
-      for (const r of mappedRanges) {
+      for (const r of effectiveRanges) {
         if (r.start <= codeIdx && r.end > codeIdx) {
           if (r.bold !== undefined) bold = r.bold;
           if (r.italic !== undefined) italic = r.italic;
@@ -775,6 +796,7 @@ function renderPerCharRich(
   const perCharFrames = Math.max(1, Math.floor(animFrames / totalChars));
 
   return graphemes.map((char, i) => {
+    if (char === "\n") return <br key={i} />;
     const animIdx = direction === "rtl" ? totalChars - 1 - i : i;
     const charStart = inStart + animIdx * perCharFrames;
     const charEnd = Math.max(charStart + 1, Math.min(charStart + Math.round(fps * 0.35), inEnd));
@@ -849,6 +871,7 @@ function renderPerChar(
   const perCharFrames = Math.max(1, Math.floor(animFrames / totalChars));
 
   return graphemes.map((char, i) => {
+    if (char === "\n") return <br key={i} />;
     const animIdx = direction === "rtl" ? totalChars - 1 - i : i;
     const charStart = inStart + animIdx * perCharFrames;
     const charEnd = Math.max(charStart + 1, Math.min(charStart + Math.round(fps * 0.35), inEnd));
@@ -908,11 +931,15 @@ export default function AnimatedTextBlock({
   defaultTextColor,
   defaultFontFamily,
   overrideFontFamily,
+  blockOverride,
+  blockFormatRanges,
 }: AnimatedTextBlockProps) {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
 
-  const text = block.content.replace(/\{(\w+)\}/g, (_, tag) => tagValues[tag] ?? "");
+  const text = blockOverride !== undefined
+    ? blockOverride
+    : block.content.replace(/\{(\w+)\}/g, (_, tag) => tagValues[tag] ?? "");
 
   // Check if any tag in this block is showing placeholder
   const isPlaceholder = placeholderTags
@@ -1024,10 +1051,22 @@ export default function AnimatedTextBlock({
       }}
     >
       {isPerChar && frame < inEndFrame
-        ? renderPerCharRich(text, frame, startFrame, inEndFrame, fps, animationType, fontSize, block, tagValues, fontFamilies, block.anim_in_direction ?? "ltr")
+        ? blockOverride !== undefined
+          ? blockFormatRanges?.length
+            ? renderPerCharRich(text, frame, startFrame, inEndFrame, fps, animationType, fontSize, block, tagValues, fontFamilies, block.anim_in_direction ?? "ltr", blockFormatRanges)
+            : renderPerChar(text, frame, startFrame, inEndFrame, fps, animationType, fontSize, block.anim_in_direction ?? "ltr")
+          : renderPerCharRich(text, frame, startFrame, inEndFrame, fps, animationType, fontSize, block, tagValues, fontFamilies, block.anim_in_direction ?? "ltr")
         : isPerCharOut && frame >= outStartFrame
-        ? renderPerCharRichExit(text, frame, outStartFrame, endFrame, fps, animationOut, fontSize, block, tagValues, fontFamilies, block.anim_out_direction ?? "ltr")
-        : renderRichText(text, block, tagValues, fontFamilies)}
+        ? blockOverride !== undefined
+          ? blockFormatRanges?.length
+            ? renderPerCharRichExit(text, frame, outStartFrame, endFrame, fps, animationOut, fontSize, block, tagValues, fontFamilies, block.anim_out_direction ?? "ltr", blockFormatRanges)
+            : renderPerCharExit(text, frame, outStartFrame, endFrame, fps, animationOut, fontSize, block.anim_out_direction ?? "ltr")
+          : renderPerCharRichExit(text, frame, outStartFrame, endFrame, fps, animationOut, fontSize, block, tagValues, fontFamilies, block.anim_out_direction ?? "ltr")
+        : blockOverride !== undefined
+          ? blockFormatRanges?.length
+            ? renderRichTextFromRanges(text, blockFormatRanges)
+            : text
+          : renderRichText(text, block, tagValues, fontFamilies)}
     </div>
   );
 }

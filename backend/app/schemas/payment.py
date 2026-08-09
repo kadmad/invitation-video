@@ -9,6 +9,8 @@ class CreateOrderRequest(BaseModel):
     font_id: uuid.UUID | None = None
     field_values: dict[str, str]
     text_color_override: dict[str, str] | None = None
+    block_overrides: dict[str, str] | None = None
+    block_format_overrides: dict | None = None
 
 
 class CreateOrderResponse(BaseModel):

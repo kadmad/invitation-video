@@ -218,6 +218,7 @@ def render_video_task(self, job_id: str):
                 # Transliterate static content + tag values, remap format_ranges
                 default_lang = font_lang_cache.get(str(template.default_font_id), "english") if template.default_font_id else "english"
                 tag_values = dict(job.field_values) if job.field_values else {}
+                block_overrides = dict(job.block_overrides) if job.block_overrides else {}
                 already_transliterated: set[str] = set()
                 transliterated_content: dict[str, str] = {}
                 transliterated_charmaps: dict[str, list[int]] = {}
@@ -250,6 +251,13 @@ def render_video_task(self, job_id: str):
                     transliterated_content[str(block.id)] = new_content
                     transliterated_charmaps[str(block.id)] = char_map
 
+                    # Transliterate block_overrides text for regional fonts
+                    bid = str(block.id)
+                    if bid in block_overrides and block_overrides[bid]:
+                        val = block_overrides[bid]
+                        if val.strip() and re.search(r"[a-zA-Z]", val):
+                            block_overrides[bid] = _transliterate_sync(val, itc)
+
                 blocks_json = []
                 for b in text_blocks:
                     bid = str(b.id)
@@ -273,6 +281,8 @@ def render_video_task(self, job_id: str):
                 # Build text color overrides
                 text_color_overrides = job.text_color_override if job.text_color_override else None
 
+                block_format_overrides = dict(job.block_format_overrides) if job.block_format_overrides else None
+
                 input_props = {
                     "videoUrl": video_url,
                     "width": template.width,
@@ -285,6 +295,8 @@ def render_video_task(self, job_id: str):
                     "defaultFontFamily": default_font_family,
                     "overrideFontFamily": override_font_family,
                     "textColorOverrides": text_color_overrides,
+                    "blockOverrides": block_overrides if block_overrides else None,
+                    "blockFormatOverrides": block_format_overrides,
                 }
 
                 renderer_url = os.environ.get("RENDERER_URL", "http://renderer:3100")
@@ -357,6 +369,7 @@ def render_video_task(self, job_id: str):
                         text_color_override=job.text_color_override,
                         default_text_color=template.default_text_color,
                         fallback_font_path=fallback_font_path,
+                        block_overrides=block_overrides if block_overrides else None,
                     )
                     ffmpeg.render()
 
@@ -398,6 +411,9 @@ def render_preview_task(self, template_id: str):
 
         if not template.video_key:
             return
+
+        template.preview_status = "processing"
+        db.commit()
 
         text_blocks = db.execute(
             select(TextBlock).where(TextBlock.template_id == template.id)
@@ -540,11 +556,17 @@ def render_preview_task(self, template_id: str):
 
             storage_service.upload(preview_key, dl_resp.content, content_type="video/mp4")
             template.preview_key = preview_key
+            template.preview_status = "completed"
             db.commit()
         except Exception as e:
             print(f"Remotion render failed, falling back to FFmpeg: {e}")
-            # Fallback to FFmpeg render
-            _ffmpeg_preview_fallback(db, template, text_blocks, tag_values)
+            try:
+                # Fallback to FFmpeg render
+                _ffmpeg_preview_fallback(db, template, text_blocks, tag_values)
+            except Exception as ffmpeg_err:
+                print(f"FFmpeg preview fallback failed: {ffmpeg_err}")
+                template.preview_status = "failed"
+                db.commit()
 
 
 def _ffmpeg_preview_fallback(db, template, text_blocks, tag_values):
@@ -594,4 +616,5 @@ def _ffmpeg_preview_fallback(db, template, text_blocks, tag_values):
                 pass
         storage_service.upload_file(preview_key, output_path, content_type="video/mp4")
         template.preview_key = preview_key
+        template.preview_status = "completed"
         db.commit()

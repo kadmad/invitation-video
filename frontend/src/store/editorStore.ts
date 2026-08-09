@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import type { Template, Font } from "@/types";
+import type { Template, Font, FormatRange } from "@/types";
 
 /** Extract unique {tag} names from all text_blocks' content. */
 export function extractTags(template: Template): string[] {
@@ -29,7 +29,11 @@ interface EditorState {
   textColorOverrides: Record<string, string>;
   prefill: PrefillData | null;
   imageUploads: Record<string, string>;
-  seekToTime: number | null;
+  seekToTime: { time: number; id: number } | null;
+  editorMode: "express" | "advanced";
+  blockOverrides: Record<string, string>;
+  blockFormatOverrides: Record<string, FormatRange[]>;
+  transliteratedBlockOverrides: Record<string, string>;
   setImageUpload: (blockId: string, url: string) => void;
   clearImageUpload: (blockId: string) => void;
   setTemplate: (template: Template) => void;
@@ -44,6 +48,13 @@ interface EditorState {
   consumePrefill: () => PrefillData | null;
   seekTo: (time: number) => void;
   clearSeek: () => void;
+  initAdvancedMode: (expandedBlocks: Record<string, string>) => void;
+  exitAdvancedMode: () => void;
+  setBlockOverride: (blockId: string, text: string) => void;
+  setBlockOverrides: (overrides: Record<string, string>) => void;
+  setBlockFormatOverrides: (overrides: Record<string, FormatRange[]>) => void;
+  setBlockFormatOverride: (blockId: string, ranges: FormatRange[]) => void;
+  setTransliteratedBlockOverrides: (overrides: Record<string, string>) => void;
   reset: () => void;
 }
 
@@ -57,6 +68,10 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   prefill: null,
   imageUploads: {},
   seekToTime: null,
+  editorMode: "express",
+  blockOverrides: {},
+  blockFormatOverrides: {},
+  transliteratedBlockOverrides: {},
 
   setTemplate: (template) => {
     const fieldValues: Record<string, string> = {};
@@ -114,8 +129,31 @@ export const useEditorStore = create<EditorState>((set, get) => ({
       return { imageUploads: next };
     }),
 
-  seekTo: (time) => set({ seekToTime: time }),
+  seekTo: (time) => set({ seekToTime: { time, id: Date.now() } }),
   clearSeek: () => set({ seekToTime: null }),
+
+  initAdvancedMode: (expandedBlocks) =>
+    set({ editorMode: "advanced", blockOverrides: expandedBlocks }),
+
+  exitAdvancedMode: () =>
+    set({ editorMode: "express" }),
+
+  setBlockOverride: (blockId, text) =>
+    set((state) => ({
+      blockOverrides: { ...state.blockOverrides, [blockId]: text },
+    })),
+
+  setBlockOverrides: (overrides) => set({ blockOverrides: overrides }),
+
+  setBlockFormatOverrides: (overrides) => set({ blockFormatOverrides: overrides }),
+
+  setBlockFormatOverride: (blockId, ranges) =>
+    set((state) => ({
+      blockFormatOverrides: { ...state.blockFormatOverrides, [blockId]: ranges },
+    })),
+
+  setTransliteratedBlockOverrides: (overrides) =>
+    set({ transliteratedBlockOverrides: overrides }),
 
   reset: () =>
     set((state) => ({
@@ -127,6 +165,10 @@ export const useEditorStore = create<EditorState>((set, get) => ({
       textColorOverrides: {},
       imageUploads: {},
       seekToTime: null,
+      editorMode: "express",
+      blockOverrides: {},
+      blockFormatOverrides: {},
+      transliteratedBlockOverrides: {},
       prefill: state.prefill, // preserve
     })),
 }));

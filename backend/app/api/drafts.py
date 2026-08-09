@@ -16,6 +16,9 @@ class DraftBody(BaseModel):
     field_values: dict[str, str]
     font_id: uuid.UUID | None = None
     text_color_override: dict[str, str] | None = None
+    block_overrides: dict | None = None
+    block_format_overrides: dict | None = None
+    editor_mode: str | None = None
 
 
 class DraftResponse(BaseModel):
@@ -23,6 +26,9 @@ class DraftResponse(BaseModel):
     field_values: dict
     font_id: uuid.UUID | None
     text_color_override: dict | None
+    block_overrides: dict | None = None
+    block_format_overrides: dict | None = None
+    editor_mode: str | None = None
 
     model_config = {"from_attributes": True}
 
@@ -34,6 +40,9 @@ class DraftListItem(BaseModel):
     field_values: dict
     font_id: uuid.UUID | None
     text_color_override: dict | None
+    block_overrides: dict | None = None
+    block_format_overrides: dict | None = None
+    editor_mode: str | None = None
     updated_at: str
 
     model_config = {"from_attributes": True}
@@ -62,6 +71,9 @@ async def list_drafts(
             field_values=draft.field_values,
             font_id=draft.font_id,
             text_color_override=draft.text_color_override,
+            block_overrides=draft.block_overrides,
+            block_format_overrides=draft.block_format_overrides,
+            editor_mode=draft.editor_mode,
             updated_at=draft.updated_at.isoformat() if draft.updated_at else "",
         ))
     return items
@@ -104,6 +116,9 @@ async def save_draft(
         draft.field_values = body.field_values
         draft.font_id = body.font_id
         draft.text_color_override = body.text_color_override
+        draft.block_overrides = body.block_overrides
+        draft.block_format_overrides = body.block_format_overrides
+        draft.editor_mode = body.editor_mode
     else:
         draft = UserDraft(
             user_id=user.id,
@@ -111,6 +126,9 @@ async def save_draft(
             field_values=body.field_values,
             font_id=body.font_id,
             text_color_override=body.text_color_override,
+            block_overrides=body.block_overrides,
+            block_format_overrides=body.block_format_overrides,
+            editor_mode=body.editor_mode,
         )
         db.add(draft)
 

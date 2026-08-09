@@ -108,6 +108,7 @@ async def get_video_token(
         "token": token,
         "expires_at": expires_at,
         "has_preview": bool(template.preview_key),
+        "preview_status": template.preview_status,
         "preview_v": preview_version,
         "video_url": video_url,
         "preview_url": preview_url,

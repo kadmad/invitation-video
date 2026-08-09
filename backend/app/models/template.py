@@ -31,6 +31,7 @@ class Template(UUIDMixin, TimestampMixin, Base):
     render_notes: Mapped[str | None] = mapped_column(String(1000), nullable=True)
     price: Mapped[int] = mapped_column(Integer, default=9900)
     preview_key: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    preview_status: Mapped[str | None] = mapped_column(String(50), nullable=True)
 
     category = relationship("Category", back_populates="templates")
     default_font = relationship("Font", foreign_keys=[default_font_id])

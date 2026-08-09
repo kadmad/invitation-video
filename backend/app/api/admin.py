@@ -43,9 +43,9 @@ from app.services.storage_service import storage_service
 router = APIRouter()
 
 
-def _queue_preview_if_published(template: Template):
-    """Queue preview video re-render if template is published and has source video."""
-    if template.is_published and template.video_key:
+def _queue_preview(template: Template):
+    """Queue preview video re-render if template has source video."""
+    if template.video_key:
         from app.workers.tasks import render_preview_task
         render_preview_task.delay(str(template.id))
 
@@ -314,11 +314,12 @@ async def update_template(
     update_data = body.model_dump(exclude_unset=True, exclude={"render_preview"})
     for key, value in update_data.items():
         setattr(template, key, value)
+    if should_render:
+        template.preview_status = "processing"
     await db.commit()
     await db.refresh(template)
-
     if should_render:
-        _queue_preview_if_published(template)
+        _queue_preview(template)
     return template
 
 

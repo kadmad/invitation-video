@@ -6,7 +6,7 @@ export const RemotionRoot: React.FC = () => {
   return (
     <Composition
       id="GenericTemplate"
-      component={GenericTemplate}
+      component={GenericTemplate as React.ComponentType<any>}
       durationInFrames={300}
       fps={30}
       width={1080}

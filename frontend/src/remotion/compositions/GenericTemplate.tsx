@@ -3,7 +3,7 @@ import { AbsoluteFill, Video, delayRender, continueRender } from "remotion";
 import AnimatedText from "../components/AnimatedText";
 import AnimatedTextBlock from "../components/AnimatedTextBlock";
 import AnimatedImageBlock from "../components/AnimatedImageBlock";
-import type { TemplateField, TextBlock, ImageBlock } from "@/types";
+import type { TemplateField, TextBlock, ImageBlock, FormatRange } from "@/types";
 
 interface GenericTemplateProps {
   videoUrl: string | null;
@@ -21,6 +21,8 @@ interface GenericTemplateProps {
   overrideFontFamily?: string;
   imageBlocks?: ImageBlock[];
   imageUploads?: Record<string, string>;
+  blockOverrides?: Record<string, string>;
+  blockFormatOverrides?: Record<string, FormatRange[]>;
   // Legacy field-based props (backward compat)
   fields?: TemplateField[];
   fieldValues?: Record<string, string>;
@@ -42,6 +44,8 @@ export default function GenericTemplate({
   overrideFontFamily,
   imageBlocks,
   imageUploads,
+  blockOverrides,
+  blockFormatOverrides,
   fields,
   fieldValues,
   fontFamily,
@@ -137,6 +141,8 @@ export default function GenericTemplate({
               defaultTextColor={defaultTextColor}
               defaultFontFamily={defaultFontFamily}
               overrideFontFamily={overrideFontFamily}
+              blockOverride={blockOverrides?.[block.id]}
+              blockFormatRanges={blockFormatOverrides?.[block.id]}
             />
           ))
         : (fields ?? []).map((field) => (

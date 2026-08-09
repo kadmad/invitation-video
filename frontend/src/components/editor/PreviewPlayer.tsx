@@ -8,7 +8,7 @@ import { transliterateBatch } from "@/api/transliterate";
 import type { Font, TextBlock, FormatRange } from "@/types";
 
 export default function PreviewPlayer() {
-  const { template, font, fontUrl, fieldValues, transliteratedValues, textColorOverrides, seekToTime } = useEditorStore();
+  const { template, font, fontUrl, fieldValues, transliteratedValues, textColorOverrides, seekToTime, editorMode, blockOverrides, blockFormatOverrides, transliteratedBlockOverrides } = useEditorStore();
 
   // Build placeholder map from tag_config
   const placeholderValues = useMemo(() => {
@@ -245,6 +245,89 @@ export default function PreviewPlayer() {
     return set;
   }, [placeholderValues, fieldValues, transliteratedValues]);
 
+  // Check if template uses regional (non-English) font
+  const needsTransliteration = useMemo(() => {
+    if (!template || fontList.length === 0) return false;
+    const blocks = template.text_blocks ?? [];
+    for (const block of blocks) {
+      const effectiveFontId = block.font_id ?? template.default_font_id;
+      if (!effectiveFontId) continue;
+      const f = fontList.find((ft) => ft.id === effectiveFontId);
+      if (f && f.language !== "english") return true;
+    }
+    return false;
+  }, [template, fontList]);
+
+  // Compute effective block overrides for advanced mode
+  const effectiveBlockOverrides = useMemo(() => {
+    if (editorMode !== "advanced") return undefined;
+    if (Object.keys(blockOverrides).length === 0 && Object.keys(transliteratedBlockOverrides).length === 0) return undefined;
+    const isRegionalFont = needsTransliteration;
+    const result: Record<string, string> = {};
+    for (const key of Object.keys(blockOverrides)) {
+      if (isRegionalFont) {
+        result[key] = transliteratedBlockOverrides[key] ?? blockOverrides[key];
+      } else {
+        result[key] = blockOverrides[key];
+      }
+    }
+    return Object.keys(result).length > 0 ? result : undefined;
+  }, [editorMode, blockOverrides, transliteratedBlockOverrides, needsTransliteration]);
+
+  // Remap blockFormatOverrides indices for transliterated text
+  const effectiveBlockFormatOverrides = useMemo(() => {
+    if (editorMode !== "advanced" || Object.keys(blockFormatOverrides).length === 0) return undefined;
+    if (!needsTransliteration || Object.keys(transliteratedBlockOverrides).length === 0) {
+      return blockFormatOverrides;
+    }
+
+    const remapped: Record<string, FormatRange[]> = {};
+    for (const [blockId, ranges] of Object.entries(blockFormatOverrides)) {
+      if (!ranges || ranges.length === 0) continue;
+
+      const origText = blockOverrides[blockId];
+      const transText = transliteratedBlockOverrides[blockId];
+      if (!origText || !transText) {
+        remapped[blockId] = ranges;
+        continue;
+      }
+
+      // Build charMap proportionally per line for accuracy
+      const origLines = origText.split("\n");
+      const transLines = transText.split("\n");
+      const charMap: number[] = [];
+      let origOffset = 0;
+      let transOffset = 0;
+
+      for (let l = 0; l < origLines.length; l++) {
+        const origLen = origLines[l].length;
+        const transLen = l < transLines.length ? transLines[l].length : origLen;
+
+        for (let c = 0; c < origLen; c++) {
+          charMap[origOffset + c] = transOffset + Math.round((c / Math.max(1, origLen)) * transLen);
+        }
+        origOffset += origLen;
+        transOffset += transLen;
+
+        // Account for newline
+        if (l < origLines.length - 1) {
+          charMap[origOffset] = transOffset;
+          origOffset += 1;
+          transOffset += 1;
+        }
+      }
+      charMap[origOffset] = transOffset;
+
+      remapped[blockId] = ranges.map((r): FormatRange => ({
+        ...r,
+        start: charMap[r.start] ?? r.start,
+        end: charMap[r.end] ?? r.end,
+      })).filter((r) => r.end > r.start);
+    }
+
+    return Object.keys(remapped).length > 0 ? remapped : undefined;
+  }, [editorMode, blockFormatOverrides, blockOverrides, transliteratedBlockOverrides, needsTransliteration]);
+
   const inputProps = useMemo(
     () => ({
       videoUrl,
@@ -258,22 +341,11 @@ export default function PreviewPlayer() {
       defaultTextColor: template?.default_text_color,
       defaultFontFamily: template?.default_font_id ? fontFamilies[template.default_font_id] : undefined,
       overrideFontFamily: font?.family_name,
+      blockOverrides: effectiveBlockOverrides,
+      blockFormatOverrides: effectiveBlockFormatOverrides,
     }),
-    [previewBlocks, effectiveValues, fontFamilies, videoUrl, textColorOverrides, font, placeholderTags, template?.default_font_id, template?.width, template?.height, template?.default_text_color]
+    [previewBlocks, effectiveValues, fontFamilies, videoUrl, textColorOverrides, font, placeholderTags, template?.default_font_id, template?.width, template?.height, template?.default_text_color, effectiveBlockOverrides, effectiveBlockFormatOverrides]
   );
-
-  // Check if template uses regional (non-English) font
-  const needsTransliteration = useMemo(() => {
-    if (!template || fontList.length === 0) return false;
-    const blocks = template.text_blocks ?? [];
-    for (const block of blocks) {
-      const effectiveFontId = block.font_id ?? template.default_font_id;
-      if (!effectiveFontId) continue;
-      const f = fontList.find((ft) => ft.id === effectiveFontId);
-      if (f && f.language !== "english") return true;
-    }
-    return false;
-  }, [template, fontList]);
 
   // Tag values ready: either no transliteration needed, or transliterated values exist
   const hasFieldInput = Object.values(fieldValues).some((v) => v.trim());
@@ -298,14 +370,18 @@ export default function PreviewPlayer() {
 
   // Seek to block start_time when user focuses an input
   useEffect(() => {
-    if (seekToTime === null || !template || !playerRef.current) return;
+    if (seekToTime === null || !template) return;
+    if (!playerRef.current) {
+      setTimeout(() => useEditorStore.getState().clearSeek(), 0);
+      return;
+    }
     const fps = template.fps || 30;
-    const frame = Math.round(seekToTime * fps);
+    const frame = Math.round(seekToTime.time * fps);
     playerRef.current.seekTo(frame);
     if (!playerRef.current.isPlaying()) {
       playerRef.current.play();
     }
-    useEditorStore.getState().clearSeek();
+    setTimeout(() => useEditorStore.getState().clearSeek(), 0);
   }, [seekToTime, template]);
 
   if (!template) return null;

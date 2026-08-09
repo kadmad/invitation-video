@@ -294,7 +294,7 @@ export default function TextBlockOverlay({
           onDrag={({ target, left, top }) => {
             target.style.left = `${left}px`;
             target.style.top = `${top}px`;
-            const w = target.offsetWidth;
+            const w = (target as HTMLElement).offsetWidth || 0;
             const posX =
               block.text_align === "center"
                 ? (left + w / 2) / containerWidth

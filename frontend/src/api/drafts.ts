@@ -4,6 +4,9 @@ interface DraftData {
   field_values: Record<string, string>;
   font_id: string | null;
   text_color_override: Record<string, string> | null;
+  editor_mode?: string;
+  block_overrides?: Record<string, string>;
+  block_format_overrides?: Record<string, any[]>;
 }
 
 export interface DraftListItem {

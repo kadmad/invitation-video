@@ -5,7 +5,9 @@ export async function createOrder(
   templateId: string,
   fontId: string | null,
   fieldValues: Record<string, string>,
-  textColorOverride?: Record<string, string>
+  textColorOverride?: Record<string, string>,
+  blockOverrides?: Record<string, string>,
+  blockFormatOverrides?: Record<string, any[]>
 ) {
   const body: Record<string, unknown> = {
     template_id: templateId,
@@ -13,6 +15,8 @@ export async function createOrder(
   };
   if (fontId) body.font_id = fontId;
   if (textColorOverride) body.text_color_override = textColorOverride;
+  if (blockOverrides) body.block_overrides = blockOverrides;
+  if (blockFormatOverrides) body.block_format_overrides = blockFormatOverrides;
   const { data } = await client.post<PaymentOrder>("/payments/create-order", body);
   return data;
 }

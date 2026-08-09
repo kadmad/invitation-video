@@ -8,25 +8,28 @@ import type { Template, Category } from "@/types";
 /* ── Shared token cache across all cards ── */
 const BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:8000/api";
 
-interface CachedToken { url: string; expiresAt: number }
+interface CachedToken { url: string; expiresAt: number; previewStatus?: string | null }
 const tokenCache = new Map<string, CachedToken>();
 const inflight = new Map<string, Promise<CachedToken>>();
 
-async function getVideoUrl(templateId: string): Promise<CachedToken> {
+async function getVideoUrl(templateId: string, forceRefresh = false): Promise<CachedToken> {
   const cached = tokenCache.get(templateId);
   const now = Math.floor(Date.now() / 1000);
-  if (cached && cached.expiresAt > now + 30) return cached;
+  if (!forceRefresh && cached && cached.expiresAt > now + 30 && cached.previewStatus !== "processing") {
+    return cached;
+  }
 
   // Deduplicate concurrent requests for same template
   const pending = inflight.get(templateId);
-  if (pending) return pending;
+  if (pending && !forceRefresh) return pending;
 
   const promise = (async () => {
     const res = await fetch(`${BASE_URL}/templates/${templateId}/video-token`);
-    const { expires_at, has_preview, video_url, preview_url } = await res.json();
+    const { expires_at, has_preview, preview_status, video_url, preview_url } = await res.json();
     const entry: CachedToken = {
       url: has_preview && preview_url ? preview_url : video_url,
       expiresAt: expires_at,
+      previewStatus: preview_status,
     };
     tokenCache.set(templateId, entry);
     inflight.delete(templateId);
@@ -49,10 +52,16 @@ function TemplateCard({
   const [hovered, setHovered] = useState(false);
   const [videoSrc, setVideoSrc] = useState<string | null>(null);
   const [videoReady, setVideoReady] = useState(false);
+  const [previewStatus, setPreviewStatus] = useState<string | null>(t.preview_status ?? null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const cardRef = useRef<HTMLAnchorElement>(null);
   const isTouchRef = useRef(false);
   const hoveredRef = useRef(false);
+
+  // Sync previewStatus when prop changes
+  useEffect(() => {
+    if (t.preview_status) setPreviewStatus(t.preview_status);
+  }, [t.preview_status]);
 
   // Prefetch token + preload metadata when card enters viewport
   useEffect(() => {
@@ -64,6 +73,7 @@ function TemplateCard({
           // Prefetch token in background
           getVideoUrl(t.id).then((cached) => {
             setVideoSrc(cached.url);
+            if (cached.previewStatus) setPreviewStatus(cached.previewStatus);
           }).catch(() => {});
           observer.disconnect();
         }
@@ -74,25 +84,41 @@ function TemplateCard({
     return () => observer.disconnect();
   }, [t.id, t.video_key]);
 
+  // Poll video token while hovered if rendering or video not ready
+  useEffect(() => {
+    if (!hovered) return;
+    const isProcessing = previewStatus === "processing" || previewStatus === "pending" || t.preview_status === "processing" || !videoReady;
+    if (!isProcessing) return;
+
+    const interval = setInterval(async () => {
+      try {
+        const cached = await getVideoUrl(t.id, true);
+        setVideoSrc(cached.url);
+        if (cached.previewStatus !== undefined) setPreviewStatus(cached.previewStatus);
+      } catch { /* ignore */ }
+    }, 2500);
+
+    return () => clearInterval(interval);
+  }, [hovered, previewStatus, t.preview_status, videoReady, t.id]);
+
   const startPreview = useCallback(async () => {
     hoveredRef.current = true;
     setHovered(true);
     if (!t.video_key) return;
 
     // If already have src and video ready, just play
-    if (videoSrc && videoReady) {
+    if (videoSrc && videoReady && previewStatus !== "processing") {
       videoRef.current?.play().catch(() => {});
       return;
     }
 
-    // Token might already be cached from prefetch
     try {
-      const cached = await getVideoUrl(t.id);
+      const cached = await getVideoUrl(t.id, previewStatus === "processing");
       if (!hoveredRef.current) return;
       setVideoSrc(cached.url);
-      // Video element will auto-play via onCanPlay
+      if (cached.previewStatus !== undefined) setPreviewStatus(cached.previewStatus);
     } catch { /* ignore */ }
-  }, [t.id, t.video_key, videoSrc, videoReady]);
+  }, [t.id, t.video_key, videoSrc, videoReady, previewStatus]);
 
   const stopPreview = useCallback(() => {
     hoveredRef.current = false;
@@ -206,6 +232,28 @@ function TemplateCard({
         <div className="absolute inset-0 bg-black/20 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center z-10">
           <span className="btn-primary text-sm pointer-events-none">Use Template</span>
         </div>
+
+        {/* Hover preview generating status notice */}
+        {hovered && (previewStatus === "processing" || previewStatus === "pending" || t.preview_status === "processing") && (
+          <div className="absolute inset-0 bg-slate-950/65 backdrop-blur-xs flex flex-col items-center justify-center p-3 text-center transition-all z-20 pointer-events-none">
+            <div className="flex items-center gap-2 text-amber-300 font-medium text-xs bg-amber-950/85 px-3.5 py-2 rounded-full border border-amber-500/30 shadow-lg animate-pulse">
+              <svg className="w-4 h-4 animate-spin text-amber-400 flex-shrink-0" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+              </svg>
+              <span>Preview is getting ready...</span>
+            </div>
+          </div>
+        )}
+        {/* Loading spinner when video is buffering (not rendering) */}
+        {hovered && !videoReady && !(previewStatus === "processing" || previewStatus === "pending" || t.preview_status === "processing") && videoSrc && (
+          <div className="absolute inset-0 flex items-center justify-center z-20 pointer-events-none">
+            <svg className="w-8 h-8 animate-spin text-white/60" fill="none" viewBox="0 0 24 24">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+            </svg>
+          </div>
+        )}
       </div>
 
       {/* Info section */}

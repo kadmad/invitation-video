@@ -18,6 +18,7 @@ class FFmpegRenderer:
         text_color_override: dict[str, str] | None = None,
         default_text_color: str | None = None,
         fallback_font_path: str | None = None,
+        block_overrides: dict[str, str] | None = None,
     ):
         self.source_path = source_path
         self.output_path = output_path
@@ -30,6 +31,7 @@ class FFmpegRenderer:
         self.text_color_override = text_color_override
         self.default_text_color = default_text_color or "#FFFFFF"
         self.fallback_font_path = fallback_font_path  # Template default — used when block has no font
+        self.block_overrides = block_overrides
 
     @staticmethod
     def _escape_drawtext(text: str) -> str:
@@ -143,7 +145,11 @@ class FFmpegRenderer:
     def build_filter_complex(self) -> str:
         filters = []
         for block in self.text_blocks:
-            text = self._resolve_content(block, self.tag_values)
+            bid = str(block.id)
+            if self.block_overrides and bid in self.block_overrides:
+                text = self.block_overrides[bid]
+            else:
+                text = self._resolve_content(block, self.tag_values)
             if not text:
                 continue
             filters.append(self._build_drawtext_filter(block, text))

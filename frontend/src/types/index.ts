@@ -108,6 +108,7 @@ export interface Template {
   thumbnail_key: string | null;
   video_key: string | null;
   preview_key: string | null;
+  preview_status?: string | null;
   duration_frames: number;
   fps: number;
   width: number;
