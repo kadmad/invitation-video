@@ -20,6 +20,9 @@ class RenderResponse(BaseModel):
     text_color_override: dict | None
     progress: int
     output_key: str | None
+    pdf_key: str | None
+    pdf_status: str | None
+    location_url: str | None
     error_message: str | None
     render_notes: str | None = None
     created_at: datetime

@@ -11,14 +11,20 @@ app.use(express.json({ limit: "50mb" }));
 
 let bundleLocation = null;
 
-// Track render progress and results per renderId
 const renderJobs = new Map();
 
-// Concurrency: how many frames Remotion renders in parallel
-const FRAME_CONCURRENCY = parseInt(process.env.RENDER_CONCURRENCY || "2", 10);
-// Max simultaneous render jobs this instance handles
+const FRAME_CONCURRENCY = parseInt(process.env.RENDER_CONCURRENCY || "4", 10);
 const MAX_PARALLEL_JOBS = parseInt(process.env.MAX_PARALLEL_JOBS || "2", 10);
 let activeJobs = 0;
+
+const CHROMIUM_PERF_ARGS = [
+  "--no-sandbox",
+  "--disable-gpu",
+  "--disable-backgrounding-occluded-windows",
+  "--disable-renderer-backgrounding",
+  "--disable-breakpad",
+  "--disable-component-update",
+];
 
 function invalidateBundle() {
   bundleLocation = null;
@@ -47,7 +53,6 @@ async function ensureBundle() {
   return bundleLocation;
 }
 
-// Async render — runs in background, caller polls /progress/:id
 async function doRender(id, params) {
   const { compositionId, durationInFrames, fps, width, height, inputProps } = params;
 
@@ -63,7 +68,7 @@ async function doRender(id, params) {
       chromiumOptions: {
         gl: "swangle",
         disableWebSecurity: true,
-        args: ["--no-sandbox", "--disable-dev-shm-usage", "--disable-gpu"],
+        args: CHROMIUM_PERF_ARGS,
       },
     });
 
@@ -74,6 +79,8 @@ async function doRender(id, params) {
 
     const outputDir = fs.mkdtempSync(path.join(os.tmpdir(), "remotion-render-"));
     const outputPath = path.join(outputDir, "output.mp4");
+
+    console.log(`[${id}] Rendering ${composition.durationInFrames} frames @ ${composition.fps}fps, concurrency=${FRAME_CONCURRENCY}`);
 
     await renderMedia({
       composition,
@@ -86,7 +93,15 @@ async function doRender(id, params) {
       chromiumOptions: {
         gl: "swangle",
         disableWebSecurity: true,
-        args: ["--no-sandbox", "--disable-dev-shm-usage", "--disable-gpu"],
+        args: CHROMIUM_PERF_ARGS,
+      },
+      offthreadVideoImageFormat: "jpeg",
+      jpegQuality: 90,
+      enableMultiProcessOnLinux: false,
+      ffmpegOverride: ({ args }) => {
+        const idx = args.indexOf("medium");
+        if (idx !== -1) args[idx] = "fast";
+        return args;
       },
       onProgress: ({ progress }) => {
         const job = renderJobs.get(id);
@@ -101,6 +116,7 @@ async function doRender(id, params) {
       job.outputPath = outputPath;
       job.outputDir = outputDir;
     }
+    console.log(`[${id}] Render complete`);
   } catch (err) {
     console.error(`Render ${id} failed:`, err);
     const job = renderJobs.get(id);
@@ -113,8 +129,6 @@ async function doRender(id, params) {
   }
 }
 
-// POST /render — start render, return renderId immediately (non-blocking)
-// Also supports ?sync=true for backward compat (blocking mode)
 app.post("/render", async (req, res) => {
   const {
     compositionId = "GenericTemplate",
@@ -140,7 +154,6 @@ app.post("/render", async (req, res) => {
 
   if (activeJobs >= MAX_PARALLEL_JOBS) {
     renderJobs.set(id, { progress: 0, status: "queued", error: null });
-    // Wait for a slot
     await new Promise((resolve) => {
       const check = setInterval(() => {
         if (activeJobs < MAX_PARALLEL_JOBS) {
@@ -156,7 +169,6 @@ app.post("/render", async (req, res) => {
   activeJobs++;
 
   if (sync) {
-    // Blocking mode — wait for render, stream file back (legacy)
     await doRender(id, { compositionId, durationInFrames, fps, width, height, inputProps });
     const job = renderJobs.get(id);
     if (!job || job.status === "failed") {
@@ -173,20 +185,17 @@ app.post("/render", async (req, res) => {
       setTimeout(() => renderJobs.delete(id), 60000);
     });
   } else {
-    // Non-blocking mode — return immediately, caller polls progress + downloads
     res.json({ renderId: id, status: "rendering" });
     doRender(id, { compositionId, durationInFrames, fps, width, height, inputProps });
   }
 });
 
-// GET /progress/:id — poll render progress
 app.get("/progress/:id", (req, res) => {
   const job = renderJobs.get(req.params.id);
   if (!job) return res.json({ progress: 0, status: "unknown" });
   res.json({ progress: job.progress, status: job.status, error: job.error });
 });
 
-// GET /download/:id — download completed render
 app.get("/download/:id", (req, res) => {
   const job = renderJobs.get(req.params.id);
   if (!job) return res.status(404).json({ error: "Not found" });
@@ -205,13 +214,11 @@ app.get("/download/:id", (req, res) => {
   });
 });
 
-// Invalidate bundle cache
 app.post("/invalidate", (req, res) => {
   invalidateBundle();
   res.json({ status: "ok", message: "Bundle cache cleared" });
 });
 
-// Health check
 app.get("/health", (req, res) => {
   res.json({
     status: "ok",
@@ -219,10 +226,16 @@ app.get("/health", (req, res) => {
     activeJobs,
     maxParallelJobs: MAX_PARALLEL_JOBS,
     frameConcurrency: FRAME_CONCURRENCY,
+    optimizations: {
+      renderStrategy: "single-pass-optimized",
+      codec: "h264",
+      preset: "fast",
+      offthreadVideo: true,
+      enableMultiProcessOnLinux: false,
+    },
   });
 });
 
-// Clean up stale jobs every 10 min
 setInterval(() => {
   const now = Date.now();
   for (const [id, job] of renderJobs) {

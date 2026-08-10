@@ -76,6 +76,7 @@ export interface TextBlock {
   end_time: number;
   tag_config: Record<string, { label?: string; placeholder?: string; min_chars?: number; max_chars?: number }> | null;
   format_ranges: FormatRange[] | null;
+  transliteration_overrides: Record<string, string> | null;
 }
 
 export interface ImageBlock {
@@ -123,6 +124,7 @@ export interface Template {
   default_font_id: string | null;
   render_notes: string | null;
   price: number;
+  pdf_snapshot_timestamps?: number[];
 }
 
 export interface RenderJob {
@@ -134,6 +136,9 @@ export interface RenderJob {
   text_color_override: Record<string, string> | null;
   progress: number;
   output_key: string | null;
+  pdf_key: string | null;
+  pdf_status: "queued" | "generating" | "completed" | "failed" | null;
+  location_url: string | null;
   error_message: string | null;
   render_notes: string | null;
   created_at: string;

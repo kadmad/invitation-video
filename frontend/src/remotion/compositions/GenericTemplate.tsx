@@ -1,5 +1,5 @@
-import { useEffect, useState, useCallback } from "react";
-import { AbsoluteFill, Video, delayRender, continueRender } from "remotion";
+import { useEffect, useState, useCallback, useMemo } from "react";
+import { AbsoluteFill, OffthreadVideo, delayRender, continueRender } from "remotion";
 import AnimatedText from "../components/AnimatedText";
 import AnimatedTextBlock from "../components/AnimatedTextBlock";
 import AnimatedImageBlock from "../components/AnimatedImageBlock";
@@ -23,6 +23,7 @@ interface GenericTemplateProps {
   imageUploads?: Record<string, string>;
   blockOverrides?: Record<string, string>;
   blockFormatOverrides?: Record<string, FormatRange[]>;
+  overlayOnly?: boolean;
   // Legacy field-based props (backward compat)
   fields?: TemplateField[];
   fieldValues?: Record<string, string>;
@@ -46,13 +47,19 @@ export default function GenericTemplate({
   imageUploads,
   blockOverrides,
   blockFormatOverrides,
+  overlayOnly,
   fields,
   fieldValues,
   fontFamily,
 }: GenericTemplateProps) {
   // Use new text_blocks path if available, otherwise fall back to legacy fields
   const useBlocks = textBlocks && textBlocks.length > 0;
-  const placeholderSet = placeholderTags ? new Set(placeholderTags) : null;
+  const placeholderSet = useMemo(
+    () => (placeholderTags ? new Set(placeholderTags) : null),
+    [placeholderTags]
+  );
+  const resolvedTagValues = useMemo(() => tagValues ?? {}, [tagValues]);
+  const resolvedFontFamilies = useMemo(() => fontFamilies ?? {}, [fontFamilies]);
 
   // Build @font-face CSS for SSR rendering (when fontUrls provided by renderer service)
   const fontFaceCSS = fontUrls
@@ -105,7 +112,7 @@ export default function GenericTemplate({
     <AbsoluteFill style={{ backgroundColor: "#1a1a2e" }}>
       {fontFaceCSS && <style dangerouslySetInnerHTML={{ __html: fontFaceCSS }} />}
       {videoUrl && (
-        <Video
+        <OffthreadVideo
           src={videoUrl}
           volume={1}
           style={{ width: "100%", height: "100%", objectFit: "cover" }}
@@ -132,8 +139,8 @@ export default function GenericTemplate({
             <AnimatedTextBlock
               key={block.id}
               block={block}
-              tagValues={tagValues ?? {}}
-              fontFamilies={fontFamilies ?? {}}
+              tagValues={resolvedTagValues}
+              fontFamilies={resolvedFontFamilies}
               placeholderTags={placeholderSet}
               videoWidth={width}
               videoHeight={height}

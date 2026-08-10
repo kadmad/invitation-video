@@ -109,3 +109,29 @@ async def download_render(
             "Cache-Control": "private, max-age=3600",
         },
     )
+
+
+@router.get("/{render_id}/download-pdf")
+async def download_pdf(
+    render_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    result = await db.execute(
+        select(RenderJob).where(RenderJob.id == render_id, RenderJob.user_id == user.id)
+    )
+    job = result.scalar_one_or_none()
+    if not job:
+        raise HTTPException(status_code=404, detail="Render job not found")
+    if job.status != "completed" or not job.pdf_key:
+        raise HTTPException(status_code=400, detail="PDF not ready for download")
+
+    data = storage_service.download(job.pdf_key)
+    return Response(
+        content=data,
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": f'attachment; filename="invitation_{render_id}.pdf"',
+            "Cache-Control": "private, max-age=3600",
+        },
+    )

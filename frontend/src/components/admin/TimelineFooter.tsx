@@ -36,9 +36,11 @@ function formatTime(seconds: number): string {
 
 interface TimelineFooterProps {
   playerRef: React.RefObject<PlayerRef | null>;
+  pdfSnapshotTimestamps?: number[];
+  onPdfSnapshotTimestampsChange?: (timestamps: number[]) => void;
 }
 
-export default function TimelineFooter({ playerRef }: TimelineFooterProps) {
+export default function TimelineFooter({ playerRef, pdfSnapshotTimestamps, onPdfSnapshotTimestampsChange }: TimelineFooterProps) {
   const { id: templateId } = useParams<{ id: string }>();
   const {
     template,
@@ -490,6 +492,52 @@ export default function TimelineFooter({ playerRef }: TimelineFooterProps) {
                     onMouseDown={(e) => handleEdgeDragStart(e, b.id, "end")}
                   />
                 )}
+              </div>
+            );
+          })}
+
+          {/* PDF Snapshot markers — draggable red triangles */}
+          {pdfSnapshotTimestamps?.map((ts, idx) => {
+            const pct = (ts / totalSeconds) * 100;
+            return (
+              <div
+                key={`pdf-${idx}`}
+                className="absolute z-30 cursor-grab group/snap"
+                style={{ left: `${pct}%`, top: 0, bottom: 0 }}
+                onMouseDown={(e) => {
+                  e.stopPropagation();
+                  if (e.button === 2) return;
+                  playerRef.current?.pause();
+                  const handleMove = (ev: MouseEvent) => {
+                    const newTime = Math.round(xToTime(ev.clientX) * 10) / 10;
+                    const clamped = Math.max(0, Math.min(totalSeconds, newTime));
+                    const updated = [...(pdfSnapshotTimestamps || [])];
+                    updated[idx] = clamped;
+                    onPdfSnapshotTimestampsChange?.(updated.sort((a, b) => a - b));
+                    seekToTime(clamped);
+                  };
+                  const handleUp = () => {
+                    window.removeEventListener("mousemove", handleMove);
+                    window.removeEventListener("mouseup", handleUp);
+                  };
+                  window.addEventListener("mousemove", handleMove);
+                  window.addEventListener("mouseup", handleUp);
+                }}
+                onDoubleClick={(e) => {
+                  e.stopPropagation();
+                  onPdfSnapshotTimestampsChange?.(
+                    (pdfSnapshotTimestamps || []).filter((_, i) => i !== idx)
+                  );
+                }}
+                title={`PDF page at ${ts}s — drag to move, double-click to remove`}
+              >
+                <div className="absolute top-0 bottom-0 w-px bg-orange-400 opacity-60 group-hover/snap:opacity-100" />
+                <div className="absolute -top-0.5 left-1/2 -translate-x-1/2 w-0 h-0"
+                  style={{ borderLeft: "5px solid transparent", borderRight: "5px solid transparent", borderTop: "6px solid #fb923c" }}
+                />
+                <div className="absolute -bottom-3 left-1/2 -translate-x-1/2 text-[7px] text-orange-400 font-medium whitespace-nowrap opacity-0 group-hover/snap:opacity-100 transition-opacity">
+                  {ts}s
+                </div>
               </div>
             );
           })}

@@ -47,6 +47,8 @@ class TextBlock(UUIDMixin, Base):
     tag_config: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     format_ranges: Mapped[list | None] = mapped_column(JSONB, nullable=True)
     # e.g. {"bride_name": {"min_chars": 2, "max_chars": 30, "label": "Bride's Name"}}
+    transliteration_overrides: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    # e.g. {"hello": "हैलो", "world": "वर्ल्ड"} — admin-selected transliteration per word
 
     template = relationship("Template", back_populates="text_blocks")
     font = relationship("Font")

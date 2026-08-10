@@ -11,6 +11,8 @@ class CreateOrderRequest(BaseModel):
     text_color_override: dict[str, str] | None = None
     block_overrides: dict[str, str] | None = None
     block_format_overrides: dict | None = None
+    location_url: str | None = None
+    skip_render: bool = False
 
 
 class CreateOrderResponse(BaseModel):
@@ -38,6 +40,8 @@ class RenderSummary(BaseModel):
     status: str
     progress: int
     output_key: str | None
+    pdf_key: str | None
+    pdf_status: str | None
 
     model_config = {"from_attributes": True}
 

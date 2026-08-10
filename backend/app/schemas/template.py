@@ -25,6 +25,7 @@ class TextBlockResponse(BaseModel):
     end_time: float
     tag_config: dict | None
     format_ranges: list[dict] | None = None
+    transliteration_overrides: dict | None = None
 
     model_config = {"from_attributes": True}
 
@@ -80,6 +81,7 @@ class TemplateDetailResponse(TemplateListResponse):
     video_key: str | None
     remotion_comp: str | None
     tag_labels: dict | None
+    pdf_snapshot_timestamps: list[float] | None = None
     text_blocks: list[TextBlockResponse]
     image_blocks: list[ImageBlockResponse]
 

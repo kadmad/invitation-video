@@ -30,3 +30,7 @@ export async function getRender(renderId: string) {
 export function getDownloadUrl(renderId: string) {
   return `${client.defaults.baseURL}/renders/${renderId}/download`;
 }
+
+export function getPdfDownloadUrl(renderId: string) {
+  return `${client.defaults.baseURL}/renders/${renderId}/download-pdf`;
+}

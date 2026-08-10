@@ -6,7 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.config import settings
-from app.dependencies import get_current_user, get_db
+from app.dependencies import get_admin_user, get_current_user, get_db
 from app.models.payment import Payment
 from app.models.render_job import RenderJob
 from app.models.template import Template
@@ -21,7 +21,7 @@ from app.schemas.payment import (
     VerifyPaymentResponse,
 )
 from app.services import payment_service
-from app.workers.tasks import render_video_task
+from app.workers.tasks import generate_pdf_only_task, render_video_task
 
 router = APIRouter()
 
@@ -61,6 +61,7 @@ async def create_order(
         text_color_override=body.text_color_override,
         block_overrides=body.block_overrides,
         block_format_overrides=body.block_format_overrides,
+        location_url=body.location_url,
     )
     db.add(payment)
     await db.commit()
@@ -107,7 +108,11 @@ async def verify_payment(
     payment.razorpay_payment_id = body.razorpay_payment_id
     payment.razorpay_signature = body.razorpay_signature
 
-    # Create render job from stored params
+    # Check if template has PDF snapshots configured
+    tmpl_result = await db.execute(select(Template).where(Template.id == payment.template_id))
+    tmpl = tmpl_result.scalar_one_or_none()
+    has_pdf = bool(tmpl and tmpl.pdf_snapshot_timestamps)
+
     job = RenderJob(
         user_id=user.id,
         template_id=payment.template_id,
@@ -116,7 +121,9 @@ async def verify_payment(
         text_color_override=payment.text_color_override,
         block_overrides=payment.block_overrides,
         block_format_overrides=payment.block_format_overrides,
+        location_url=payment.location_url,
         status="pending",
+        pdf_status="queued" if has_pdf else None,
     )
     db.add(job)
     await db.flush()
@@ -133,6 +140,68 @@ async def verify_payment(
     return VerifyPaymentResponse(
         render_job_id=job.id,
         status="paid",
+    )
+
+
+@router.post("/admin-render", response_model=VerifyPaymentResponse)
+async def admin_render(
+    body: CreateOrderRequest,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_admin_user),
+):
+    result = await db.execute(select(Template).where(Template.id == body.template_id))
+    template = result.scalar_one_or_none()
+    if not template:
+        raise HTTPException(status_code=404, detail="Template not found")
+    if not template.video_key:
+        raise HTTPException(status_code=400, detail="Template has no source video uploaded yet")
+
+    has_pdf = bool(template.pdf_snapshot_timestamps)
+    job = RenderJob(
+        user_id=user.id,
+        template_id=body.template_id,
+        font_id=body.font_id,
+        field_values=body.field_values,
+        text_color_override=body.text_color_override,
+        block_overrides=body.block_overrides,
+        block_format_overrides=body.block_format_overrides,
+        location_url=body.location_url,
+        status="completed" if body.skip_render else "pending",
+        progress=100 if body.skip_render else 0,
+        pdf_status="queued" if has_pdf else None,
+    )
+    db.add(job)
+    await db.flush()
+
+    payment = Payment(
+        user_id=user.id,
+        razorpay_order_id=f"admin_{uuid.uuid4().hex[:16]}",
+        amount=0,
+        currency="INR",
+        status="paid",
+        template_id=body.template_id,
+        font_id=body.font_id,
+        field_values=body.field_values,
+        text_color_override=body.text_color_override,
+        block_overrides=body.block_overrides,
+        block_format_overrides=body.block_format_overrides,
+        location_url=body.location_url,
+        render_job_id=job.id,
+    )
+    db.add(payment)
+    await db.commit()
+    await db.refresh(job)
+
+    if body.skip_render:
+        generate_pdf_only_task.delay(str(job.id))
+    else:
+        task = render_video_task.delay(str(job.id))
+        job.celery_task_id = task.id
+        await db.commit()
+
+    return VerifyPaymentResponse(
+        render_job_id=job.id,
+        status="completed" if body.skip_render else "rendering",
     )
 
 

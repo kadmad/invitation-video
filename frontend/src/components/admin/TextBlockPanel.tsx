@@ -7,7 +7,9 @@ import {
   deleteTextBlock,
   listAdminFonts,
 } from "@/api/admin";
-import { transliterateBatch } from "@/api/transliterate";
+import { transliterateBatchCandidates } from "@/api/transliterate";
+import type { WordCandidates } from "@/api/transliterate";
+import TranslitWord from "@/components/common/TranslitWord";
 import ConfirmModal from "@/components/admin/ConfirmModal";
 import RichTextEditor from "@/components/admin/RichTextEditor";
 import FontPicker from "@/components/editor/FontPicker";
@@ -242,34 +244,192 @@ function BlockEditForm({
   saving: boolean;
   saveSuccess: boolean;
   onUpdateField: (field: keyof TextBlock, value: unknown) => void;
-  onSave: () => void;
+  onSave: (extraFields?: Partial<TextBlock>) => void;
   onPreviewAnimation: () => void;
   contentRef: React.RefObject<HTMLTextAreaElement | null>;
   fallbackFontId: string | null;
 }) {
-  // Transliteration preview for regional fonts
+  // Transliteration preview with candidates for regional fonts
   const effectiveFontId = block.font_id ?? fallbackFontId;
   const selectedFont = effectiveFontId ? fonts.find((f) => f.id === effectiveFontId) : null;
   const fontLanguage = selectedFont?.language ?? "english";
   const isRegionalFont = fontLanguage !== "english" && !!effectiveFontId;
-  const [transliteratedPreview, setTransliteratedPreview] = useState("");
+  const [translitCandidates, setTranslitCandidates] = useState<WordCandidates[]>([]);
+  const [selectedIndices, setSelectedIndices] = useState<number[]>([]);
   const translitTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Placeholder transliteration candidates
+  const [placeholderCandidates, setPlaceholderCandidates] = useState<Record<string, WordCandidates[]>>({});
+  const [placeholderIndices, setPlaceholderIndices] = useState<Record<string, number[]>>({});
+  const placeholderTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Build overrides map from current selections and save to block
+  const buildOverridesMap = useCallback(() => {
+    const overrides: Record<string, string> = {};
+    // Content word overrides
+    translitCandidates.forEach((wc, idx) => {
+      const selIdx = selectedIndices[idx] ?? 0;
+      if (wc.candidates[selIdx]) {
+        overrides[wc.word] = wc.candidates[selIdx];
+      }
+    });
+    // Placeholder word overrides
+    for (const tag of Object.keys(placeholderCandidates)) {
+      const words = placeholderCandidates[tag];
+      const indices = placeholderIndices[tag] || [];
+      words.forEach((wc, idx) => {
+        const selIdx = indices[idx] ?? 0;
+        if (wc.candidates[selIdx]) {
+          overrides[wc.word] = wc.candidates[selIdx];
+        }
+      });
+    }
+    return Object.keys(overrides).length > 0 ? overrides : null;
+  }, [translitCandidates, selectedIndices, placeholderCandidates, placeholderIndices]);
+
+  // Save handler that includes transliteration overrides
+  const handleSaveWithOverrides = useCallback(() => {
+    if (isRegionalFont) {
+      const overrides = buildOverridesMap();
+      onSave({ transliteration_overrides: overrides });
+    } else {
+      onSave();
+    }
+  }, [isRegionalFont, buildOverridesMap, onSave]);
 
   useEffect(() => {
     if (!isRegionalFont || !block.content.trim()) {
-      setTransliteratedPreview("");
+      setTranslitCandidates([]);
+      setSelectedIndices([]);
       return;
     }
     if (translitTimer.current) clearTimeout(translitTimer.current);
     translitTimer.current = setTimeout(() => {
-      transliterateBatch({ content: block.content }, fontLanguage)
-        .then((result) => setTransliteratedPreview(result.content || ""))
-        .catch(() => setTransliteratedPreview(""));
+      transliterateBatchCandidates({ content: block.content }, fontLanguage)
+        .then((result) => {
+          const candidates = result.content || [];
+          setTranslitCandidates(candidates);
+          // Restore from saved overrides if available, otherwise default to index 0
+          const saved = block.transliteration_overrides;
+          if (saved) {
+            const indices = candidates.map((wc) => {
+              const savedVal = saved[wc.word];
+              if (savedVal) {
+                const idx = wc.candidates.indexOf(savedVal);
+                return idx >= 0 ? idx : 0;
+              }
+              return 0;
+            });
+            setSelectedIndices(indices);
+          } else {
+            setSelectedIndices((prev) =>
+              prev.length === candidates.length ? prev : new Array(candidates.length).fill(0)
+            );
+          }
+        })
+        .catch(() => {
+          setTranslitCandidates([]);
+          setSelectedIndices([]);
+        });
     }, 400);
     return () => {
       if (translitTimer.current) clearTimeout(translitTimer.current);
     };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [block.content, block.font_id, fontLanguage, isRegionalFont]);
+
+  // Fetch transliteration candidates for placeholder values
+  useEffect(() => {
+    if (!isRegionalFont || !block.tag_config) {
+      setPlaceholderCandidates({});
+      setPlaceholderIndices({});
+      return;
+    }
+    const placeholders: Record<string, string> = {};
+    for (const [tag, cfg] of Object.entries(block.tag_config)) {
+      const ph = cfg?.placeholder;
+      if (ph && ph.trim()) placeholders[tag] = ph;
+    }
+    if (Object.keys(placeholders).length === 0) {
+      setPlaceholderCandidates({});
+      setPlaceholderIndices({});
+      return;
+    }
+    if (placeholderTimer.current) clearTimeout(placeholderTimer.current);
+    placeholderTimer.current = setTimeout(() => {
+      transliterateBatchCandidates(placeholders, fontLanguage)
+        .then((result) => {
+          setPlaceholderCandidates(result);
+          const saved = block.transliteration_overrides;
+          const newIndices: Record<string, number[]> = {};
+          for (const [tag, words] of Object.entries(result)) {
+            if (saved) {
+              newIndices[tag] = words.map((wc) => {
+                const savedVal = saved[wc.word];
+                if (savedVal) {
+                  const idx = wc.candidates.indexOf(savedVal);
+                  return idx >= 0 ? idx : 0;
+                }
+                return 0;
+              });
+            } else {
+              newIndices[tag] = new Array(words.length).fill(0);
+            }
+          }
+          setPlaceholderIndices(newIndices);
+        })
+        .catch(() => {
+          setPlaceholderCandidates({});
+          setPlaceholderIndices({});
+        });
+    }, 400);
+    return () => {
+      if (placeholderTimer.current) clearTimeout(placeholderTimer.current);
+    };
+    // Note: block.transliteration_overrides intentionally excluded — only used for initial restore
+    // Live updates go through pushOverridesToStore, not re-fetching candidates
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [block.tag_config, fontLanguage, isRegionalFont]);
+
+  // Push overrides to store so VideoPreviewCanvas picks them up immediately
+  const pushOverridesToStore = useCallback((
+    nextContentIndices: number[],
+    nextPlaceholderIndices: Record<string, number[]>,
+  ) => {
+    const overrides: Record<string, string> = {};
+    translitCandidates.forEach((wc, idx) => {
+      const selIdx = nextContentIndices[idx] ?? 0;
+      if (wc.candidates[selIdx]) overrides[wc.word] = wc.candidates[selIdx];
+    });
+    for (const tag of Object.keys(placeholderCandidates)) {
+      const words = placeholderCandidates[tag];
+      const indices = nextPlaceholderIndices[tag] || [];
+      words.forEach((wc, idx) => {
+        const selIdx = indices[idx] ?? 0;
+        if (wc.candidates[selIdx]) overrides[wc.word] = wc.candidates[selIdx];
+      });
+    }
+    onUpdateField("transliteration_overrides", Object.keys(overrides).length > 0 ? overrides : null);
+  }, [translitCandidates, placeholderCandidates, onUpdateField]);
+
+  const handleTranslitSelect = (wordIdx: number, candidateIdx: number) => {
+    setSelectedIndices((prev) => {
+      const next = [...prev];
+      next[wordIdx] = candidateIdx;
+      pushOverridesToStore(next, placeholderIndices);
+      return next;
+    });
+  };
+
+  const handlePlaceholderTranslitSelect = (tag: string, wordIdx: number, candidateIdx: number) => {
+    setPlaceholderIndices((prev) => {
+      const tagIndices = [...(prev[tag] || [])];
+      tagIndices[wordIdx] = candidateIdx;
+      const next = { ...prev, [tag]: tagIndices };
+      pushOverridesToStore(selectedIndices, next);
+      return next;
+    });
+  };
 
   const tagKeys = block.tag_config ? Object.keys(block.tag_config) : [];
 
@@ -325,10 +485,17 @@ function BlockEditForm({
             }}
             tagKeys={tagKeys}
           />
-          {isRegionalFont && transliteratedPreview && (
-            <p className="bg-primary-50 px-3 py-1.5 rounded-lg text-primary-500 text-sm font-medium mt-1">
-              {transliteratedPreview}
-            </p>
+          {isRegionalFont && translitCandidates.length > 0 && (
+            <div className="bg-primary-50 px-3 py-1.5 rounded-lg mt-1 flex flex-wrap gap-1 items-center">
+              {translitCandidates.map((wc, wordIdx) => (
+                <TranslitWord
+                  key={wordIdx}
+                  word={wc}
+                  selectedIndex={selectedIndices[wordIdx] ?? 0}
+                  onSelect={(idx) => handleTranslitSelect(wordIdx, idx)}
+                />
+              ))}
+            </div>
           )}
           {/* Auto-detected tag placeholders */}
           {(() => {
@@ -338,22 +505,36 @@ function BlockEditForm({
             return (
               <div className="mt-2 space-y-1.5">
                 {unique.map((tag) => (
-                  <div key={tag} className="flex items-center gap-2">
-                    <span className="text-xs text-slate-400 font-mono shrink-0 w-20 truncate" title={tag}>{`{${tag}}`}</span>
-                    <input
-                      type="text"
-                      value={block.tag_config?.[tag]?.placeholder ?? ""}
-                      onChange={(e) => {
-                        const existing = block.tag_config ?? {};
-                        const cfg = existing[tag] ?? {};
-                        onUpdateField("tag_config", {
-                          ...existing,
-                          [tag]: { ...cfg, placeholder: e.target.value },
-                        });
-                      }}
-                      className="input-field text-xs flex-1 text-slate-500"
-                      placeholder={`Default for ${tag}`}
-                    />
+                  <div key={tag}>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-slate-400 font-mono shrink-0 w-20 truncate" title={tag}>{`{${tag}}`}</span>
+                      <input
+                        type="text"
+                        value={block.tag_config?.[tag]?.placeholder ?? ""}
+                        onChange={(e) => {
+                          const existing = block.tag_config ?? {};
+                          const cfg = existing[tag] ?? {};
+                          onUpdateField("tag_config", {
+                            ...existing,
+                            [tag]: { ...cfg, placeholder: e.target.value },
+                          });
+                        }}
+                        className="input-field text-xs flex-1 text-slate-500"
+                        placeholder={`Default for ${tag}`}
+                      />
+                    </div>
+                    {isRegionalFont && placeholderCandidates[tag]?.length > 0 && (
+                      <div className="bg-primary-50 px-2 py-1 rounded mt-0.5 ml-[5.5rem] flex flex-wrap gap-1 items-center">
+                        {placeholderCandidates[tag].map((wc, wordIdx) => (
+                          <TranslitWord
+                            key={wordIdx}
+                            word={wc}
+                            selectedIndex={placeholderIndices[tag]?.[wordIdx] ?? 0}
+                            onSelect={(idx) => handlePlaceholderTranslitSelect(tag, wordIdx, idx)}
+                          />
+                        ))}
+                      </div>
+                    )}
                   </div>
                 ))}
                 <p className="text-[10px] text-slate-300">Leave empty to show tag name as-is</p>
@@ -626,7 +807,7 @@ function BlockEditForm({
       </CollapsibleSection>
 
       <button
-        onClick={onSave}
+        onClick={handleSaveWithOverrides}
         disabled={saving}
         className="btn-primary w-full text-sm disabled:opacity-50 mt-2 sticky bottom-0"
       >
@@ -765,13 +946,15 @@ export default function TextBlockPanel() {
     }
   };
 
-  const handleSaveBlock = async (blockId: string) => {
+  const handleSaveBlock = async (blockId: string, extraFields?: Partial<TextBlock>) => {
     if (!templateId) return;
     const block = allBlocks.find((b) => b.id === blockId);
     if (!block) return;
     setSaving(true);
     try {
-      await updateTextBlock(templateId, block.id, block);
+      const payload = extraFields ? { ...block, ...extraFields } : block;
+      await updateTextBlock(templateId, block.id, payload);
+      if (extraFields) updateBlock(blockId, extraFields);
       clearAdminDraft(templateId);
       setSaveSuccess(true);
       setTimeout(() => setSaveSuccess(false), 2000);
@@ -806,6 +989,7 @@ export default function TextBlockPanel() {
         end_time: source.end_time,
         tag_config: source.tag_config,
         format_ranges: source.format_ranges,
+        transliteration_overrides: source.transliteration_overrides,
       });
       addBlock(cloned);
     } catch (err) {
@@ -976,7 +1160,7 @@ export default function TextBlockPanel() {
                         saving={saving}
                         saveSuccess={saveSuccess}
                         onUpdateField={(field, value) => updateField(block.id, field, value)}
-                        onSave={() => handleSaveBlock(block.id)}
+                        onSave={(extra) => handleSaveBlock(block.id, extra)}
                         onPreviewAnimation={triggerBlockPreview}
                         contentRef={contentInputRef}
                         fallbackFontId={defaultFontId}

@@ -156,7 +156,7 @@ class FFmpegRenderer:
 
         return ",".join(filters) if filters else ""
 
-    def render(self, crf: int = 23, preset: str = "medium"):
+    def render(self, crf: int = 23, preset: str = "fast"):
         filter_str = self.build_filter_complex()
 
         cmd = [

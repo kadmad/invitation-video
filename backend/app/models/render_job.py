@@ -30,6 +30,9 @@ class RenderJob(UUIDMixin, TimestampMixin, Base):
     block_overrides: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     block_format_overrides: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     progress: Mapped[int] = mapped_column(Integer, default=0)
+    pdf_key: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    pdf_status: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    location_url: Mapped[str | None] = mapped_column(String(1000), nullable=True)
 
     user = relationship("User", back_populates="render_jobs")
     template = relationship("Template", back_populates="render_jobs")

@@ -146,11 +146,40 @@ export default function VideoPreviewCanvas({ playerRef }: VideoPreviewCanvasProp
         byLang[language][key] = text;
       }
 
+      // Build per-segment overrides lookup: segKey → block.transliteration_overrides
+      const segOverrides: Record<string, Record<string, string>> = {};
+      for (const block of blocks) {
+        const ov = block.transliteration_overrides;
+        if (!ov || Object.keys(ov).length === 0) continue;
+        for (const key of Object.keys(toTransliterate)) {
+          if (key.startsWith(`seg:${block.id}:`)) segOverrides[key] = ov;
+        }
+        // Tag value overrides
+        const tagRe = /\{(\w+)\}/g;
+        let m: RegExpExecArray | null;
+        while ((m = tagRe.exec(block.content)) !== null) {
+          const font = fontList.find((f) => f.id === (block.font_id ?? template!.default_font_id));
+          if (font) segOverrides[`tag:${m[1]}:${font.language}`] = ov;
+        }
+      }
+
+      // Transliterate via batch API, then apply word-level overrides
       const segResults: Record<string, string> = {};
       for (const [language, values] of Object.entries(byLang)) {
         try {
           const translated = await transliterateBatch(values, language);
-          Object.assign(segResults, translated);
+          for (const [key, val] of Object.entries(translated)) {
+            const ov = segOverrides[key];
+            if (ov) {
+              // Apply word-level overrides: split original + translated, swap where override exists
+              const origWords = values[key].split(/\s+/).filter(Boolean);
+              const transWords = val.split(/\s+/).filter(Boolean);
+              const result = origWords.map((w, i) => ov[w] ?? transWords[i] ?? w);
+              segResults[key] = result.join(" ");
+            } else {
+              segResults[key] = val;
+            }
+          }
         } catch {
           // Transliteration failed, skip
         }

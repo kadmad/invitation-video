@@ -2,8 +2,10 @@ import { useEffect, useMemo, useState, useRef, useCallback } from "react";
 import { useParams, useNavigate, useSearchParams } from "react-router-dom";
 import { getTemplate } from "@/api/templates";
 import { listFonts, getFontFileUrl } from "@/api/fonts";
-import { createOrder, verifyPayment } from "@/api/payments";
-import { transliterateBatch } from "@/api/transliterate";
+import { createOrder, verifyPayment, adminRender } from "@/api/payments";
+import { transliterateBatch, transliterateBatchCandidates } from "@/api/transliterate";
+import type { WordCandidates } from "@/api/transliterate";
+import TranslitWord from "@/components/common/TranslitWord";
 import { getDraft, saveDraft, getGuestDraft, saveGuestDraft } from "@/api/drafts";
 import { uploadUserImage } from "@/api/templates";
 import { useEditorStore, extractTags } from "@/store/editorStore";
@@ -77,14 +79,20 @@ export default function EditorPage() {
     setTransliteratedBlockOverrides,
     reset,
   } = useEditorStore();
-  const { token, openAuthModal } = useAuthStore();
+  const { token, user: authUser, openAuthModal } = useAuthStore();
   const isLoggedIn = !!token;
   const [fonts, setFonts] = useState<Font[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [showConfirmPopup, setShowConfirmPopup] = useState(false);
   const [transliteratedLabels, setTransliteratedLabels] = useState<Record<string, string>>({});
+  const [transliterationCandidates, setTransliterationCandidates] = useState<Record<string, WordCandidates[]>>({});
+  const [selectedCandidateIndices, setSelectedCandidateIndices] = useState<Record<string, number[]>>({});
+  const [blockTransliterationCandidates, setBlockTransliterationCandidates] = useState<Record<string, WordCandidates[]>>({});
+  const [selectedBlockCandidateIndices, setSelectedBlockCandidateIndices] = useState<Record<string, number[]>>({});
   const labelTranslitTimer = useRef<ReturnType<typeof setTimeout>>();
   const [linkCopied, setLinkCopied] = useState(false);
+  const [actuallyRender, setActuallyRender] = useState(false);
+  const [locationUrl, setLocationUrl] = useState("");
   const debounceTimer = useRef<ReturnType<typeof setTimeout>>();
   const blockOverrideDebounceTimer = useRef<ReturnType<typeof setTimeout>>();
   const saveDraftTimer = useRef<ReturnType<typeof setTimeout>>();
@@ -215,27 +223,128 @@ export default function EditorPage() {
     [template, tags]
   );
 
+  // Build transliterated value from selected candidate indices
+  const buildFromCandidates = useCallback(
+    (candidates: WordCandidates[], indices: number[]): string => {
+      return candidates
+        .map((wc, i) => {
+          const idx = indices[i] ?? 0;
+          return wc.candidates[idx] ?? wc.candidates[0] ?? wc.word;
+        })
+        .join(" ");
+    },
+    []
+  );
+
+  const handleCandidateSelect = useCallback(
+    (tag: string, wordIdx: number, candidateIdx: number) => {
+      setSelectedCandidateIndices((prev) => {
+        const tagIndices = [...(prev[tag] ?? [])];
+        tagIndices[wordIdx] = candidateIdx;
+        const next = { ...prev, [tag]: tagIndices };
+
+        // Rebuild transliterated value
+        const candidates = transliterationCandidates[tag];
+        if (candidates) {
+          const rebuilt = buildFromCandidates(candidates, tagIndices);
+          const current = useEditorStore.getState().transliteratedValues;
+          setTransliteratedValues({ ...current, [tag]: rebuilt });
+        }
+        return next;
+      });
+    },
+    [transliterationCandidates, buildFromCandidates, setTransliteratedValues]
+  );
+
+  const handleBlockCandidateSelect = useCallback(
+    (blockId: string, wordIdx: number, candidateIdx: number) => {
+      setSelectedBlockCandidateIndices((prev) => {
+        const indices = [...(prev[blockId] ?? [])];
+        indices[wordIdx] = candidateIdx;
+        const next = { ...prev, [blockId]: indices };
+
+        const candidates = blockTransliterationCandidates[blockId];
+        if (candidates) {
+          const rebuilt = buildFromCandidates(candidates, indices);
+          const current = useEditorStore.getState().transliteratedBlockOverrides;
+          setTransliteratedBlockOverrides({ ...current, [blockId]: rebuilt });
+        }
+        return next;
+      });
+    },
+    [blockTransliterationCandidates, buildFromCandidates, setTransliteratedBlockOverrides]
+  );
+
+  // Merge all blocks' transliteration_overrides into one map: {latin_word: chosen_transliteration}
+  const adminTranslitOverrides = useMemo(() => {
+    const merged: Record<string, string> = {};
+    for (const block of template?.text_blocks ?? []) {
+      if (block.transliteration_overrides) {
+        Object.assign(merged, block.transliteration_overrides);
+      }
+    }
+    return merged;
+  }, [template]);
+
   // Auto-transliterate when font language is hindi/gujarati
   const doTransliterate = useCallback(
     (values: Record<string, string>, language: string) => {
       if (language === "english" || !language) {
         setTransliteratedValues({});
+        setTransliterationCandidates({});
+        setSelectedCandidateIndices({});
         return;
       }
-      // Filter out empty values
       const nonEmpty: Record<string, string> = {};
       for (const [k, v] of Object.entries(values)) {
         if (v.trim()) nonEmpty[k] = v;
       }
       if (Object.keys(nonEmpty).length === 0) {
         setTransliteratedValues({});
+        setTransliterationCandidates({});
+        setSelectedCandidateIndices({});
         return;
       }
-      transliterateBatch(nonEmpty, language)
-        .then(setTransliteratedValues)
+      // Single API call returns candidates; first candidate = default transliteration
+      transliterateBatchCandidates(nonEmpty, language)
+        .then((result) => {
+          setTransliterationCandidates(result);
+          // Build default transliterated values — use admin-selected overrides where available
+          const transliterated: Record<string, string> = {};
+          const indices: Record<string, number[]> = {};
+          for (const [key, words] of Object.entries(result)) {
+            const wordIndices: number[] = [];
+            transliterated[key] = words
+              .map((wc, i) => {
+                // Check if admin selected a specific candidate for this word
+                const adminChoice = adminTranslitOverrides[wc.word];
+                if (adminChoice) {
+                  const idx = wc.candidates.indexOf(adminChoice);
+                  if (idx >= 0) {
+                    wordIndices[i] = idx;
+                    return adminChoice;
+                  }
+                }
+                wordIndices[i] = 0;
+                return wc.candidates[0] ?? wc.word;
+              })
+              .join(" ");
+            indices[key] = wordIndices;
+          }
+          setTransliteratedValues(transliterated);
+          // Set initial indices from admin overrides (user can change later)
+          setSelectedCandidateIndices((prev) => {
+            const next = { ...prev };
+            for (const [key, idx] of Object.entries(indices)) {
+              // Only set if user hasn't already made a selection
+              if (!next[key] || next[key].length === 0) next[key] = idx;
+            }
+            return next;
+          });
+        })
         .catch((err) => console.error("Transliteration failed:", err));
     },
-    [setTransliteratedValues]
+    [setTransliteratedValues, adminTranslitOverrides]
   );
 
   // Determine effective language: user override font > block fonts > template default font
@@ -292,6 +401,8 @@ export default function EditorPage() {
   useEffect(() => {
     if (editorMode !== "advanced" || effectiveLanguage === "english") {
       setTransliteratedBlockOverrides({});
+      setBlockTransliterationCandidates({});
+      setSelectedBlockCandidateIndices({});
       return;
     }
     clearTimeout(blockOverrideDebounceTimer.current);
@@ -302,10 +413,42 @@ export default function EditorPage() {
       }
       if (Object.keys(nonEmpty).length === 0) {
         setTransliteratedBlockOverrides({});
+        setBlockTransliterationCandidates({});
+        setSelectedBlockCandidateIndices({});
         return;
       }
-      transliterateBatch(nonEmpty, effectiveLanguage)
-        .then(setTransliteratedBlockOverrides)
+      transliterateBatchCandidates(nonEmpty, effectiveLanguage)
+        .then((result) => {
+          setBlockTransliterationCandidates(result);
+          const transliterated: Record<string, string> = {};
+          const indices: Record<string, number[]> = {};
+          for (const [key, words] of Object.entries(result)) {
+            const wordIndices: number[] = [];
+            transliterated[key] = words
+              .map((wc, i) => {
+                const adminChoice = adminTranslitOverrides[wc.word];
+                if (adminChoice) {
+                  const idx = wc.candidates.indexOf(adminChoice);
+                  if (idx >= 0) {
+                    wordIndices[i] = idx;
+                    return adminChoice;
+                  }
+                }
+                wordIndices[i] = 0;
+                return wc.candidates[0] ?? wc.word;
+              })
+              .join(" ");
+            indices[key] = wordIndices;
+          }
+          setTransliteratedBlockOverrides(transliterated);
+          setSelectedBlockCandidateIndices((prev) => {
+            const next = { ...prev };
+            for (const [key, idx] of Object.entries(indices)) {
+              if (!next[key] || next[key].length === 0) next[key] = idx;
+            }
+            return next;
+          });
+        })
         .catch((err) => console.error("Block override transliteration failed:", err));
     }, 400);
     return () => clearTimeout(blockOverrideDebounceTimer.current);
@@ -402,7 +545,7 @@ export default function EditorPage() {
     setTimeout(() => setLinkCopied(false), 2000);
   };
 
-  // Step 2: Proceed to payment
+  // Step 2: Proceed to payment (or direct render for admin)
   const handleProceedToPayment = async () => {
     if (!template) return;
     setShowConfirmPopup(false);
@@ -412,18 +555,43 @@ export default function EditorPage() {
         ? textColorOverrides
         : undefined;
       const advancedBlockOverrides = editorMode === "advanced"
-        ? blockOverrides
+        ? (Object.keys(transliteratedBlockOverrides).length > 0
+          ? { ...blockOverrides, ...transliteratedBlockOverrides }
+          : blockOverrides)
         : undefined;
       const advancedBlockFormatOverrides = editorMode === "advanced" && Object.keys(blockFormatOverrides).length > 0
         ? blockFormatOverrides
         : undefined;
+
+      const currentTagValues: Record<string, string> = {};
+      for (const tag of tags) {
+        if (effectiveValues[tag] !== undefined) currentTagValues[tag] = effectiveValues[tag];
+      }
+
+      if (authUser?.is_admin) {
+        const skipRender = import.meta.env.DEV && !actuallyRender;
+        const result = await adminRender(
+          template.id,
+          font?.id ?? null,
+          currentTagValues,
+          colorOverride,
+          advancedBlockOverrides,
+          advancedBlockFormatOverrides,
+          locationUrl || undefined,
+          skipRender
+        );
+        navigate(`/render/${result.render_job_id}`);
+        return;
+      }
+
       const order = await createOrder(
         template.id,
         font?.id ?? null,
-        effectiveValues,
+        currentTagValues,
         colorOverride,
         advancedBlockOverrides,
-        advancedBlockFormatOverrides
+        advancedBlockFormatOverrides,
+        locationUrl || undefined
       );
 
       const options = {
@@ -507,6 +675,8 @@ export default function EditorPage() {
 
   // Deduplicate: only show input for a tag in first block that uses it
   const seenTags = useMemo(() => new Set<string>(), [template]);
+
+  const hasLocationTag = useMemo(() => tags.includes("location") || tags.includes("Location"), [tags]);
 
   const [showCustomize, setShowCustomize] = useState(false);
 
@@ -593,7 +763,6 @@ export default function EditorPage() {
                     const cfg = tagConfigs[tag] ?? {};
                     const label = cfg.label ?? humanizeTag(tag);
                     const regionalLabel = transliteratedLabels[`label:${tag}`];
-                    const transVal = transliteratedValues[tag];
                     return (
                       <div key={tag}>
                         <label className="block text-xs font-medium text-slate-600 mb-0.5">
@@ -609,10 +778,17 @@ export default function EditorPage() {
                           rows={1}
                           className="input-field w-full text-center resize-y placeholder:text-slate-300 text-sm py-2"
                         />
-                        {isRegionalFont && transVal && (
-                          <p className="bg-primary-50 px-2 py-1 rounded text-primary-500 text-xs font-medium mt-0.5">
-                            {transVal}
-                          </p>
+                        {isRegionalFont && transliterationCandidates[tag] && transliterationCandidates[tag].length > 0 && (
+                          <div className="bg-primary-50 px-2 py-1 rounded mt-0.5 flex flex-wrap gap-1 items-center">
+                            {transliterationCandidates[tag].map((wc, wordIdx) => (
+                              <TranslitWord
+                                key={wordIdx}
+                                word={wc}
+                                selectedIndex={selectedCandidateIndices[tag]?.[wordIdx] ?? 0}
+                                onSelect={(idx) => handleCandidateSelect(tag, wordIdx, idx)}
+                              />
+                            ))}
+                          </div>
                         )}
                       </div>
                     );
@@ -625,7 +801,6 @@ export default function EditorPage() {
             <>
               {textBlocksWithContent.map((block, idx) => {
                 const regionalBlockLabel = transliteratedLabels[`block:${idx}`];
-                const transVal = transliteratedBlockOverrides[block.id];
                 return (
                   <div key={block.id} onClick={() => seekTo(block.start_time ?? 0)}>
                     <label className="block text-xs font-medium text-slate-600 mb-0.5">
@@ -640,10 +815,17 @@ export default function EditorPage() {
                       }}
                       showLabel={false}
                     />
-                    {isRegionalFont && transVal && (
-                      <p className="bg-primary-50 px-2 py-1 rounded text-primary-500 text-xs font-medium mt-0.5">
-                        {transVal}
-                      </p>
+                    {isRegionalFont && blockTransliterationCandidates[block.id] && blockTransliterationCandidates[block.id].length > 0 && (
+                      <div className="bg-primary-50 px-2 py-1 rounded mt-0.5 flex flex-wrap gap-1 items-center">
+                        {blockTransliterationCandidates[block.id].map((wc, wordIdx) => (
+                          <TranslitWord
+                            key={wordIdx}
+                            word={wc}
+                            selectedIndex={selectedBlockCandidateIndices[block.id]?.[wordIdx] ?? 0}
+                            onSelect={(idx) => handleBlockCandidateSelect(block.id, wordIdx, idx)}
+                          />
+                        ))}
+                      </div>
                     )}
                   </div>
                 );
@@ -709,6 +891,32 @@ export default function EditorPage() {
             </div>
           ))}
         </div>
+
+        {/* Google Maps link — only when template has {location} tag */}
+        {hasLocationTag && (
+          <div className="mb-4">
+            <label className="block text-xs font-medium text-slate-500 mb-1">
+              Google Maps Link
+              <span className="text-slate-400 font-normal ml-1">(optional — for accurate location on PDF)</span>
+            </label>
+            <div className="relative">
+              <input
+                type="url"
+                placeholder="Paste Google Maps link of your venue"
+                value={locationUrl}
+                onChange={(e) => setLocationUrl(e.target.value)}
+                className="input-field w-full text-sm py-2 pl-8 placeholder:text-slate-300"
+              />
+              <svg className="w-4 h-4 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M15 10.5a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" />
+                <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 10.5c0 7.142-7.5 11.25-7.5 11.25S4.5 17.642 4.5 10.5a7.5 7.5 0 1 1 15 0Z" />
+              </svg>
+            </div>
+            <p className="text-[10px] text-slate-400 mt-0.5">
+              Open Google Maps, find your venue, tap Share and paste the link here
+            </p>
+          </div>
+        )}
 
         {/* Customize Colors & Font -- hidden by default */}
         <button
@@ -823,17 +1031,34 @@ export default function EditorPage() {
                 Only the video preview is shared — your details stay private
               </p>
 
-              {/* Proceed to payment */}
+              {/* Dev: actually render checkbox (admin only) */}
+              {import.meta.env.DEV && authUser?.is_admin && (
+                <label className="flex items-center gap-2 mb-3 px-1 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={actuallyRender}
+                    onChange={(e) => setActuallyRender(e.target.checked)}
+                    className="w-4 h-4 rounded border-slate-300 text-primary-600 focus:ring-primary-500"
+                  />
+                  <span className="text-sm text-slate-600">Actually render video</span>
+                </label>
+              )}
+
+              {/* Proceed to payment / render */}
               <button
                 onClick={handleProceedToPayment}
                 className="btn-primary w-full py-3 text-base"
               >
-                Proceed to Payment — ₹{template ? (template.price / 100).toFixed(0) : "99"}
+                {authUser?.is_admin
+                  ? (import.meta.env.DEV && !actuallyRender ? "Skip Render (Dev)" : "Render Video (Admin)")
+                  : `Proceed to Payment — ₹${template ? (template.price / 100).toFixed(0) : "99"}`}
               </button>
 
-              <p className="text-xs text-slate-400 text-center mt-3">
-                You'll be redirected to a secure payment page
-              </p>
+              {!authUser?.is_admin && (
+                <p className="text-xs text-slate-400 text-center mt-3">
+                  You'll be redirected to a secure payment page
+                </p>
+              )}
             </div>
           </div>
         )}

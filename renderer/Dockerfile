@@ -4,8 +4,7 @@ FROM node:20-slim
 RUN apt-get update && apt-get install -y --no-install-recommends \
     chromium \
     ffmpeg \
-    fonts-noto \
-    fonts-noto-cjk \
+    fonts-noto-core \
     && rm -rf /var/lib/apt/lists/*
 
 ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true

@@ -42,6 +42,7 @@ class Payment(UUIDMixin, TimestampMixin, Base):
     text_color_override: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     block_overrides: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     block_format_overrides: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    location_url: Mapped[str | None] = mapped_column(String(1000), nullable=True)
 
     user = relationship("User")
     render_job = relationship("RenderJob")

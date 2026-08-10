@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useParams, Link, useNavigate } from "react-router-dom";
-import { getRender, getDownloadUrl } from "@/api/renders";
+import { getRender, getDownloadUrl, getPdfDownloadUrl } from "@/api/renders";
 import { useEditorStore } from "@/store/editorStore";
 import type { RenderJob } from "@/types";
 import PageTransition from "@/components/common/PageTransition";
@@ -14,16 +14,26 @@ export default function RenderStatusPage() {
 
   useEffect(() => {
     if (!id) return;
+    let active = true;
 
     const poll = async () => {
-      const data = await getRender(id);
-      setJob(data);
-      if (data.status === "pending" || data.status === "processing") {
-        setTimeout(poll, 2000);
+      if (!active) return;
+      try {
+        const data = await getRender(id);
+        if (!active) return;
+        setJob(data);
+        const videoInProgress = data.status === "pending" || data.status === "processing";
+        const pdfInProgress = data.pdf_status === "queued" || data.pdf_status === "generating";
+        if (videoInProgress || pdfInProgress) {
+          setTimeout(poll, 2000);
+        }
+      } catch {
+        if (active) setTimeout(poll, 5000);
       }
     };
 
     poll();
+    return () => { active = false; };
   }, [id]);
 
   const handleDownload = async () => {
@@ -38,6 +48,22 @@ export default function RenderStatusPage() {
     const a = document.createElement("a");
     a.href = blobUrl;
     a.download = `render_${id}.mp4`;
+    a.click();
+    URL.revokeObjectURL(blobUrl);
+  };
+
+  const handlePdfDownload = async () => {
+    if (!id) return;
+    const url = getPdfDownloadUrl(id);
+    const token = localStorage.getItem("token");
+    const response = await fetch(url, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
+    const blob = await response.blob();
+    const blobUrl = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = blobUrl;
+    a.download = `invitation_${id}.pdf`;
     a.click();
     URL.revokeObjectURL(blobUrl);
   };
@@ -221,6 +247,52 @@ export default function RenderStatusPage() {
             >
               Download Video
             </button>
+
+            {/* PDF status indicator */}
+            {job.pdf_status === "queued" && (
+              <div className="w-full flex items-center gap-3 rounded-xl border border-amber-200 bg-amber-50 py-3 px-4">
+                <div className="w-5 h-5 rounded-full border-2 border-amber-400 border-t-transparent animate-spin flex-shrink-0" />
+                <div className="flex-1">
+                  <p className="text-sm font-medium text-amber-700">Invitation PDF</p>
+                  <p className="text-xs text-amber-500">In queue...</p>
+                </div>
+              </div>
+            )}
+            {job.pdf_status === "generating" && (
+              <div className="w-full rounded-xl border border-primary-200 bg-primary-50 py-3 px-4">
+                <div className="flex items-center gap-3 mb-2">
+                  <svg className="w-5 h-5 text-primary-500 animate-pulse flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" />
+                  </svg>
+                  <div className="flex-1">
+                    <p className="text-sm font-medium text-primary-700">Creating Invitation PDF</p>
+                    <p className="text-xs text-primary-400">Extracting frames & building pages...</p>
+                  </div>
+                </div>
+                <div className="bg-primary-100 rounded-full h-1.5 overflow-hidden">
+                  <div className="bg-primary-500 rounded-full h-1.5 animate-[pdfProgress_2s_ease-in-out_infinite]" />
+                </div>
+              </div>
+            )}
+            {job.pdf_status === "completed" && job.pdf_key && (
+              <button
+                onClick={handlePdfDownload}
+                className="w-full flex items-center justify-center gap-2 rounded-xl border border-primary-200 bg-primary-50 py-3 text-base font-medium text-primary-700 hover:bg-primary-100 transition-colors"
+              >
+                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" />
+                </svg>
+                Download Invitation PDF
+              </button>
+            )}
+            {job.pdf_status === "failed" && (
+              <div className="w-full flex items-center gap-3 rounded-xl border border-red-200 bg-red-50 py-3 px-4">
+                <svg className="w-5 h-5 text-red-400 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m9-.75a9 9 0 1 1-18 0 9 9 0 0 1 18 0Zm-9 3.75h.008v.008H12v-.008Z" />
+                </svg>
+                <p className="text-sm text-red-600">PDF generation failed</p>
+              </div>
+            )}
 
             {/* Share Buttons */}
             <div className="flex gap-3">

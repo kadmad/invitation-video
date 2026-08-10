@@ -55,6 +55,8 @@ export default function AdminTemplateEditorPage() {
   const [hasDraft, setHasDraft] = useState(false);
   const [panelOpen, setPanelOpen] = useState(true);
   const [renderPreview, setRenderPreview] = useState(false);
+  const [pdfSnapshotTimestamps, setPdfSnapshotTimestamps] = useState<number[]>([]);
+  const [newTimestamp, setNewTimestamp] = useState("");
 
   // Undo/redo reactive state
   const canUndo = useStore(useAdminTemplateStore.temporal, (s) => s.pastStates.length > 0);
@@ -113,6 +115,7 @@ export default function AdminTemplateEditorPage() {
         setDefaultFontId(tmpl.default_font_id ?? null);
         setRenderNotes(tmpl.render_notes ?? "");
         setPrice(tmpl.price ?? 9900);
+        setPdfSnapshotTimestamps(tmpl.pdf_snapshot_timestamps ?? []);
         setCategories(cats);
 
         if (tmpl.video_key) {
@@ -229,6 +232,7 @@ export default function AdminTemplateEditorPage() {
         default_font_id: defaultFontId,
         render_notes: renderNotes || null,
         price,
+        pdf_snapshot_timestamps: pdfSnapshotTimestamps.length > 0 ? pdfSnapshotTimestamps : null,
         render_preview: renderPreview,
       } as any);
 
@@ -451,6 +455,69 @@ export default function AdminTemplateEditorPage() {
         </div>
       </div>
 
+      {/* PDF Snapshot Timestamps */}
+      <div className="card flex-shrink-0 border border-slate-200 px-3 py-1.5 mt-1 flex items-center gap-2 flex-wrap">
+        <span className="text-[10px] font-medium text-slate-500 uppercase tracking-wider flex-shrink-0">PDF Snapshots</span>
+        <div className="w-px h-5 bg-slate-200" />
+        {pdfSnapshotTimestamps.map((ts, idx) => (
+          <span key={idx} className="inline-flex items-center gap-1 bg-primary-50 text-primary-700 text-xs font-medium px-2 py-0.5 rounded-full">
+            {ts}s
+            <button
+              onClick={() => setPdfSnapshotTimestamps((prev) => prev.filter((_, i) => i !== idx))}
+              className="text-primary-400 hover:text-red-500 transition"
+            >
+              <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </span>
+        ))}
+        <button
+          onClick={() => {
+            const player = playerRef.current;
+            if (!player || !template) return;
+            const frame = player.getCurrentFrame();
+            const sec = Math.round((frame / template.fps) * 10) / 10;
+            if (!pdfSnapshotTimestamps.includes(sec)) {
+              setPdfSnapshotTimestamps((prev) => [...prev, sec].sort((a, b) => a - b));
+            }
+          }}
+          className="btn-secondary text-xs px-2 py-1 flex items-center gap-1"
+          title="Add current video time as PDF page"
+        >
+          <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+          </svg>
+          Capture
+        </button>
+        <div className="flex items-center gap-1">
+          <input
+            type="number"
+            value={newTimestamp}
+            onChange={(e) => setNewTimestamp(e.target.value)}
+            placeholder="0.0"
+            step="0.1"
+            min="0"
+            className="input-field text-xs w-16 text-center"
+          />
+          <button
+            onClick={() => {
+              const val = parseFloat(newTimestamp);
+              if (!isNaN(val) && val >= 0) {
+                setPdfSnapshotTimestamps((prev) => [...prev, val].sort((a, b) => a - b));
+                setNewTimestamp("");
+              }
+            }}
+            className="btn-secondary text-xs px-2 py-1"
+          >
+            Add
+          </button>
+        </div>
+        {pdfSnapshotTimestamps.length === 0 && (
+          <span className="text-[10px] text-slate-400">No timestamps — PDF generation disabled</span>
+        )}
+      </div>
+
       {/* Editor area */}
       <div className="flex flex-1 min-h-0 overflow-hidden mt-1 relative">
         {/* Left: Video preview */}
@@ -511,7 +578,11 @@ export default function AdminTemplateEditorPage() {
 
       {/* Full-width timeline footer */}
       <div className="mt-1">
-        <TimelineFooter playerRef={playerRef} />
+        <TimelineFooter
+          playerRef={playerRef}
+          pdfSnapshotTimestamps={pdfSnapshotTimestamps}
+          onPdfSnapshotTimestampsChange={setPdfSnapshotTimestamps}
+        />
       </div>
     </div>
   );

@@ -32,6 +32,7 @@ class Template(UUIDMixin, TimestampMixin, Base):
     price: Mapped[int] = mapped_column(Integer, default=9900)
     preview_key: Mapped[str | None] = mapped_column(String(500), nullable=True)
     preview_status: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    pdf_snapshot_timestamps: Mapped[list | None] = mapped_column(JSONB, nullable=True)
 
     category = relationship("Category", back_populates="templates")
     default_font = relationship("Font", foreign_keys=[default_font_id])

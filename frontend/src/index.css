@@ -54,6 +54,10 @@
     overflow: hidden;
   }
 
+  .accordion-content.open > * {
+    overflow: visible;
+  }
+
   .skeleton {
     @apply bg-gradient-to-r from-slate-200 via-slate-100 to-slate-200 rounded;
     background-size: 200% 100%;
@@ -210,4 +214,10 @@
   .accordion-content {
     transition-duration: 0.01ms !important;
   }
+}
+
+@keyframes pdfProgress {
+  0% { width: 30%; }
+  50% { width: 80%; }
+  100% { width: 30%; }
 }

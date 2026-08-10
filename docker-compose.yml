@@ -82,7 +82,7 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile
-    command: celery -A app.workers.celery_app worker --loglevel=info --concurrency=2
+    command: celery -A app.workers.celery_app worker --loglevel=info --concurrency=1
     volumes:
       - ./backend:/app
     env_file:
@@ -114,19 +114,19 @@ services:
       dockerfile: Dockerfile
     ports:
       - "3100:3100"
-    shm_size: "2gb"
+    shm_size: "4gb"
     volumes:
       - ./renderer:/app
       - ./frontend:/frontend
       - /app/node_modules
     environment:
       RENDERER_PORT: 3100
-      RENDER_CONCURRENCY: ${RENDER_CONCURRENCY:-3}
+      RENDER_CONCURRENCY: ${RENDER_CONCURRENCY:-4}
       MAX_PARALLEL_JOBS: ${MAX_PARALLEL_JOBS:-2}
     deploy:
       resources:
         limits:
-          memory: 3g
+          memory: 6g
     depends_on:
       minio-init:
         condition: service_completed_successfully

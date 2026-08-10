@@ -5,6 +5,7 @@ import subprocess
 import tempfile
 import time
 import uuid
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 
 import httpx
@@ -12,6 +13,7 @@ from sqlalchemy import create_engine, select
 from sqlalchemy.orm import sessionmaker
 
 from app.config import settings
+from app.models.category import Category
 from app.models.font import Font
 from app.models.render_job import RenderJob
 from app.models.template import Template
@@ -21,6 +23,7 @@ from app.services.storage_service import storage_service
 from app.services.whatsapp_service import send_render_ready
 from app.workers.celery_app import celery_app
 from app.workers.ffmpeg_renderer import FFmpegRenderer
+from app.workers.pdf_generator import generate_invitation_pdf
 
 LANGUAGE_TO_ITC = {
     "hindi": "hi-t-i0-und",
@@ -29,8 +32,8 @@ LANGUAGE_TO_ITC = {
 GOOGLE_URL = "https://inputtools.google.com/request"
 
 
-def _transliterate_sync(text: str, itc: str) -> str:
-    """Sync transliteration using Google Input Tools."""
+def _transliterate_sync(text: str, itc: str, overrides: dict[str, str] | None = None) -> str:
+    """Sync transliteration using Google Input Tools. Uses overrides map first if provided."""
     if not text.strip():
         return text
     lines = text.split("\n")
@@ -43,6 +46,10 @@ def _transliterate_sync(text: str, itc: str) -> str:
                 continue
             line_results = []
             for word in words:
+                # Check admin-selected override first
+                if overrides and word in overrides:
+                    line_results.append(overrides[word])
+                    continue
                 try:
                     resp = client.get(GOOGLE_URL, params={"text": word, "itc": itc, "num": 1})
                     data = resp.json()
@@ -73,9 +80,10 @@ sync_engine = create_engine(sync_url)
 SyncSession = sessionmaker(sync_engine)
 
 
-def _transliterate_block_content(content: str, itc: str):
+def _transliterate_block_content(content: str, itc: str, overrides: dict[str, str] | None = None):
     """Transliterate static parts of block content, preserving {tags}.
     Returns (new_content, char_map) where char_map maps old char indices to new ones.
+    Uses overrides map for admin-selected transliterations.
     """
     parts = re.split(r"(\{\w+\})", content)
     orig_offset = 0
@@ -94,7 +102,7 @@ def _transliterate_block_content(content: str, itc: str):
         else:
             # Static text — transliterate if Latin
             if part.strip() and re.search(r"[a-zA-Z]", part):
-                translated = _transliterate_sync(part, itc)
+                translated = _transliterate_sync(part, itc, overrides)
                 # Preserve leading/trailing whitespace from original
                 lead = len(part) - len(part.lstrip())
                 trail = len(part) - len(part.rstrip())
@@ -172,9 +180,6 @@ def render_video_task(self, job_id: str):
 
             with tempfile.TemporaryDirectory() as tmp_dir:
                 source_path = os.path.join(tmp_dir, "source.mp4")
-                storage_service.download_to_file(template.video_key, source_path)
-                job.progress = 10
-                db.commit()
 
                 font_paths = {}
                 default_font_path = None
@@ -186,17 +191,34 @@ def render_video_task(self, job_id: str):
                 if template.default_font_id:
                     unique_font_ids.add(template.default_font_id)
 
+                # Prepare font download info (DB queries before thread pool)
+                font_download_info = {}
                 for font_id in unique_font_ids:
                     font = db.execute(select(Font).where(Font.id == font_id)).scalar_one()
                     ext = os.path.splitext(font.file_key)[1] or ".ttf"
                     fpath = os.path.join(tmp_dir, f"font_{font_id}{ext}")
-                    storage_service.download_to_file(font.file_key, fpath)
+                    font_download_info[font_id] = (font.file_key, fpath)
+
+                # Download video + all fonts in parallel
+                def _download(key_path_pair):
+                    storage_service.download_to_file(key_path_pair[0], key_path_pair[1])
+
+                download_tasks = [(template.video_key, source_path)]
+                download_tasks.extend(font_download_info.values())
+
+                with ThreadPoolExecutor(max_workers=len(download_tasks)) as pool:
+                    list(pool.map(_download, download_tasks))
+
+                for font_id, (_, fpath) in font_download_info.items():
                     font_paths[str(font_id)] = fpath
 
                 if job.font_id:
                     default_font_path = font_paths[str(job.font_id)]
                 if template.default_font_id:
                     fallback_font_path = font_paths.get(str(template.default_font_id))
+
+                job.progress = 10
+                db.commit()
 
                 job.progress = 20
                 db.commit()
@@ -236,6 +258,9 @@ def render_video_task(self, job_id: str):
                     if not itc:
                         continue
 
+                    # Admin-selected transliteration overrides for this block
+                    block_translit_overrides = block.transliteration_overrides or {}
+
                     # Transliterate user-provided tag values
                     block_tags = re.findall(r"\{(\w+)\}", block.content)
                     for tag in block_tags:
@@ -243,11 +268,11 @@ def render_video_task(self, job_id: str):
                             continue
                         value = tag_values[tag]
                         if value and value.strip() and re.search(r"[a-zA-Z]", value):
-                            tag_values[tag] = _transliterate_sync(value, itc)
+                            tag_values[tag] = _transliterate_sync(value, itc, block_translit_overrides)
                             already_transliterated.add(tag)
 
                     # Transliterate static parts + build charmap for format_ranges
-                    new_content, char_map = _transliterate_block_content(block.content, itc)
+                    new_content, char_map = _transliterate_block_content(block.content, itc, block_translit_overrides)
                     transliterated_content[str(block.id)] = new_content
                     transliterated_charmaps[str(block.id)] = char_map
 
@@ -256,7 +281,7 @@ def render_video_task(self, job_id: str):
                     if bid in block_overrides and block_overrides[bid]:
                         val = block_overrides[bid]
                         if val.strip() and re.search(r"[a-zA-Z]", val):
-                            block_overrides[bid] = _transliterate_sync(val, itc)
+                            block_overrides[bid] = _transliterate_sync(val, itc, block_translit_overrides)
 
                 blocks_json = []
                 for b in text_blocks:
@@ -384,6 +409,54 @@ def render_video_task(self, job_id: str):
                 job.progress = 100
                 db.commit()
 
+                # Generate invitation PDF
+                try:
+                    snapshot_ts = template.pdf_snapshot_timestamps
+                    field_vals = job.field_values or {}
+                    # Use transliterated location text (same as video)
+                    location_text = tag_values.get("location") or tag_values.get("Location") or field_vals.get("location") or field_vals.get("Location")
+                    if snapshot_ts:
+                        job.pdf_status = "generating"
+                        db.commit()
+                        category = db.execute(
+                            select(Category).where(Category.id == template.category_id)
+                        ).scalar_one_or_none()
+                        category_slug = category.slug if category else "default"
+
+                        # Use font from block containing {location} tag (same font as video)
+                        pdf_font = None
+                        for block in text_blocks:
+                            if "{location}" in (block.content or "") or "{Location}" in (block.content or ""):
+                                block_fid = block.font_id or template.default_font_id or job.font_id
+                                if block_fid and str(block_fid) in font_paths:
+                                    pdf_font = font_paths[str(block_fid)]
+                                break
+                        if not pdf_font:
+                            pdf_font = fallback_font_path or default_font_path
+
+                        pdf_output = os.path.join(tmp_dir, "invitation.pdf")
+                        generate_invitation_pdf(
+                            video_path=output_path,
+                            snapshot_timestamps=snapshot_ts,
+                            location_text=location_text,
+                            category_slug=category_slug,
+                            field_values=field_vals,
+                            output_path=pdf_output,
+                            google_maps_api_key=os.environ.get("GOOGLE_MAPS_API_KEY"),
+                            font_path=pdf_font,
+                            location_url=job.location_url,
+                        )
+                        if os.path.exists(pdf_output):
+                            pdf_key = f"renders/{job.user_id}/{job.id}/invitation.pdf"
+                            storage_service.upload_file(pdf_key, pdf_output, content_type="application/pdf")
+                            job.pdf_key = pdf_key
+                            job.pdf_status = "completed"
+                            db.commit()
+                except Exception as pdf_err:
+                    print(f"[PDF] Generation failed for job {job_id}: {pdf_err}")
+                    job.pdf_status = "failed"
+                    db.commit()
+
                 # Send WhatsApp notification
                 try:
                     user = db.execute(select(User).where(User.id == job.user_id)).scalar_one_or_none()
@@ -463,6 +536,9 @@ def render_preview_task(self, template_id: str):
             if not itc:
                 continue
 
+            # Admin-selected transliteration overrides for this block
+            block_translit_overrides = block.transliteration_overrides or {}
+
             # Transliterate tag placeholder values
             block_tags = re.findall(r"\{(\w+)\}", block.content)
             for tag in block_tags:
@@ -470,11 +546,11 @@ def render_preview_task(self, template_id: str):
                     continue
                 value = tag_values[tag]
                 if value.strip():
-                    tag_values[tag] = _transliterate_sync(value, itc)
+                    tag_values[tag] = _transliterate_sync(value, itc, block_translit_overrides)
                     already_transliterated.add(tag)
 
             # Transliterate static parts + build charmap for format_ranges
-            new_content, char_map = _transliterate_block_content(block.content, itc)
+            new_content, char_map = _transliterate_block_content(block.content, itc, block_translit_overrides)
             transliterated_content[str(block.id)] = new_content
             transliterated_charmaps[str(block.id)] = char_map
 
@@ -567,6 +643,108 @@ def render_preview_task(self, template_id: str):
                 print(f"FFmpeg preview fallback failed: {ffmpeg_err}")
                 template.preview_status = "failed"
                 db.commit()
+
+
+@celery_app.task(bind=True, name="generate_pdf_only")
+def generate_pdf_only_task(self, job_id: str):
+    """Generate invitation PDF using template source video (no render needed)."""
+    with SyncSession() as db:
+        job = db.execute(select(RenderJob).where(RenderJob.id == uuid.UUID(job_id))).scalar_one()
+        template = db.execute(select(Template).where(Template.id == job.template_id)).scalar_one()
+
+        snapshot_ts = template.pdf_snapshot_timestamps
+        if not snapshot_ts:
+            return
+
+        job.pdf_status = "generating"
+        db.commit()
+
+        try:
+            category = db.execute(
+                select(Category).where(Category.id == template.category_id)
+            ).scalar_one_or_none()
+            category_slug = category.slug if category else "default"
+            field_vals = job.field_values or {}
+
+            # Load text blocks to find location block's font + language
+            text_blocks = db.execute(
+                select(TextBlock).where(TextBlock.template_id == template.id)
+            ).scalars().all()
+
+            # Build font language cache (same as video render)
+            font_lang_cache: dict[str, str] = {}
+            unique_font_ids = {b.font_id for b in text_blocks if b.font_id}
+            if template.default_font_id:
+                unique_font_ids.add(template.default_font_id)
+            if job.font_id:
+                unique_font_ids.add(job.font_id)
+
+            font_download_info: dict[str, tuple[str, str]] = {}
+            for fid in unique_font_ids:
+                f = db.execute(select(Font).where(Font.id == fid)).scalar_one_or_none()
+                if f:
+                    font_lang_cache[str(fid)] = f.language
+
+            default_lang = font_lang_cache.get(str(template.default_font_id), "english") if template.default_font_id else "english"
+
+            # Transliterate location text using same logic as video render
+            location_text = field_vals.get("location") or field_vals.get("Location")
+            location_font_id = None
+
+            if location_text and location_text.strip():
+                for block in text_blocks:
+                    if "{location}" in (block.content or "") or "{Location}" in (block.content or ""):
+                        block_lang = "english"
+                        if block.font_id and str(block.font_id) in font_lang_cache:
+                            block_lang = font_lang_cache[str(block.font_id)]
+                        elif default_lang != "english":
+                            block_lang = default_lang
+
+                        location_font_id = block.font_id or template.default_font_id or job.font_id
+
+                        itc = LANGUAGE_TO_ITC.get(block_lang)
+                        if itc and re.search(r"[a-zA-Z]", location_text):
+                            block_translit_overrides = block.transliteration_overrides or {}
+                            location_text = _transliterate_sync(location_text, itc, block_translit_overrides)
+                        break
+
+            with tempfile.TemporaryDirectory() as tmp_dir:
+                source_path = os.path.join(tmp_dir, "source.mp4")
+                storage_service.download_to_file(template.video_key, source_path)
+
+                # Download font from location block (same font as video rendering)
+                pdf_font_path = None
+                target_font_id = location_font_id or job.font_id or template.default_font_id
+                if target_font_id:
+                    font_row = db.execute(select(Font).where(Font.id == target_font_id)).scalar_one_or_none()
+                    if font_row:
+                        ext = os.path.splitext(font_row.file_key)[1] or ".ttf"
+                        pdf_font_path = os.path.join(tmp_dir, f"pdf_font{ext}")
+                        storage_service.download_to_file(font_row.file_key, pdf_font_path)
+
+                pdf_output = os.path.join(tmp_dir, "invitation.pdf")
+                generate_invitation_pdf(
+                    video_path=source_path,
+                    snapshot_timestamps=snapshot_ts,
+                    location_text=location_text,
+                    category_slug=category_slug,
+                    field_values=field_vals,
+                    output_path=pdf_output,
+                    google_maps_api_key=os.environ.get("GOOGLE_MAPS_API_KEY"),
+                    font_path=pdf_font_path,
+                    location_url=job.location_url,
+                )
+                if os.path.exists(pdf_output):
+                    pdf_key = f"renders/{job.user_id}/{job.id}/invitation.pdf"
+                    storage_service.upload_file(pdf_key, pdf_output, content_type="application/pdf")
+                    job.pdf_key = pdf_key
+                    job.pdf_status = "completed"
+                    db.commit()
+                    print(f"[PDF] Generated for skip-render job {job_id}")
+        except Exception as e:
+            print(f"[PDF] Generation failed for skip-render job {job_id}: {e}")
+            job.pdf_status = "failed"
+            db.commit()
 
 
 def _ffmpeg_preview_fallback(db, template, text_blocks, tag_values):

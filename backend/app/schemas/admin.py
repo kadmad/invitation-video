@@ -58,6 +58,7 @@ class AdminTemplateUpdate(BaseModel):
     default_font_id: uuid.UUID | None = None
     render_notes: str | None = None
     price: int | None = None
+    pdf_snapshot_timestamps: list[float] | None = None
     render_preview: bool = False  # explicit flag — only queue preview render when True
 
 
@@ -83,6 +84,7 @@ class TextBlockCreate(BaseModel):
     end_time: float = 2.0
     tag_config: dict | None = None
     format_ranges: list[dict] | None = None
+    transliteration_overrides: dict | None = None
 
 
 class TextBlockUpdate(BaseModel):
@@ -105,6 +107,7 @@ class TextBlockUpdate(BaseModel):
     end_time: float | None = None
     tag_config: dict | None = None
     format_ranges: list[dict] | None = None
+    transliteration_overrides: dict | None = None
 
 
 class TextBlockResponse(BaseModel):
@@ -129,6 +132,7 @@ class TextBlockResponse(BaseModel):
     end_time: float
     tag_config: dict | None
     format_ranges: list[dict] | None
+    transliteration_overrides: dict | None
 
     model_config = {"from_attributes": True}
 
@@ -265,6 +269,7 @@ class AnalyticsSummary(BaseModel):
 class AdminTemplateDetailResponse(AdminTemplateListResponse):
     remotion_comp: str | None
     tag_labels: dict | None
+    pdf_snapshot_timestamps: list[float] | None
     text_blocks: list[TextBlockResponse]
     image_blocks: list[ImageBlockResponse]
 

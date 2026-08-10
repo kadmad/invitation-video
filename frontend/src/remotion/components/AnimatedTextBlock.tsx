@@ -1,5 +1,17 @@
+import React, { useMemo } from "react";
 import { useCurrentFrame, useVideoConfig, interpolate, Easing } from "remotion";
 import type { TextBlock, FormatRange } from "@/types";
+
+const segmenter =
+  typeof Intl !== "undefined" && (Intl as any).Segmenter
+    ? new (Intl as any).Segmenter("en", { granularity: "grapheme" })
+    : null;
+
+const textAlignMap: Record<string, string> = {
+  center: "center",
+  left: "left",
+  right: "right",
+};
 
 interface AnimatedTextBlockProps {
   block: TextBlock;
@@ -731,8 +743,7 @@ function renderRichText(
 
 /** Split text into grapheme clusters (keeps Gujarati conjuncts + matras intact) */
 function splitGraphemes(text: string): string[] {
-  if (typeof Intl !== "undefined" && (Intl as any).Segmenter) {
-    const segmenter = new (Intl as any).Segmenter(undefined, { granularity: "grapheme" });
+  if (segmenter) {
     return Array.from(segmenter.segment(text), (s: any) => s.segment);
   }
   // Fallback: spread handles surrogate pairs but not combining marks
@@ -920,7 +931,10 @@ function renderPerChar(
   });
 }
 
-export default function AnimatedTextBlock({
+const perCharTypes = ["type_blur_reveal", "pop_reveal", "wave_in"];
+const perCharOutTypes = ["type_blur_out", "pop_out", "wave_out"];
+const indicScriptRegex = /[\u0A80-\u0AFF\u0900-\u097F]/;
+function AnimatedTextBlock({
   block,
   tagValues,
   fontFamilies,
@@ -937,40 +951,77 @@ export default function AnimatedTextBlock({
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
 
-  const text = blockOverride !== undefined
-    ? blockOverride
-    : block.content.replace(/\{(\w+)\}/g, (_, tag) => tagValues[tag] ?? "");
+  // === All hooks must be called before any early returns (Rules of Hooks) ===
+  const text = useMemo(
+    () =>
+      blockOverride !== undefined
+        ? blockOverride
+        : block.content.replace(/\{(\w+)\}/g, (_, tag) => tagValues[tag] ?? ""),
+    [blockOverride, block.content, tagValues],
+  );
 
-  // Check if any tag in this block is showing placeholder
-  const isPlaceholder = placeholderTags
-    ? /\{(\w+)\}/g.test(block.content) && Array.from(block.content.matchAll(/\{(\w+)\}/g)).some((m) => placeholderTags.has(m[1]))
-    : false;
+  const isPlaceholder = useMemo(
+    () =>
+      placeholderTags
+        ? Array.from(block.content.matchAll(/\{(\w+)\}/g)).some((m) => placeholderTags.has(m[1]))
+        : false,
+    [placeholderTags, block.content],
+  );
+
+  const fontSize = useMemo(() => block.font_size_ratio * videoHeight, [block.font_size_ratio, videoHeight]);
+  const x = useMemo(() => block.position_x * videoWidth, [block.position_x, videoWidth]);
+  const y = useMemo(() => block.position_y * videoHeight, [block.position_y, videoHeight]);
+  const maxWidth = useMemo(() => block.max_width * videoWidth, [block.max_width, videoWidth]);
+
+  const startFrame = useMemo(() => Math.round(block.start_time * fps), [block.start_time, fps]);
+  const endFrame = useMemo(() => Math.round(block.end_time * fps), [block.end_time, fps]);
+
+  const fontFamily = useMemo(
+    () => overrideFontFamily || (block.font_id ? (fontFamilies[block.font_id] ?? "sans-serif") : (defaultFontFamily ?? "sans-serif")),
+    [overrideFontFamily, block.font_id, fontFamilies, defaultFontFamily],
+  );
+
+  const inEndFrame = useMemo(() => {
+    const inDuration = block.anim_in_duration ?? 1.0;
+    return Math.min(startFrame + Math.round(inDuration * fps), endFrame);
+  }, [block.anim_in_duration, startFrame, fps, endFrame]);
+
+  const outStartFrame = useMemo(() => {
+    const outDuration = block.anim_out_duration ?? 1.0;
+    return Math.max(endFrame - Math.round(outDuration * fps), startFrame);
+  }, [block.anim_out_duration, endFrame, fps, startFrame]);
+
+  const alignedLeft = useMemo(
+    () =>
+      block.text_align === "center"
+        ? x - maxWidth / 2
+        : block.text_align === "right"
+          ? x - maxWidth
+          : x,
+    [block.text_align, x, maxWidth],
+  );
+
+  const transformOrigin = useMemo(
+    () =>
+      block.text_align === "center" ? "center center"
+      : block.text_align === "right" ? "right center"
+      : "left center",
+    [block.text_align],
+  );
+
+  const needsExtraPadding = useMemo(
+    () => indicScriptRegex.test(text) || (fontFamily && fontFamily !== "sans-serif"),
+    [text, fontFamily],
+  );
+
+  // === Early returns (after all hooks) ===
   if (!text) return null;
-
-  const fontSize = block.font_size_ratio * videoHeight;
-  const x = block.position_x * videoWidth;
-  const y = block.position_y * videoHeight;
-  const maxWidth = block.max_width * videoWidth;
-
-  const startFrame = Math.round(block.start_time * fps);
-  const endFrame = Math.round(block.end_time * fps);
-
   if (frame < startFrame || frame > endFrame) return null;
 
-  const fontFamily = overrideFontFamily || (block.font_id ? (fontFamilies[block.font_id] ?? "sans-serif") : (defaultFontFamily ?? "sans-serif"));
-
-  // Compute entry/exit frame ranges from durations
-  const inDuration = block.anim_in_duration ?? 1.0;
-  const outDuration = block.anim_out_duration ?? 1.0;
+  // === Non-hook computations (safe after early returns) ===
   const animationType = block.animation_type || "none";
   const animationOut = block.animation_out || "none";
 
-  const inEndFrame = Math.min(startFrame + Math.round(inDuration * fps), endFrame);
-  const outStartFrame = Math.max(endFrame - Math.round(outDuration * fps), startFrame);
-
-  // Per-character entry/exit animations
-  const perCharTypes = ["type_blur_reveal", "pop_reveal", "wave_in"];
-  const perCharOutTypes = ["type_blur_out", "pop_out", "wave_out"];
   const isPerChar = perCharTypes.includes(animationType);
   const isPerCharOut = perCharOutTypes.includes(animationOut);
 
@@ -995,24 +1046,6 @@ export default function AnimatedTextBlock({
     applyExitAnim(s, animationOut, frame, outStartFrame, endFrame, fontSize, maxWidth);
   }
 
-  const textAlignMap: Record<string, string> = {
-    center: "center",
-    left: "left",
-    right: "right",
-  };
-
-  const alignedLeft =
-    block.text_align === "center"
-      ? x - maxWidth / 2
-      : block.text_align === "right"
-        ? x - maxWidth
-        : x;
-
-  const transformOrigin =
-    block.text_align === "center" ? "center center"
-    : block.text_align === "right" ? "right center"
-    : "left center";
-
   // For per-char entry/exit: wrapper handles non-per-char anim, chars handle per-char anim
   const hasNonPerCharExit = animationOut !== "none" && !isPerCharOut && frame >= outStartFrame;
   const wrapperOpacity = (isPerChar || isPerCharOut) ? (hasNonPerCharExit ? s.opacity : 1) : s.opacity;
@@ -1022,9 +1055,9 @@ export default function AnimatedTextBlock({
       : undefined)
     : `translate(${s.translateX}px, ${s.translateY}px) scale(${s.scale}) rotate(${s.rotate}deg)`;
 
-  // Gujarati/Hindi scripts need extra line-height + padding for tall matras
-  const needsExtraPadding = /[\u0A80-\u0AFF\u0900-\u097F]/.test(text) || (fontFamily && fontFamily !== "sans-serif");
   const extraPad = needsExtraPadding ? fontSize * 0.25 : 0;
+
+  const textColor = textColorOverrides?.[block.id] || textColorOverrides?._default || block.text_color || defaultTextColor || "#FFFFFF";
 
   return (
     <div
@@ -1035,7 +1068,7 @@ export default function AnimatedTextBlock({
         width: maxWidth,
         fontSize,
         fontFamily,
-        color: textColorOverrides?.[block.id] || textColorOverrides?._default || block.text_color || defaultTextColor || "#FFFFFF",
+        color: textColor,
         textAlign: textAlignMap[block.text_align] as any,
         opacity: isPlaceholder ? wrapperOpacity * 0.35 : wrapperOpacity,
         transform: wrapperTransform,
@@ -1070,3 +1103,5 @@ export default function AnimatedTextBlock({
     </div>
   );
 }
+
+export default React.memo(AnimatedTextBlock);
