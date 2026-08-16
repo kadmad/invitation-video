@@ -1,33 +1,19 @@
 import { useEffect, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link } from "react-router-dom";
 import { listOrders } from "@/api/payments";
 import { getDownloadUrl } from "@/api/renders";
-import { useEditorStore } from "@/store/editorStore";
 import type { Order } from "@/types";
 import PageTransition from "@/components/common/PageTransition";
 
 export default function MyOrdersPage() {
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
-  const navigate = useNavigate();
-  const { setPrefill } = useEditorStore();
 
   useEffect(() => {
     listOrders()
       .then(setOrders)
       .finally(() => setLoading(false));
   }, []);
-
-  const handleReEdit = (order: Order, e: React.MouseEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setPrefill({
-      fieldValues: order.field_values,
-      fontId: null,
-      textColorOverrides: null,
-    });
-    navigate(`/templates`);
-  };
 
   const handleDownload = async (renderId: string, e: React.MouseEvent) => {
     e.preventDefault();
@@ -164,6 +150,14 @@ export default function MyOrdersPage() {
 
               {/* Actions */}
               <div className="flex flex-wrap gap-2">
+                {order.render && (
+                  <Link
+                    to={`/render/${order.render.id}`}
+                    className="btn-secondary text-sm px-3 py-1.5"
+                  >
+                    {order.render.status === "completed" ? "View Status" : "View / Edit Order"}
+                  </Link>
+                )}
                 <Link
                   to={`/invoice/${order.id}`}
                   className="btn-secondary text-sm px-3 py-1.5"
@@ -178,12 +172,6 @@ export default function MyOrdersPage() {
                     Download
                   </button>
                 )}
-                <button
-                  onClick={(e) => handleReEdit(order, e)}
-                  className="btn-secondary text-sm px-3 py-1.5"
-                >
-                  Re-edit
-                </button>
               </div>
             </div>
           ))}

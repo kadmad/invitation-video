@@ -3,6 +3,7 @@ import { useParams, useNavigate, useSearchParams } from "react-router-dom";
 import { getTemplate } from "@/api/templates";
 import { listFonts, getFontFileUrl } from "@/api/fonts";
 import { createOrder, verifyPayment, adminRender } from "@/api/payments";
+import { getRender, updateRender } from "@/api/renders";
 import { transliterateBatch, transliterateBatchCandidates } from "@/api/transliterate";
 import type { WordCandidates } from "@/api/transliterate";
 import TranslitWord from "@/components/common/TranslitWord";
@@ -10,7 +11,7 @@ import { getDraft, saveDraft, getGuestDraft, saveGuestDraft } from "@/api/drafts
 import { uploadUserImage } from "@/api/templates";
 import { useEditorStore, extractTags } from "@/store/editorStore";
 import { useAuthStore } from "@/store/authStore";
-import type { Font, TextBlock, ImageBlock } from "@/types";
+import type { Font, TextBlock, ImageBlock, RenderJob } from "@/types";
 import PreviewPlayer from "@/components/editor/PreviewPlayer";
 import FontPicker from "@/components/editor/FontPicker";
 import PageTransition from "@/components/common/PageTransition";
@@ -47,6 +48,7 @@ export default function EditorPage() {
   const { slug } = useParams<{ slug: string }>();
   const [searchParams] = useSearchParams();
   const isPreviewOnly = searchParams.get("preview") === "1";
+  const editRenderId = searchParams.get("editRender");
   const navigate = useNavigate();
   const {
     template,
@@ -93,6 +95,8 @@ export default function EditorPage() {
   const [linkCopied, setLinkCopied] = useState(false);
   const [actuallyRender, setActuallyRender] = useState(false);
   const [locationUrl, setLocationUrl] = useState("");
+  const [editingRender, setEditingRender] = useState<RenderJob | null>(null);
+  const [editRenderError, setEditRenderError] = useState("");
   const debounceTimer = useRef<ReturnType<typeof setTimeout>>();
   const blockOverrideDebounceTimer = useRef<ReturnType<typeof setTimeout>>();
   const saveDraftTimer = useRef<ReturnType<typeof setTimeout>>();
@@ -167,6 +171,33 @@ export default function EditorPage() {
     if (draftApplied.current || !template || fonts.length === 0) return;
     draftApplied.current = true;
 
+    // Editing an existing paid (manual-render) order takes priority over
+    // everything else — load its saved values instead of any draft.
+    if (editRenderId) {
+      getRender(editRenderId).then((render) => {
+        // Server-rendered orders were never editable here — that's the one
+        // real block. Manual orders always load below regardless of
+        // status/can_edit: the user can look and try to save, and if it's
+        // already been picked up for rendering, the save itself fails with
+        // the backend's "already picked" message (handleSaveRenderEdit).
+        if (render.render_method !== "manual") {
+          setEditRenderError("This order can't be edited here.");
+          return;
+        }
+        applyDraftData(
+          render.field_values,
+          render.font_id,
+          render.text_color_override,
+          render.block_overrides ? "advanced" : undefined,
+          render.block_overrides ?? undefined,
+          render.block_format_overrides ?? undefined
+        );
+        setLocationUrl(render.location_url ?? "");
+        setEditingRender(render);
+      }).catch(() => setEditRenderError("Couldn't load that order — it may not exist or isn't yours."));
+      return;
+    }
+
     // Prefill from re-edit takes priority
     const prefill = consumePrefill();
     if (prefill) {
@@ -194,7 +225,7 @@ export default function EditorPage() {
         applyDraftData(draft.field_values, draft.font_id, draft.text_color_override, draft.editor_mode, draft.block_overrides, draft.block_format_overrides);
       }
     }
-  }, [template, fonts]);
+  }, [template, fonts, editRenderId]);
 
   const applyDraftData = (
     values: Record<string, string>,
@@ -566,6 +597,43 @@ export default function EditorPage() {
       return;
     }
     setShowConfirmPopup(true);
+  };
+
+  // Editing an already-paid manual-render order: no payment, just PATCH the
+  // existing job with whatever's currently in the editor and go back.
+  const handleSaveRenderEdit = async () => {
+    if (!editingRender) return;
+    setSubmitting(true);
+    try {
+      const colorOverride = Object.keys(textColorOverrides).length > 0 ? textColorOverrides : null;
+      const advancedBlockOverrides = editorMode === "advanced"
+        ? (Object.keys(transliteratedBlockOverrides).length > 0
+          ? { ...blockOverrides, ...transliteratedBlockOverrides }
+          : blockOverrides)
+        : null;
+      const advancedBlockFormatOverrides = editorMode === "advanced" && Object.keys(blockFormatOverrides).length > 0
+        ? blockFormatOverrides
+        : null;
+
+      const currentTagValues: Record<string, string> = {};
+      for (const tag of tags) {
+        if (effectiveValues[tag] !== undefined) currentTagValues[tag] = effectiveValues[tag];
+      }
+
+      await updateRender(editingRender.id, {
+        font_id: font?.id ?? null,
+        field_values: currentTagValues,
+        text_color_override: colorOverride,
+        block_overrides: advancedBlockOverrides,
+        block_format_overrides: advancedBlockFormatOverrides,
+        location_url: locationUrl || null,
+      });
+      navigate(`/render/${editingRender.id}`);
+    } catch (err: any) {
+      alert(err.response?.data?.detail || "Failed to save changes");
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   const handleSharePreview = async () => {
@@ -1000,20 +1068,37 @@ export default function EditorPage() {
           </div>
         )}
 
-        <button
-          onClick={handleRenderClick}
-          disabled={submitting}
-          className="btn-primary w-full py-3.5 text-base disabled:opacity-50 flex items-center justify-center gap-2"
-        >
-          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-          </svg>
-          {submitting ? "Processing..." : "Render Video"}
-        </button>
+        {editingRender ? (
+          <button
+            onClick={handleSaveRenderEdit}
+            disabled={submitting}
+            className="btn-primary w-full py-3.5 text-base disabled:opacity-50 flex items-center justify-center gap-2"
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4.5 12.75l6 6 9-13.5" />
+            </svg>
+            {submitting ? "Saving..." : "Save Changes"}
+          </button>
+        ) : (
+          <button
+            onClick={handleRenderClick}
+            disabled={submitting}
+            className="btn-primary w-full py-3.5 text-base disabled:opacity-50 flex items-center justify-center gap-2"
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            {submitting ? "Processing..." : "Render Video"}
+          </button>
+        )}
+
+        {editRenderError && (
+          <p className="text-red-500 text-sm text-center mt-2">{editRenderError}</p>
+        )}
 
         {/* Confirm & Share popup */}
-        {showConfirmPopup && (
+        {!editingRender && showConfirmPopup && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
             <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setShowConfirmPopup(false)} />
             <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6">

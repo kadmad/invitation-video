@@ -10,11 +10,26 @@ from app.dependencies import get_current_user, get_db
 from app.models.render_job import RenderJob
 from app.models.template import Template
 from app.models.user import User
-from app.schemas.render import RenderCreate, RenderResponse
+from app.schemas.render import RenderCreate, RenderResponse, RenderUpdate
 from app.services.storage_service import storage_service
 from app.workers.tasks import render_video_task
 
 router = APIRouter()
+
+
+async def _typical_manual_turnaround_hours(db: AsyncSession) -> float | None:
+    result = await db.execute(
+        select(RenderJob.created_at, RenderJob.updated_at)
+        .where(RenderJob.render_method == "manual", RenderJob.status == "completed")
+        .order_by(RenderJob.updated_at.desc())
+        .limit(50)
+    )
+    durations = sorted((updated - created).total_seconds() / 3600 for created, updated in result.all())
+    if not durations:
+        return None
+    mid = len(durations) // 2
+    value = durations[mid] if len(durations) % 2 else (durations[mid - 1] + durations[mid]) / 2
+    return round(value, 1)
 
 
 @router.post("/", response_model=RenderResponse, status_code=status.HTTP_201_CREATED)
@@ -82,6 +97,46 @@ async def get_render(
     response = RenderResponse.model_validate(job)
     if job.template:
         response.render_notes = job.template.render_notes
+    if job.render_method == "manual":
+        response.can_edit = job.status == "pending"
+        response.typical_turnaround_hours = await _typical_manual_turnaround_hours(db)
+    return response
+
+
+@router.patch("/{render_id}", response_model=RenderResponse)
+async def update_render(
+    render_id: uuid.UUID,
+    body: RenderUpdate,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """Let the customer amend their own details on a manual-render order —
+    only while it's still sitting "pending" (no admin has claimed it yet).
+    Once an admin clicks "Run Render" the job moves to "processing" and this
+    is locked, so nobody edits values out from under an in-progress render."""
+    result = await db.execute(
+        select(RenderJob)
+        .where(RenderJob.id == render_id, RenderJob.user_id == user.id)
+        .options(selectinload(RenderJob.template))
+    )
+    job = result.scalar_one_or_none()
+    if not job:
+        raise HTTPException(status_code=404, detail="Render job not found")
+    if job.render_method != "manual":
+        raise HTTPException(status_code=400, detail="This order can't be edited")
+    if job.status != "pending":
+        raise HTTPException(status_code=400, detail="This order is already being rendered and can no longer be edited")
+
+    for key, value in body.model_dump(exclude_unset=True).items():
+        setattr(job, key, value)
+    await db.commit()
+    await db.refresh(job)
+
+    response = RenderResponse.model_validate(job)
+    if job.template:
+        response.render_notes = job.template.render_notes
+    response.can_edit = job.status == "pending"
+    response.typical_turnaround_hours = await _typical_manual_turnaround_hours(db)
     return response
 
 

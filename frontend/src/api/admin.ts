@@ -1,6 +1,6 @@
 import client, { API_URL, IS_PROXIED_API } from "@/api/client";
 import type { Category, Template, Font, TextBlock, ImageBlock } from "@/types";
-import type { AdminStats, AEImportPreviewResponse } from "@/types";
+import type { AdminStats, AEImportPreviewResponse, AwaitingRendersList, AwaitingRender } from "@/types";
 
 // ── Stats ──────────────────────────────────────────────────────────────────────
 export const getAdminStats = () =>
@@ -174,3 +174,21 @@ export const uploadFont = (
 
 export const deleteFont = (id: string) =>
   client.delete(`/admin/fonts/${id}`).then((r) => r.data);
+
+// ── Manual render queue (SERVER_RENDERING=false) ────────────────────────────────
+export const listAwaitingRenders = () =>
+  client.get<AwaitingRendersList>("/admin/renders/awaiting").then((r) => r.data);
+
+export const claimRender = (renderId: string) =>
+  client.post<AwaitingRender>(`/admin/renders/${renderId}/claim`).then((r) => r.data);
+
+export const completeRender = (renderId: string, video: File, pdf?: File | null) => {
+  const form = new FormData();
+  form.append("video", video);
+  if (pdf) form.append("pdf", pdf);
+  return client
+    .post(`/admin/renders/${renderId}/complete`, form, {
+      headers: { "Content-Type": "multipart/form-data" },
+    })
+    .then((r) => r.data);
+};

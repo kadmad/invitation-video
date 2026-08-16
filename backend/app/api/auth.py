@@ -76,6 +76,8 @@ async def send_otp(body: SendOTPRequest):
         await generate_otp(phone)
     except ValueError as e:
         raise HTTPException(status_code=429, detail=str(e))
+    except RuntimeError as e:
+        raise HTTPException(status_code=502, detail=str(e))
 
     return SendOTPResponse(
         message="OTP sent successfully",

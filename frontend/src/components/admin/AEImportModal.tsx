@@ -5,6 +5,7 @@ import type { AEImportPreviewLayer, AEImportPreviewResponse, TextBlock } from "@
 interface Props {
   templateId: string;
   sortOrderStart: number;
+  fallbackFontId: string | null;
   onClose: () => void;
   onImported: (blocks: TextBlock[]) => void;
 }
@@ -12,11 +13,13 @@ interface Props {
 /**
  * Import from After Effects: upload the JSON manifest produced by
  * scripts/ae-export/export_text_layers.jsx, review the proposed blocks
- * (font/position/timing only — no animation), then create the accepted
- * ones as real text_blocks. Font is matched by name against our library;
- * unmatched fonts stay unset and can be picked manually after import.
+ * (font/color/position/timing only — no animation), then create the
+ * accepted ones as real text_blocks. Font is matched by name against our
+ * library; unmatched fonts stay unset and can be picked manually after
+ * import. Color falls back to white when the AE layer's fill wasn't
+ * readable (e.g. per-character mixed colors, gradients, no fill).
  */
-export default function AEImportModal({ templateId, sortOrderStart, onClose, onImported }: Props) {
+export default function AEImportModal({ templateId, sortOrderStart, fallbackFontId, onClose, onImported }: Props) {
   const [preview, setPreview] = useState<AEImportPreviewResponse | null>(null);
   const [checked, setChecked] = useState<boolean[]>([]);
   const [loading, setLoading] = useState(false);
@@ -61,14 +64,14 @@ export default function AEImportModal({ templateId, sortOrderStart, onClose, onI
       let sortOrder = sortOrderStart;
       for (const row of rows) {
         const block = await createTextBlock(templateId, {
-          content: row.name,
+          content: row.text ?? row.name,
           sort_order: sortOrder++,
           position_x: row.position_x,
           position_y: row.position_y,
           max_width: 0.8,
-          font_id: row.matched_font_id,
+          font_id: row.matched_font_id || fallbackFontId,
           font_size_ratio: row.font_size_ratio,
-          text_color: "#FFFFFF",
+          text_color: row.color || "#FFFFFF",
           text_align: "center",
           animation_type: "none",
           animation_out: "none",
@@ -100,7 +103,7 @@ export default function AEImportModal({ templateId, sortOrderStart, onClose, onI
           <div>
             <h2 className="text-base font-semibold text-slate-800">Import from After Effects</h2>
             <p className="text-xs text-slate-400 mt-0.5">
-              Font, position, and start/stop time only — animation stays manual.
+              Font, color, position, and start/stop time only — animation stays manual.
             </p>
           </div>
           <button onClick={onClose} className="text-slate-400 hover:text-slate-600 transition-colors">
@@ -156,13 +159,14 @@ export default function AEImportModal({ templateId, sortOrderStart, onClose, onI
                 </button>
               </div>
 
-              <div className="border border-slate-100 rounded-xl overflow-hidden">
-                <table className="w-full text-sm">
+              <div className="border border-slate-100 rounded-xl overflow-x-auto">
+                <table className="w-full text-sm min-w-[560px]">
                   <thead className="bg-slate-50 text-slate-500 text-xs">
                     <tr>
                       <th className="px-3 py-2 text-left w-8"></th>
                       <th className="px-3 py-2 text-left">Layer</th>
                       <th className="px-3 py-2 text-left">Font</th>
+                      <th className="px-3 py-2 text-left">Color</th>
                       <th className="px-3 py-2 text-left">Position</th>
                       <th className="px-3 py-2 text-left">Time</th>
                     </tr>
@@ -178,14 +182,32 @@ export default function AEImportModal({ templateId, sortOrderStart, onClose, onI
                             className="accent-primary-500"
                           />
                         </td>
-                        <td className="px-3 py-2 text-slate-700">{row.name}</td>
+                        <td className="px-3 py-2 text-slate-700">
+                          <span className="whitespace-pre-line">{row.text ?? row.name}</span>
+                          {row.text && row.text !== row.name && (
+                            <span className="block text-[10px] text-slate-400 mt-0.5">layer: {row.name}</span>
+                          )}
+                        </td>
                         <td className="px-3 py-2">
                           {row.matched_font_id ? (
                             <span className="text-slate-600">{row.matched_font_name}</span>
                           ) : (
                             <span className="text-amber-600 text-xs" title={`Requested: ${row.requested_font}`}>
-                              Not found — pick manually
+                              Not found — using default font
                             </span>
+                          )}
+                        </td>
+                        <td className="px-3 py-2">
+                          {row.color ? (
+                            <span className="inline-flex items-center gap-1.5 text-slate-600 text-xs">
+                              <span
+                                className="w-3.5 h-3.5 rounded border border-slate-200 inline-block"
+                                style={{ backgroundColor: row.color }}
+                              />
+                              {row.color}
+                            </span>
+                          ) : (
+                            <span className="text-slate-300 text-xs">— (defaults white)</span>
                           )}
                         </td>
                         <td className="px-3 py-2 text-slate-500 text-xs">
@@ -202,8 +224,9 @@ export default function AEImportModal({ templateId, sortOrderStart, onClose, onI
 
               <p className="text-[11px] text-slate-400 mt-3">
                 Position is AE's layer anchor point, not guaranteed pixel-exact against this template's
-                alignment — nudge into place after import if needed. Unmatched fonts import with no font
-                set; pick one afterward in the block's Styling section.
+                alignment — nudge into place after import if needed. Unmatched fonts import using this
+                template's default font; pick a different one afterward in the block's Styling section
+                if needed.
               </p>
 
               {error && <p className="text-red-500 text-sm mt-3">{error}</p>}

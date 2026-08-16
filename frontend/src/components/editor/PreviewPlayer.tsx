@@ -109,7 +109,6 @@ export default function PreviewPlayer() {
   const [blockTranslitCache, setBlockTranslitCache] = useState<Record<string, string>>({});
   const [translitDone, setTranslitDone] = useState(false);
   const blockTranslitTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const wasPlayingRef = useRef(false);
 
   // The Remotion Player's own fullscreen button promotes ITS internal
   // container to the browser's fullscreen top-layer — our watermark div,
@@ -371,23 +370,17 @@ export default function PreviewPlayer() {
   const blockContentReady = !needsTransliteration || translitDone;
   const previewReady = tagValuesReady && blockContentReady;
 
-  // Pause player while translating, resume when done
+  // Pause while translating — do NOT auto-resume once done. Playback only
+  // ever starts from an explicit user press of play, never automatically.
   useEffect(() => {
-    const player = playerRef.current;
-    if (!player) return;
     if (!previewReady) {
-      if (player.isPlaying()) {
-        wasPlayingRef.current = true;
-        player.pause();
-      }
-    } else if (wasPlayingRef.current) {
-      wasPlayingRef.current = false;
-      player.play();
+      playerRef.current?.pause();
     }
   }, [previewReady]);
 
-  // Seek to a block's start frame when the user focuses its input, then keep
-  // playing from there so they see their edit in motion, not a frozen frame.
+  // Seek to a block's start frame when the user focuses its input, so they
+  // can see the relevant frame — but don't auto-play it. Playback only
+  // starts when the user explicitly presses play.
   useEffect(() => {
     if (seekToTime === null || !template) return;
     if (!playerRef.current) {
@@ -397,11 +390,21 @@ export default function PreviewPlayer() {
     const fps = template.fps || 30;
     const frame = Math.round(seekToTime.time * fps);
     playerRef.current.seekTo(frame);
-    if (!playerRef.current.isPlaying()) {
-      playerRef.current.play();
-    }
+    playerRef.current.pause();
     setTimeout(() => useEditorStore.getState().clearSeek(), 0);
   }, [seekToTime, template]);
+
+  // Pause on any typed edit — express-mode field values or advanced-mode
+  // block text — so the preview never keeps animating while the user is
+  // mid-edit. Playback stays off until they explicitly press play again.
+  const isFirstInputRender = useRef(true);
+  useEffect(() => {
+    if (isFirstInputRender.current) {
+      isFirstInputRender.current = false;
+      return;
+    }
+    playerRef.current?.pause();
+  }, [fieldValues, blockOverrides]);
 
   if (!template) return null;
 
@@ -440,7 +443,6 @@ export default function PreviewPlayer() {
           }}
           controls
           loop
-          autoPlay
           numberOfSharedAudioTags={5}
         />
         {fullscreenTarget ? createPortal(watermarkOverlay, fullscreenTarget) : watermarkOverlay}
@@ -448,6 +450,22 @@ export default function PreviewPlayer() {
     </div>
   );
 }
+
+// Tiled, diagonal, low-opacity logo watermark — deliberately dense enough
+// that cropping any one region out of a screen recording still leaves
+// several marks in frame, instead of a single corner/center mark that's
+// trivial to crop away.
+// Tile size in real pixels — a percentage-of-grid-cell approach turned out
+// unpredictable to scale (CSS grid resolves item percentages against the
+// track, not visibly-linearly with the number typed), so this sizes each
+// tile in fixed px. A plain repeating background-image ties tile size to
+// repeat spacing 1:1 (can't have the logo stay full size while packing
+// tighter horizontally), so this uses a real CSS grid instead — gives
+// independent control over horizontal vs. vertical gap.
+const WATERMARK_TILE_PX = 256; // width of one logo tile
+const WATERMARK_COLUMN_GAP_PX = 13; // horizontal distance between tiles
+const WATERMARK_ROW_GAP_PX = 38; // vertical distance between tiles
+const WATERMARK_ITEM_COUNT = 60; // generous — extra ones just get clipped
 
 const watermarkOverlay = (
   <div
@@ -457,30 +475,49 @@ const watermarkOverlay = (
       pointerEvents: "none",
       overflow: "hidden",
       borderRadius: 12,
-      display: "flex",
-      alignItems: "center",
-      justifyContent: "center",
       zIndex: 2147483647,
+      // Inverts against whatever's underneath instead of a fixed white,
+      // so it stays visible on light AND dark video backgrounds alike —
+      // a flat white fill alone washes out on light/cream templates.
+      // Opacity belongs HERE, on the same element as mix-blend-mode, not
+      // on the tiles below — putting it there dilutes the diff math back
+      // toward plain semi-transparent white before blending, which washes
+      // out again on light backgrounds. Here it fades the already-blended
+      // (high-contrast) result as a single flat layer.
+      mixBlendMode: "difference",
+      opacity: 0.3,
     }}
   >
     <div
       style={{
+        position: "absolute",
+        // Oversized + centered so the rotated tile pattern still covers
+        // every corner of the frame, not just the middle.
+        inset: "-50%",
         transform: "rotate(-30deg)",
-        whiteSpace: "nowrap",
-        fontSize: 28,
-        fontWeight: 700,
-        color: "rgba(255, 255, 255, 0.4)",
-        letterSpacing: "0.2em",
-        lineHeight: "3.5em",
-        textAlign: "center",
-        userSelect: "none",
-        width: "200%",
+        display: "grid",
+        gridTemplateColumns: `repeat(auto-fill, ${WATERMARK_TILE_PX}px)`,
+        columnGap: WATERMARK_COLUMN_GAP_PX,
+        rowGap: WATERMARK_ROW_GAP_PX,
+        justifyContent: "center",
+        alignContent: "center",
       }}
     >
-      {Array.from({ length: 8 }, (_, i) => (
-        <div key={i}>
-          PREVIEW &nbsp; PREVIEW &nbsp; PREVIEW &nbsp; PREVIEW
-        </div>
+      {Array.from({ length: WATERMARK_ITEM_COUNT }, (_, i) => (
+        <img
+          key={i}
+          src="/logo.png"
+          alt=""
+          draggable={false}
+          style={{
+            width: WATERMARK_TILE_PX,
+            height: "auto",
+            // Flat white silhouette so the blend-mode diff math above gets
+            // clean, fully-opaque input.
+            filter: "brightness(0) invert(1)",
+            userSelect: "none",
+          }}
+        />
       ))}
     </div>
   </div>

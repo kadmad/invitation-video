@@ -11,9 +11,9 @@ export default function Navbar() {
     <>
     <nav className="bg-white/80 backdrop-blur-md border-b border-slate-100 sticky top-0 z-40">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex justify-between h-16 items-center">
-          <Link to="/" className="text-xl font-bold bg-gradient-to-r from-primary-500 to-accent-500 bg-clip-text text-transparent">
-            Bring My Matter
+        <div className="flex justify-between py-3 items-center">
+          <Link to="/" className="flex items-center">
+            <img src="/logo.png" alt="Bring My Matter" className="h-28 w-auto" />
           </Link>
 
           {/* Desktop nav */}

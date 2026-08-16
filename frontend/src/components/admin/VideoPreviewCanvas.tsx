@@ -49,7 +49,13 @@ export default function VideoPreviewCanvas({ playerRef }: VideoPreviewCanvasProp
   // Load fonts
   useEffect(() => { listFonts().then(setFontList); }, []);
 
-  // Auto-refresh video token every 4 min (token TTL is 5 min)
+  // Auto-refresh video token every 4 min. getTemplateVideoUrl hits the
+  // public /templates/{id}/video-token endpoint (same one the customer
+  // editor uses), which deliberately issues a short-lived (5 min) signed
+  // URL — NOT the separate admin/video-url endpoint (1 hr TTL) which this
+  // canvas doesn't actually call. Letting the token sit expired causes
+  // OffthreadVideo's per-frame fetches to fail and retry in a tight loop,
+  // which looks like the video flickering black.
   useEffect(() => {
     if (!templateId || !template?.video_key) return;
     const refresh = () => {

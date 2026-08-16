@@ -27,6 +27,22 @@ export async function getRender(renderId: string) {
   return data;
 }
 
+export interface RenderUpdatePayload {
+  font_id?: string | null;
+  field_values?: Record<string, string>;
+  text_color_override?: Record<string, string> | null;
+  block_overrides?: Record<string, string> | null;
+  block_format_overrides?: Record<string, unknown> | null;
+  location_url?: string | null;
+}
+
+/** Amend a manual-render order's details — only works while it's still
+ * editable (render.can_edit), i.e. no admin has claimed it yet. */
+export async function updateRender(renderId: string, payload: RenderUpdatePayload) {
+  const { data } = await client.patch<RenderJob>(`/renders/${renderId}`, payload);
+  return data;
+}
+
 export function getDownloadUrl(renderId: string) {
   return `${client.defaults.baseURL}/renders/${renderId}/download`;
 }

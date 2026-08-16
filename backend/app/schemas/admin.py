@@ -149,8 +149,10 @@ class TextBlockResponse(BaseModel):
 
 class AEImportLayer(BaseModel):
     name: str
+    text: str | None = None
     font: str
     font_size: float
+    color: str | None = None
     x: float
     y: float
     in_point: float = Field(alias="in")
@@ -169,9 +171,11 @@ class AEImportRequest(BaseModel):
 
 class AEImportPreviewLayer(BaseModel):
     name: str
+    text: str | None
     requested_font: str
     matched_font_id: uuid.UUID | None
     matched_font_name: str | None
+    color: str | None
     position_x: float
     position_y: float
     font_size_ratio: float
@@ -184,6 +188,34 @@ class AEImportPreviewResponse(BaseModel):
     comp_width: float
     comp_height: float
     layers: list[AEImportPreviewLayer]
+
+
+# --- Manual render queue (SERVER_RENDERING=false) ---
+
+class AwaitingRenderResponse(BaseModel):
+    id: uuid.UUID
+    order_number: str
+    status: str
+    progress: int
+    created_at: datetime
+    user_name: str
+    user_phone: str | None
+    template_id: uuid.UUID
+    template_name: str
+    template_video_key: str | None
+    font_id: uuid.UUID | None
+    field_values: dict
+    text_color_override: dict | None
+    block_overrides: dict | None
+    block_format_overrides: dict | None
+    location_url: str | None
+    has_pdf: bool
+
+
+class AwaitingRendersListResponse(BaseModel):
+    renders: list[AwaitingRenderResponse]
+    typical_turnaround_hours: float | None  # median of past completed manual jobs
+    auto_render_enabled: bool  # settings.DEBUG — claiming dispatches a real render locally
 
 
 # --- Image Blocks ---

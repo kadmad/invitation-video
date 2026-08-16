@@ -30,15 +30,21 @@ class Settings(BaseSettings):
 
     # OTP
     OTP_EXPIRE_SECONDS: int = 300
-    OTP_MOCK: bool = True
+    OTP_MOCK: bool = True  # True: always "123456", no SMS sent. False: real random code sent via Twilio SMS.
     OTP_RATE_LIMIT_MAX: int = 3
     OTP_RATE_LIMIT_WINDOW: int = 600
+    # Comma-separated phone numbers (E.164, e.g. "+919999999999,+918888888888")
+    # that may ALSO log in with "123456" even when OTP_MOCK is False and a
+    # real code was sent — a controlled bypass for known test/owner accounts
+    # so real-OTP mode can be enabled without locking them out.
+    OTP_BYPASS_NUMBERS: str = ""
 
-    # Twilio (WhatsApp notifications)
+    # Twilio (WhatsApp notifications + SMS OTP)
     TWILIO_ACCOUNT_SID: str = ""
     TWILIO_AUTH_TOKEN: str = ""
     TWILIO_WHATSAPP_FROM: str = ""  # e.g. "whatsapp:+17372212163"
     TWILIO_CONTENT_SID: str = ""  # Content Template SID (e.g. HXa9d0fd...)
+    TWILIO_SMS_FROM: str = ""  # plain SMS-capable number, e.g. "+17372508034" (separate from the WhatsApp number)
     APP_BASE_URL: str = "http://localhost:5173"  # frontend URL for download links
 
     # App
@@ -46,6 +52,15 @@ class Settings(BaseSettings):
     BACKEND_CORS_ORIGINS: str = "http://localhost:5173,http://localhost:3000"
     DEBUG: bool = True
     TERMS_VERSION: str = "2026-08-15"
+
+    # When False, paid orders are NOT auto-dispatched to the render worker.
+    # Instead all admins get a WhatsApp alert and the order sits in the admin
+    # "Renders Awaiting" queue for manual fulfillment (render locally, then
+    # upload the finished video/PDF through the admin panel). Lets hosting
+    # skip running worker/renderer compute until volume justifies it.
+    SERVER_RENDERING: bool = True
+    # Absolute ceiling communicated to the user while waiting on a manual render.
+    MANUAL_RENDER_MAX_HOURS: int = 24
 
     model_config = {"env_file": ".env", "extra": "ignore"}
 

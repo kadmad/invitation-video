@@ -4,6 +4,7 @@ import { useAuthStore } from "@/store/authStore";
 import PageLayout from "@/components/layout/PageLayout";
 import AuthModal from "@/components/auth/AuthModal";
 import DashboardPage from "@/pages/DashboardPage";
+import LandingPage from "@/pages/LandingPage";
 import TemplateBrowsePage from "@/pages/TemplateBrowsePage";
 import EditorPage from "@/pages/EditorPage";
 import RenderStatusPage from "@/pages/RenderStatusPage";
@@ -20,6 +21,7 @@ import AdminCategoriesPage from "@/pages/admin/AdminCategoriesPage";
 import AdminTemplateListPage from "@/pages/admin/AdminTemplateListPage";
 import AdminTemplateEditorPage from "@/pages/admin/AdminTemplateEditorPage";
 import AdminFontsPage from "@/pages/admin/AdminFontsPage";
+import AdminRendersAwaitingPage from "@/pages/admin/AdminRendersAwaitingPage";
 import AdminAnalyticsPage from "@/pages/admin/AdminAnalyticsPage";
 import AdminLoginPage from "@/pages/admin/AdminLoginPage";
 
@@ -41,7 +43,7 @@ export default function App() {
     <PageLayout>
       <Routes>
         {/* Public routes */}
-        <Route path="/" element={<TemplateBrowsePage />} />
+        <Route path="/" element={<LandingPage />} />
         <Route path="/templates" element={<TemplateBrowsePage />} />
         <Route path="/editor/:slug" element={<EditorPage />} />
         <Route path="/terms" element={<TermsPage />} />
@@ -99,6 +101,7 @@ export default function App() {
           <Route path="templates" element={<AdminTemplateListPage />} />
           <Route path="templates/:id" element={<AdminTemplateEditorPage />} />
           <Route path="fonts" element={<AdminFontsPage />} />
+          <Route path="renders" element={<AdminRendersAwaitingPage />} />
           <Route path="analytics" element={<AdminAnalyticsPage />} />
         </Route>
       </Routes>

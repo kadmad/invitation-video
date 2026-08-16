@@ -1,58 +1,15 @@
 import { useEffect, useRef, useState, useCallback } from "react";
-import { Link, useLocation } from "react-router-dom";
+import { Link } from "react-router-dom";
 import { listTemplates } from "@/api/templates";
 import { listCategories } from "@/api/categories";
 import PageTransition from "@/components/common/PageTransition";
 import { useSeo } from "@/lib/seo";
-import { API_URL, IS_PROXIED_API } from "@/api/client";
+import { API_URL } from "@/api/client";
 import { SITE_DESCRIPTION, SITE_NAME, SITE_URL } from "@/lib/site";
+import { getTemplateVideoSrc as getVideoUrl } from "@/lib/templateVideo";
 import type { Template, Category } from "@/types";
 
-/* ── Shared token cache across all cards ── */
 const BASE_URL = API_URL;
-
-interface CachedToken { url: string; expiresAt: number; previewStatus?: string | null }
-const tokenCache = new Map<string, CachedToken>();
-const inflight = new Map<string, Promise<CachedToken>>();
-
-async function getVideoUrl(templateId: string, forceRefresh = false): Promise<CachedToken> {
-  const cached = tokenCache.get(templateId);
-  const now = Math.floor(Date.now() / 1000);
-  if (!forceRefresh && cached && cached.expiresAt > now + 30 && cached.previewStatus !== "processing") {
-    return cached;
-  }
-
-  // Deduplicate concurrent requests for same template
-  const pending = inflight.get(templateId);
-  if (pending && !forceRefresh) return pending;
-
-  const promise = (async () => {
-    const res = await fetch(`${BASE_URL}/templates/${templateId}/video-token`);
-    const {
-      expires_at,
-      has_preview,
-      preview_status,
-      video_url,
-      preview_url,
-      video_stream_url,
-      preview_stream_url,
-    } = await res.json();
-    const url = IS_PROXIED_API
-      ? (has_preview && preview_stream_url ? preview_stream_url : video_stream_url)
-      : (has_preview && preview_url ? preview_url : video_url);
-    const entry: CachedToken = {
-      url,
-      expiresAt: expires_at,
-      previewStatus: preview_status,
-    };
-    tokenCache.set(templateId, entry);
-    inflight.delete(templateId);
-    return entry;
-  })();
-
-  inflight.set(templateId, promise);
-  return promise;
-}
 
 function TemplateCard({
   template: t,
@@ -324,16 +281,10 @@ function Pagination({
 }
 
 export default function TemplateBrowsePage() {
-  // "/" and "/templates" render this page — keep the canonical honest.
-  const { pathname } = useLocation();
-
   useSeo({
-    title:
-      pathname === "/templates"
-        ? "Invitation Video Templates"
-        : `${SITE_NAME} — Online Invitation Video Maker`,
+    title: "Invitation Video Templates",
     description: SITE_DESCRIPTION,
-    path: pathname === "/templates" ? "/templates" : "/",
+    path: "/templates",
     jsonLd: {
       "@context": "https://schema.org",
       "@type": "WebSite",

@@ -20,7 +20,7 @@ from app.schemas.payment import (
     VerifyPaymentRequest,
     VerifyPaymentResponse,
 )
-from app.services import payment_service
+from app.services import payment_service, whatsapp_service
 from app.workers.tasks import generate_pdf_only_task, render_video_task
 
 router = APIRouter()
@@ -124,6 +124,7 @@ async def verify_payment(
         location_url=payment.location_url,
         status="pending",
         pdf_status="queued" if has_pdf else None,
+        render_method="server" if settings.SERVER_RENDERING else "manual",
     )
     db.add(job)
     await db.flush()
@@ -132,10 +133,28 @@ async def verify_payment(
     await db.commit()
     await db.refresh(job)
 
-    # Dispatch celery task
-    task = render_video_task.delay(str(job.id))
-    job.celery_task_id = task.id
-    await db.commit()
+    if settings.SERVER_RENDERING:
+        # Dispatch celery task
+        task = render_video_task.delay(str(job.id))
+        job.celery_task_id = task.id
+        await db.commit()
+    else:
+        # Manual-render mode: no worker running to pick this up. Alert every
+        # admin with a phone number on file; the order waits in the admin
+        # panel's "Renders Awaiting" queue until one of them renders it
+        # locally and uploads the result. Never let a notification failure
+        # block the paid order from completing.
+        order_number = _format_order_number(payment.order_number) if payment.order_number else str(payment.id)
+        admins_result = await db.execute(
+            select(User).where(User.is_admin == True, User.phone_number.isnot(None))  # noqa: E712
+        )
+        for admin in admins_result.scalars().all():
+            try:
+                whatsapp_service.send_new_render_request(
+                    admin.phone_number, user.full_name or "Customer", tmpl.name if tmpl else "Template", order_number
+                )
+            except Exception:
+                pass
 
     return VerifyPaymentResponse(
         render_job_id=job.id,
@@ -227,6 +246,8 @@ async def list_orders(
                 status=p.render_job.status,
                 progress=p.render_job.progress,
                 output_key=p.render_job.output_key,
+                pdf_key=p.render_job.pdf_key,
+                pdf_status=p.render_job.pdf_status,
             )
         orders.append(
             OrderResponse(

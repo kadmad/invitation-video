@@ -11,6 +11,7 @@ from sqlalchemy import select, func, case, and_
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.config import settings
 from app.dependencies import get_admin_user, get_db
 from app.models.category import Category
 from app.models.font import Font
@@ -34,6 +35,8 @@ from app.schemas.admin import (
     AEImportRequest,
     AEImportPreviewLayer,
     AEImportPreviewResponse,
+    AwaitingRenderResponse,
+    AwaitingRendersListResponse,
     ImageBlockCreate,
     ImageBlockUpdate,
     ImageBlockResponse,
@@ -43,6 +46,7 @@ from app.schemas.admin import (
 )
 from app.schemas.font import FontResponse
 from app.services.storage_service import storage_service
+from app.services import whatsapp_service
 
 router = APIRouter()
 
@@ -574,15 +578,20 @@ async def preview_ae_import(
     if body.comp_width <= 0 or body.comp_height <= 0:
         raise HTTPException(status_code=400, detail="Invalid comp dimensions in export file")
 
+    hex_color_re = re.compile(r"^#[0-9a-fA-F]{6}$")
+
     preview_layers = []
     for layer in body.layers:
         matched = await _match_ae_font(layer.font, db)
+        color = layer.color if layer.color and hex_color_re.match(layer.color) else None
         preview_layers.append(
             AEImportPreviewLayer(
                 name=layer.name,
+                text=layer.text.strip() if layer.text and layer.text.strip() else None,
                 requested_font=layer.font,
                 matched_font_id=matched.id if matched else None,
                 matched_font_name=matched.name if matched else None,
+                color=color,
                 position_x=round(layer.x / body.comp_width, 4),
                 position_y=round(layer.y / body.comp_height, 4),
                 font_size_ratio=round(layer.font_size / body.comp_height, 4),
@@ -773,3 +782,193 @@ async def delete_font(
     await db.delete(font)
     await db.commit()
     return {"status": "deleted"}
+
+
+# --- Manual Render Queue (SERVER_RENDERING=false) ---
+
+def _order_number(n: int | None, fallback_id) -> str:
+    return f"INV-{n:06d}" if n else str(fallback_id)
+
+
+@router.get("/renders/awaiting", response_model=AwaitingRendersListResponse)
+async def list_awaiting_renders(
+    db: AsyncSession = Depends(get_db),
+    _admin=Depends(get_admin_user),
+):
+    """Manual (SERVER_RENDERING=false) renders still needing a local render +
+    upload, oldest request first. Not paginated — this queue is meant to stay
+    small/empty in normal operation."""
+    result = await db.execute(
+        select(RenderJob, Payment.order_number, User, Template)
+        .join(Payment, Payment.render_job_id == RenderJob.id)
+        .join(User, User.id == RenderJob.user_id)
+        .join(Template, Template.id == RenderJob.template_id)
+        .where(RenderJob.render_method == "manual", RenderJob.status.in_(["pending", "processing"]))
+        .order_by(RenderJob.created_at.asc())
+    )
+    rows = result.all()
+
+    renders = [
+        AwaitingRenderResponse(
+            id=job.id,
+            order_number=_order_number(order_no, job.id),
+            status=job.status,
+            progress=job.progress,
+            created_at=job.created_at,
+            user_name=usr.full_name or "Customer",
+            user_phone=usr.phone_number,
+            template_id=tmpl.id,
+            template_name=tmpl.name,
+            template_video_key=tmpl.video_key,
+            font_id=job.font_id,
+            field_values=job.field_values,
+            text_color_override=job.text_color_override,
+            block_overrides=job.block_overrides,
+            block_format_overrides=job.block_format_overrides,
+            location_url=job.location_url,
+            has_pdf=bool(tmpl.pdf_snapshot_timestamps),
+        )
+        for job, order_no, usr, tmpl in rows
+    ]
+
+    # Typical turnaround = median (created_at -> updated_at) over past
+    # completed manual jobs, shown to reassure the waiting user it's usually
+    # faster than the stated max.
+    completed_result = await db.execute(
+        select(RenderJob.created_at, RenderJob.updated_at)
+        .where(RenderJob.render_method == "manual", RenderJob.status == "completed")
+        .order_by(RenderJob.updated_at.desc())
+        .limit(50)
+    )
+    durations = sorted(
+        (updated - created).total_seconds() / 3600 for created, updated in completed_result.all()
+    )
+    typical_hours = None
+    if durations:
+        mid = len(durations) // 2
+        typical_hours = durations[mid] if len(durations) % 2 else (durations[mid - 1] + durations[mid]) / 2
+        typical_hours = round(typical_hours, 1)
+
+    return AwaitingRendersListResponse(renders=renders, typical_turnaround_hours=typical_hours, auto_render_enabled=settings.DEBUG)
+
+
+@router.post("/renders/{render_id}/claim", response_model=AwaitingRenderResponse)
+async def claim_render(
+    render_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    _admin=Depends(get_admin_user),
+):
+    """Mark a manual render as being worked on. Locks it from further edits
+    by the customer (edit endpoint only allows changes while status is
+    still "pending").
+
+    In non-production (settings.DEBUG=True — the admin's own local
+    machine), this also dispatches the same render pipeline used in
+    server-render mode. The task runs on whatever Celery worker is
+    currently connected: the admin starts their local worker (pointed at
+    prod DB/S3/Redis once those exist), clicks this button, the task lands
+    on that worker's queue, renders, and uploads the result automatically —
+    same completion path (output_key, WhatsApp notify) as an automatic
+    server render.
+
+    In production, no worker runs there by design (that's the whole point
+    of SERVER_RENDERING=false — keep it off the paid server), so dispatching
+    from the production instance itself would just queue a task nothing
+    ever picks up. There, claiming only marks the job as claimed; the admin
+    renders it locally and uploads the result via the endpoint below."""
+    result = await db.execute(
+        select(RenderJob, Payment.order_number, User, Template)
+        .join(Payment, Payment.render_job_id == RenderJob.id)
+        .join(User, User.id == RenderJob.user_id)
+        .join(Template, Template.id == RenderJob.template_id)
+        .where(RenderJob.id == render_id, RenderJob.render_method == "manual")
+    )
+    row = result.first()
+    if not row:
+        raise HTTPException(status_code=404, detail="Manual render job not found")
+    job, order_no, usr, tmpl = row
+
+    if job.status not in ("pending", "processing"):
+        raise HTTPException(status_code=400, detail=f"Render is already {job.status}")
+
+    job.status = "processing"
+    await db.commit()
+
+    if settings.DEBUG:
+        from app.workers.tasks import render_video_task
+        task = render_video_task.delay(str(job.id))
+        job.celery_task_id = task.id
+        await db.commit()
+    await db.refresh(job)
+
+    return AwaitingRenderResponse(
+        id=job.id,
+        order_number=_order_number(order_no, job.id),
+        status=job.status,
+        progress=job.progress,
+        created_at=job.created_at,
+        user_name=usr.full_name or "Customer",
+        user_phone=usr.phone_number,
+        template_id=tmpl.id,
+        template_name=tmpl.name,
+        template_video_key=tmpl.video_key,
+        font_id=job.font_id,
+        field_values=job.field_values,
+        text_color_override=job.text_color_override,
+        block_overrides=job.block_overrides,
+        block_format_overrides=job.block_format_overrides,
+        location_url=job.location_url,
+        has_pdf=bool(tmpl.pdf_snapshot_timestamps),
+    )
+
+
+@router.post("/renders/{render_id}/complete")
+async def complete_manual_render(
+    render_id: uuid.UUID,
+    video: UploadFile,
+    pdf: UploadFile | None = None,
+    db: AsyncSession = Depends(get_db),
+    _admin=Depends(get_admin_user),
+):
+    """Admin uploads the video (required) they rendered locally, and the PDF
+    (optional — only meaningful if the template has PDF snapshots configured)
+    — marks the job completed and notifies the customer on WhatsApp."""
+    result = await db.execute(
+        select(RenderJob, User).join(User, User.id == RenderJob.user_id).where(
+            RenderJob.id == render_id, RenderJob.render_method == "manual"
+        )
+    )
+    row = result.first()
+    if not row:
+        raise HTTPException(status_code=404, detail="Manual render job not found")
+    job, usr = row
+
+    if job.status == "completed":
+        raise HTTPException(status_code=400, detail="Render already completed")
+
+    video_data = await video.read()
+    if not video_data:
+        raise HTTPException(status_code=400, detail="Video file is empty")
+    output_key = f"renders/{job.user_id}/{job.id}/output.mp4"
+    storage_service.upload(output_key, video_data, content_type="video/mp4")
+    job.output_key = output_key
+    job.status = "completed"
+    job.progress = 100
+
+    if pdf is not None:
+        pdf_data = await pdf.read()
+        if pdf_data:
+            pdf_key = f"renders/{job.user_id}/{job.id}/invitation.pdf"
+            storage_service.upload(pdf_key, pdf_data, content_type="application/pdf")
+            job.pdf_key = pdf_key
+            job.pdf_status = "completed"
+
+    await db.commit()
+
+    if usr.phone_number:
+        try:
+            whatsapp_service.send_render_ready(usr.phone_number, usr.full_name or "Customer", str(job.id))
+        except Exception:
+            pass
+
+    return {"status": "completed"}

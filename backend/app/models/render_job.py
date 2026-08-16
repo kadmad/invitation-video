@@ -33,6 +33,11 @@ class RenderJob(UUIDMixin, TimestampMixin, Base):
     pdf_key: Mapped[str | None] = mapped_column(String(500), nullable=True)
     pdf_status: Mapped[str | None] = mapped_column(String(20), nullable=True)
     location_url: Mapped[str | None] = mapped_column(String(1000), nullable=True)
+    # "server" = normal auto-rendered pipeline. "manual" = SERVER_RENDERING was
+    # off when this was paid for; an admin renders it locally and uploads the
+    # result. Editable by the owning user only while manual + still "pending" —
+    # locked the moment an admin claims it (status -> "processing").
+    render_method: Mapped[str] = mapped_column(String(10), default="server")
 
     user = relationship("User", back_populates="render_jobs")
     template = relationship("Template", back_populates="render_jobs")

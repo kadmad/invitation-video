@@ -16,6 +16,7 @@ import VideoPreviewCanvas from "@/components/admin/VideoPreviewCanvas";
 import TimelineFooter from "@/components/admin/TimelineFooter";
 import TextBlockPanel from "@/components/admin/TextBlockPanel";
 import ImageBlockPanel from "@/components/admin/ImageBlockPanel";
+import AEImportModal from "@/components/admin/AEImportModal";
 import Toggle from "@/components/common/Toggle";
 import FontPicker from "@/components/editor/FontPicker";
 import type { Category, Font } from "@/types";
@@ -33,6 +34,7 @@ export default function AdminTemplateEditorPage() {
     setTemplate,
     setVideoUrl,
     setSaving,
+    addBlock,
     reset,
   } = useAdminTemplateStore();
 
@@ -43,6 +45,7 @@ export default function AdminTemplateEditorPage() {
   const [loading, setLoading] = useState(true);
   const [name, setName] = useState("");
   const [categoryId, setCategoryId] = useState("");
+  const [showAeImport, setShowAeImport] = useState(false);
   const [isPublished, setIsPublished] = useState(false);
   const [defaultTextColor, setDefaultTextColor] = useState("#FFFFFF");
   const [defaultFontId, setDefaultFontId] = useState<string | null>(null);
@@ -441,6 +444,17 @@ export default function AdminTemplateEditorPage() {
           />
           <span className="text-[10px] text-slate-500">Render</span>
         </label>
+        <button
+          onClick={() => setShowAeImport(true)}
+          className="flex items-center gap-1 px-2 py-1.5 rounded-lg text-xs font-medium text-primary-600 bg-primary-50 hover:bg-primary-100 transition"
+          title="Import from After Effects (font, color, position, timing)"
+        >
+          <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" />
+          </svg>
+          Import AE
+        </button>
+
         <div className="relative">
           <button
             onClick={handleSave}
@@ -454,6 +468,16 @@ export default function AdminTemplateEditorPage() {
           )}
         </div>
       </div>
+
+      {showAeImport && id && (
+        <AEImportModal
+          templateId={id}
+          sortOrderStart={template?.text_blocks?.length ?? 0}
+          fallbackFontId={template?.default_font_id ?? null}
+          onClose={() => setShowAeImport(false)}
+          onImported={(blocks) => blocks.forEach((b) => addBlock(b))}
+        />
+      )}
 
       {/* PDF Snapshot Timestamps */}
       <div className="card flex-shrink-0 border border-slate-200 px-3 py-1.5 mt-1 flex items-center gap-2 flex-wrap">

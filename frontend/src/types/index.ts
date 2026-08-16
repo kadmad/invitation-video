@@ -85,9 +85,11 @@ export interface TextBlock {
 // From scripts/ae-export/export_text_layers.jsx
 export interface AEImportPreviewLayer {
   name: string;
+  text: string | null;
   requested_font: string;
   matched_font_id: string | null;
   matched_font_name: string | null;
+  color: string | null;
   position_x: number;
   position_y: number;
   font_size_ratio: number;
@@ -157,6 +159,8 @@ export interface RenderJob {
   status: "pending" | "processing" | "completed" | "failed";
   field_values: Record<string, string>;
   text_color_override: Record<string, string> | null;
+  block_overrides?: Record<string, string> | null;
+  block_format_overrides?: Record<string, FormatRange[]> | null;
   progress: number;
   output_key: string | null;
   pdf_key: string | null;
@@ -164,8 +168,37 @@ export interface RenderJob {
   location_url: string | null;
   error_message: string | null;
   render_notes: string | null;
+  render_method: "server" | "manual";
+  can_edit: boolean;
+  typical_turnaround_hours: number | null;
   created_at: string;
   updated_at: string;
+}
+
+export interface AwaitingRender {
+  id: string;
+  order_number: string;
+  status: string;
+  progress: number;
+  created_at: string;
+  user_name: string;
+  user_phone: string | null;
+  template_id: string;
+  template_name: string;
+  template_video_key: string | null;
+  font_id: string | null;
+  field_values: Record<string, string>;
+  text_color_override: Record<string, string> | null;
+  block_overrides: Record<string, string> | null;
+  block_format_overrides: Record<string, FormatRange[]> | null;
+  location_url: string | null;
+  has_pdf: boolean;
+}
+
+export interface AwaitingRendersList {
+  renders: AwaitingRender[];
+  typical_turnaround_hours: number | null;
+  auto_render_enabled: boolean;
 }
 
 export interface AdminStats {

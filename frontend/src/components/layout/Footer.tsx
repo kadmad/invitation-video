@@ -19,11 +19,8 @@ export default function Footer() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
         <div className="grid gap-8 sm:grid-cols-3">
           <div>
-            <Link
-              to="/"
-              className="text-lg font-bold bg-gradient-to-r from-primary-500 to-accent-500 bg-clip-text text-transparent"
-            >
-              {SITE_NAME}
+            <Link to="/" className="inline-block">
+              <img src="/logo.png" alt={SITE_NAME} className="h-32 w-auto" />
             </Link>
             <p className="text-sm text-slate-500 mt-2 max-w-xs">{SITE_TAGLINE}</p>
           </div>

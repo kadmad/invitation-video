@@ -11,7 +11,6 @@ import { transliterateBatchCandidates } from "@/api/transliterate";
 import type { WordCandidates } from "@/api/transliterate";
 import TranslitWord from "@/components/common/TranslitWord";
 import ConfirmModal from "@/components/admin/ConfirmModal";
-import AEImportModal from "@/components/admin/AEImportModal";
 import RichTextEditor from "@/components/admin/RichTextEditor";
 import FontPicker from "@/components/editor/FontPicker";
 import type { Font, TextBlock } from "@/types";
@@ -288,15 +287,20 @@ function BlockEditForm({
     return Object.keys(overrides).length > 0 ? overrides : null;
   }, [translitCandidates, selectedIndices, placeholderCandidates, placeholderIndices]);
 
-  // Save handler that includes transliteration overrides
+  // Save handler that includes transliteration overrides. Only actually
+  // passes transliteration_overrides through when it changed — passing it
+  // unconditionally replaces the block reference in the store on every
+  // save, which re-arms the autosave effect below (it keys off `block`),
+  // which saves again, forever, for any block with a regional font set.
   const handleSaveWithOverrides = useCallback(() => {
     if (isRegionalFont) {
       const overrides = buildOverridesMap();
-      onSave({ transliteration_overrides: overrides });
+      const unchanged = JSON.stringify(overrides) === JSON.stringify(block.transliteration_overrides ?? null);
+      onSave(unchanged ? undefined : { transliteration_overrides: overrides });
     } else {
       onSave();
     }
-  }, [isRegionalFont, buildOverridesMap, onSave]);
+  }, [isRegionalFont, buildOverridesMap, onSave, block.transliteration_overrides]);
 
   // Auto-save to the server a moment after the last edit, and flush
   // immediately if this block is collapsed/switched away from before that
@@ -864,7 +868,6 @@ function BlockEditForm({
 
 export default function TextBlockPanel() {
   const { id: templateId } = useParams<{ id: string }>();
-  const [showAeImport, setShowAeImport] = useState(false);
   const {
     template,
     selectedBlockId,
@@ -1074,16 +1077,6 @@ export default function TextBlockPanel() {
           </p>
         </div>
         <div className="flex items-center gap-1">
-          {/* Import from After Effects */}
-          <button
-            onClick={() => setShowAeImport(true)}
-            className="p-1.5 rounded-lg text-slate-400 hover:text-primary-500 hover:bg-primary-50 transition"
-            title="Import from After Effects (font, position, timing)"
-          >
-            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" />
-            </svg>
-          </button>
           {/* Eye toggle: filter by current time vs show all */}
           <button
             onClick={() => setShowAllBlocks(!showAllBlocks)}
@@ -1287,14 +1280,6 @@ export default function TextBlockPanel() {
         onCancel={() => setDeleteAllTarget(false)}
       />
 
-      {showAeImport && templateId && (
-        <AEImportModal
-          templateId={templateId}
-          sortOrderStart={allBlocks.length}
-          onClose={() => setShowAeImport(false)}
-          onImported={(blocks) => blocks.forEach((b) => addBlock(b))}
-        />
-      )}
     </div>
   );
 }
