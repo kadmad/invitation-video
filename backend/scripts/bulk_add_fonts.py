@@ -10,14 +10,6 @@ import asyncio
 import re
 import uuid
 import httpx
-import boto3
-from botocore.client import Config as BotoConfig
-
-# --- Configuration ---
-MINIO_ENDPOINT = "http://minio:9000"
-MINIO_ACCESS = "minioadmin"
-MINIO_SECRET = "minioadmin123"
-MINIO_BUCKET = "invitation-video"
 
 GOOGLE_CSS_URL = "https://fonts.googleapis.com/css2"
 USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
@@ -748,23 +740,11 @@ async def download_font(client: httpx.AsyncClient, url: str) -> bytes | None:
     return None
 
 
-def get_s3_client():
-    return boto3.client(
-        "s3",
-        endpoint_url=MINIO_ENDPOINT,
-        aws_access_key_id=MINIO_ACCESS,
-        aws_secret_access_key=MINIO_SECRET,
-        config=BotoConfig(signature_version="s3v4"),
-        region_name="us-east-1",
-    )
-
-
 async def main():
     from app.database import async_session
     from app.models.font import Font
+    from app.services.storage_service import storage_service
     from sqlalchemy import select
-
-    s3 = get_s3_client()
 
     # Get existing fonts to avoid duplicates
     async with async_session() as db:
@@ -812,14 +792,9 @@ async def main():
                 font_id = uuid.uuid4()
                 file_key = f"fonts/{font_id}.{ext}"
 
-                # Upload to MinIO
+                # Upload to storage (R2 in prod, MinIO in local dev)
                 try:
-                    s3.put_object(
-                        Bucket=MINIO_BUCKET,
-                        Key=file_key,
-                        Body=font_data,
-                        ContentType=f"font/{ext}",
-                    )
+                    storage_service.upload(file_key, font_data, content_type=f"font/{ext}")
                 except Exception as e:
                     print(f"SKIP (upload: {e})")
                     failed += 1
