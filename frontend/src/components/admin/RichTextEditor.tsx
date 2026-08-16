@@ -15,6 +15,7 @@ interface Segment {
   end: number;
   bold?: boolean;
   italic?: boolean;
+  superscript?: boolean;
   color?: string;
   stroke_color?: string;
   stroke_width?: number;
@@ -65,6 +66,7 @@ function buildSegments(content: string, ranges: FormatRange[]): Segment[] {
 
     let bold: boolean | undefined;
     let italic: boolean | undefined;
+    let superscript: boolean | undefined;
     let color: string | undefined;
     let stroke_color: string | undefined;
     let stroke_width: number | undefined;
@@ -73,13 +75,14 @@ function buildSegments(content: string, ranges: FormatRange[]): Segment[] {
       if (r.start <= start && r.end >= end) {
         if (r.bold !== undefined) bold = r.bold;
         if (r.italic !== undefined) italic = r.italic;
+        if (r.superscript !== undefined) superscript = r.superscript;
         if (r.color !== undefined) color = r.color;
         if (r.stroke_color !== undefined) stroke_color = r.stroke_color;
         if (r.stroke_width !== undefined) stroke_width = r.stroke_width;
       }
     }
 
-    segments.push({ text, start, end, bold, italic, color, stroke_color, stroke_width, isTag });
+    segments.push({ text, start, end, bold, italic, superscript, color, stroke_color, stroke_width, isTag });
   }
 
   return segments;
@@ -122,7 +125,7 @@ function applyFormat(
   ranges: FormatRange[],
   selStart: number,
   selEnd: number,
-  format: Partial<Pick<FormatRange, "bold" | "italic" | "color" | "stroke_color" | "stroke_width">>,
+  format: Partial<Pick<FormatRange, "bold" | "italic" | "superscript" | "color" | "stroke_color" | "stroke_width">>,
 ): FormatRange[] {
   const newRange: FormatRange = {
     start: selStart,
@@ -336,9 +339,10 @@ export default function RichTextEditor({
 
   // Active formatting at current selection
   const activeFormats = useMemo(() => {
-    if (!selection) return { bold: false, italic: false, color: undefined as string | undefined, stroke_color: undefined as string | undefined, stroke_width: undefined as number | undefined };
+    if (!selection) return { bold: false, italic: false, superscript: false, color: undefined as string | undefined, stroke_color: undefined as string | undefined, stroke_width: undefined as number | undefined };
     let bold = false;
     let italic = false;
+    let superscript = false;
     let color: string | undefined;
     let stroke_color: string | undefined;
     let stroke_width: number | undefined;
@@ -346,12 +350,13 @@ export default function RichTextEditor({
       if (r.start <= selection.start && r.end >= selection.end) {
         if (r.bold) bold = true;
         if (r.italic) italic = true;
+        if (r.superscript) superscript = true;
         if (r.color) color = r.color;
         if (r.stroke_color) stroke_color = r.stroke_color;
         if (r.stroke_width) stroke_width = r.stroke_width;
       }
     }
-    return { bold, italic, color, stroke_color, stroke_width };
+    return { bold, italic, superscript, color, stroke_color, stroke_width };
   }, [selection, ranges]);
 
   const hasSelection = selection !== null && selection.start !== selection.end;
@@ -462,6 +467,7 @@ export default function RichTextEditor({
       const styles: string[] = [];
       if (seg.bold) styles.push("font-weight:bold");
       if (seg.italic) styles.push("font-style:italic");
+      if (seg.superscript) styles.push("vertical-align:super", "font-size:0.65em");
       if (seg.color) styles.push(`color:${seg.color}`);
       if (seg.stroke_color) {
         styles.push(`-webkit-text-stroke:${seg.stroke_width ?? 1}px ${seg.stroke_color}`);
@@ -503,7 +509,7 @@ export default function RichTextEditor({
 
   // Format actions
   const applyFormatAction = useCallback(
-    (format: Partial<Pick<FormatRange, "bold" | "italic" | "color" | "stroke_color" | "stroke_width">>) => {
+    (format: Partial<Pick<FormatRange, "bold" | "italic" | "superscript" | "color" | "stroke_color" | "stroke_width">>) => {
       if (!selection) return;
       const updated = applyFormat(ranges, selection.start, selection.end, format);
       pendingSelectionRef.current = { start: selection.start, end: selection.end };
@@ -608,6 +614,24 @@ export default function RichTextEditor({
           I
         </button>
 
+        {/* Superscript */}
+        <button
+          type="button"
+          onMouseDown={(e) => e.preventDefault()}
+          onClick={() => applyFormatAction({ superscript: !activeFormats.superscript })}
+          disabled={!hasSelection}
+          className={`w-7 h-7 flex items-center justify-center rounded text-xs transition ${
+            activeFormats.superscript
+              ? "bg-primary-100 text-primary-700 ring-1 ring-primary-300"
+              : hasSelection
+                ? "text-slate-700 hover:bg-slate-200"
+                : "text-slate-300 cursor-not-allowed"
+          }`}
+          title="Superscript (select text first)"
+        >
+          x²
+        </button>
+
         <div className="w-px h-5 bg-slate-300 mx-1" />
 
         {/* Color picker dropdown */}
@@ -655,24 +679,6 @@ export default function RichTextEditor({
                   onChange={(e) => setCustomColor(e.target.value)}
                   className="w-8 h-8 rounded cursor-pointer border border-slate-200 p-0"
                 />
-                {"EyeDropper" in window && (
-                  <button
-                    type="button"
-                    onMouseDown={(e) => e.preventDefault()}
-                    onClick={async () => {
-                      try {
-                        const dropper = new (window as any).EyeDropper();
-                        const result = await dropper.open();
-                        setCustomColor(result.sRGBHex);
-                        handleColorApply(result.sRGBHex);
-                      } catch {}
-                    }}
-                    className="w-8 h-8 rounded border border-slate-200 flex items-center justify-center hover:bg-slate-50 transition"
-                    title="Pick color from screen"
-                  >
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m2 22 1-1h3l9-9"/><path d="M3 21v-3l9-9"/><path d="m15 6 3.4-3.4a2.1 2.1 0 1 1 3 3L18 9l.4.4a2.1 2.1 0 1 1-3 3l-3.8-3.8a2.1 2.1 0 1 1 3-3L15 6"/></svg>
-                  </button>
-                )}
                 <button
                   type="button"
                   onMouseDown={(e) => e.preventDefault()}

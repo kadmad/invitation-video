@@ -50,6 +50,7 @@ export interface FormatRange {
   end: number;
   bold?: boolean;
   italic?: boolean;
+  superscript?: boolean;
   color?: string;
   stroke_color?: string;
   stroke_width?: number;
@@ -66,6 +67,8 @@ export interface TextBlock {
   font_size_ratio: number;
   text_color: string;
   text_align: string;
+  letter_spacing?: number | null;
+  font_weight?: string | null;
   animation_type: string;
   animation_out: string;
   anim_in_direction: string;

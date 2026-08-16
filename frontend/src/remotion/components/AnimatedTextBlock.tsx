@@ -483,7 +483,7 @@ function renderPerCharRichExit(
   if (totalChars === 0) return null;
 
   // Get per-grapheme format info
-  let charFormats: Array<{ bold?: boolean; italic?: boolean; color?: string; stroke_color?: string; stroke_width?: number }> = [];
+  let charFormats: Array<{ bold?: boolean; italic?: boolean; superscript?: boolean; color?: string; stroke_color?: string; stroke_width?: number }> = [];
   const effectiveRanges = precomputedRanges ?? (() => {
     const rawRanges = block.format_ranges;
     if (!rawRanges || rawRanges.length === 0) return [];
@@ -499,6 +499,7 @@ function renderPerCharRichExit(
     charFormats = graphemes.map((g) => {
       let bold: boolean | undefined;
       let italic: boolean | undefined;
+      let superscript: boolean | undefined;
       let color: string | undefined;
       let stroke_color: string | undefined;
       let stroke_width: number | undefined;
@@ -506,13 +507,14 @@ function renderPerCharRichExit(
         if (r.start <= codeIdx && r.end > codeIdx) {
           if (r.bold !== undefined) bold = r.bold;
           if (r.italic !== undefined) italic = r.italic;
+          if (r.superscript !== undefined) superscript = r.superscript;
           if (r.color !== undefined) color = r.color;
           if (r.stroke_color !== undefined) stroke_color = r.stroke_color;
           if (r.stroke_width !== undefined) stroke_width = r.stroke_width;
         }
       }
       codeIdx += g.length;
-      return { bold, italic, color, stroke_color, stroke_width };
+      return { bold, italic, superscript, color, stroke_color, stroke_width };
     });
   }
 
@@ -567,6 +569,8 @@ function renderPerCharRichExit(
           whiteSpace: char === " " ? "pre" : undefined,
           fontWeight: fmt?.bold ? "bold" : undefined,
           fontStyle: fmt?.italic ? "italic" : undefined,
+          verticalAlign: fmt?.superscript ? "super" : undefined,
+          fontSize: fmt?.superscript ? "0.65em" : undefined,
           color: fmt?.color || undefined,
           WebkitTextStroke: fmt?.stroke_color ? `${fmt.stroke_width ?? 1}px ${fmt.stroke_color}` : undefined,
           paintOrder: fmt?.stroke_color ? "stroke fill" : undefined,
@@ -645,6 +649,7 @@ interface RichSegment {
   text: string;
   bold?: boolean;
   italic?: boolean;
+  superscript?: boolean;
   color?: string;
   stroke_color?: string;
   stroke_width?: number;
@@ -669,6 +674,7 @@ function splitRichSegments(text: string, ranges: FormatRange[]): RichSegment[] {
 
     let bold: boolean | undefined;
     let italic: boolean | undefined;
+    let superscript: boolean | undefined;
     let color: string | undefined;
     let stroke_color: string | undefined;
     let stroke_width: number | undefined;
@@ -677,13 +683,14 @@ function splitRichSegments(text: string, ranges: FormatRange[]): RichSegment[] {
       if (r.start <= start && r.end >= end) {
         if (r.bold !== undefined) bold = r.bold;
         if (r.italic !== undefined) italic = r.italic;
+        if (r.superscript !== undefined) superscript = r.superscript;
         if (r.color !== undefined) color = r.color;
         if (r.stroke_color !== undefined) stroke_color = r.stroke_color;
         if (r.stroke_width !== undefined) stroke_width = r.stroke_width;
       }
     }
 
-    segments.push({ text: text.slice(start, end), bold, italic, color, stroke_color, stroke_width });
+    segments.push({ text: text.slice(start, end), bold, italic, superscript, color, stroke_color, stroke_width });
   }
 
   return segments;
@@ -699,7 +706,7 @@ function renderRichTextFromRanges(
   const segments = splitRichSegments(text, ranges);
 
   return segments.map((seg, i) => {
-    const hasStyle = seg.bold || seg.italic || seg.color || seg.stroke_color;
+    const hasStyle = seg.bold || seg.italic || seg.superscript || seg.color || seg.stroke_color;
     if (!hasStyle) return seg.text;
     return (
       <span
@@ -707,6 +714,8 @@ function renderRichTextFromRanges(
         style={{
           fontWeight: seg.bold ? "bold" : undefined,
           fontStyle: seg.italic ? "italic" : undefined,
+          verticalAlign: seg.superscript ? "super" : undefined,
+          fontSize: seg.superscript ? "0.65em" : undefined,
           color: seg.color || undefined,
           WebkitTextStroke: seg.stroke_color
             ? `${seg.stroke_width ?? 1}px ${seg.stroke_color}`
@@ -770,7 +779,7 @@ function renderPerCharRich(
   if (totalChars === 0) return null;
 
   // Get per-grapheme format info (map using code-point index)
-  let charFormats: Array<{ bold?: boolean; italic?: boolean; color?: string; stroke_color?: string; stroke_width?: number }> = [];
+  let charFormats: Array<{ bold?: boolean; italic?: boolean; superscript?: boolean; color?: string; stroke_color?: string; stroke_width?: number }> = [];
   const effectiveRanges = precomputedRanges ?? (() => {
     const rawRanges = block.format_ranges;
     if (!rawRanges || rawRanges.length === 0) return [];
@@ -786,6 +795,7 @@ function renderPerCharRich(
     charFormats = graphemes.map((g) => {
       let bold: boolean | undefined;
       let italic: boolean | undefined;
+      let superscript: boolean | undefined;
       let color: string | undefined;
       let stroke_color: string | undefined;
       let stroke_width: number | undefined;
@@ -793,13 +803,14 @@ function renderPerCharRich(
         if (r.start <= codeIdx && r.end > codeIdx) {
           if (r.bold !== undefined) bold = r.bold;
           if (r.italic !== undefined) italic = r.italic;
+          if (r.superscript !== undefined) superscript = r.superscript;
           if (r.color !== undefined) color = r.color;
           if (r.stroke_color !== undefined) stroke_color = r.stroke_color;
           if (r.stroke_width !== undefined) stroke_width = r.stroke_width;
         }
       }
       codeIdx += g.length;
-      return { bold, italic, color, stroke_color, stroke_width };
+      return { bold, italic, superscript, color, stroke_color, stroke_width };
     });
   }
 
@@ -852,6 +863,8 @@ function renderPerCharRich(
           whiteSpace: char === " " ? "pre" : undefined,
           fontWeight: fmt?.bold ? "bold" : undefined,
           fontStyle: fmt?.italic ? "italic" : undefined,
+          verticalAlign: fmt?.superscript ? "super" : undefined,
+          fontSize: fmt?.superscript ? "0.65em" : undefined,
           color: fmt?.color || undefined,
           WebkitTextStroke: fmt?.stroke_color ? `${fmt.stroke_width ?? 1}px ${fmt.stroke_color}` : undefined,
           paintOrder: fmt?.stroke_color ? "stroke fill" : undefined,
@@ -1046,6 +1059,12 @@ function AnimatedTextBlock({
     applyExitAnim(s, animationOut, frame, outStartFrame, endFrame, fontSize, maxWidth);
   }
 
+  // Admin-set static letter spacing (em multiplier of font size) — additive on
+  // top of any animation's own letterSpacing effect, so "letter_spacing" /
+  // "shimmer_in" entrance effects collapse down TO this resting value instead
+  // of always collapsing to 0, and every other animation just holds at it.
+  s.letterSpacing += (block.letter_spacing ?? 0) * fontSize;
+
   // For per-char entry/exit: wrapper handles non-per-char anim, chars handle per-char anim
   const hasNonPerCharExit = animationOut !== "none" && !isPerCharOut && frame >= outStartFrame;
   const wrapperOpacity = (isPerChar || isPerCharOut) ? (hasNonPerCharExit ? s.opacity : 1) : s.opacity;
@@ -1068,6 +1087,7 @@ function AnimatedTextBlock({
         width: maxWidth,
         fontSize,
         fontFamily,
+        fontWeight: block.font_weight || undefined,
         color: textColor,
         textAlign: textAlignMap[block.text_align] as any,
         opacity: isPlaceholder ? wrapperOpacity * 0.35 : wrapperOpacity,
@@ -1077,7 +1097,7 @@ function AnimatedTextBlock({
         lineHeight: needsExtraPadding ? 1.5 : 1.2,
         paddingTop: extraPad,
         paddingBottom: extraPad,
-        letterSpacing: s.letterSpacing > 0 ? `${s.letterSpacing}px` : undefined,
+        letterSpacing: s.letterSpacing !== 0 ? `${s.letterSpacing}px` : undefined,
         filter: s.blur > 0 ? `blur(${s.blur}px)` : undefined,
         clipPath: s.clipPath,
         overflow: "visible",

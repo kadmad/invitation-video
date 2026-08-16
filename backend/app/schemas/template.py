@@ -15,6 +15,8 @@ class TextBlockResponse(BaseModel):
     font_size_ratio: float
     text_color: str
     text_align: str
+    letter_spacing: float | None = None
+    font_weight: str | None = None
     animation_type: str
     animation_out: str
     anim_in_direction: str

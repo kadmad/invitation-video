@@ -47,6 +47,48 @@ function debouncedSaveDraft() {
   }, 500);
 }
 
+const HISTORY_LIMIT = 50;
+
+/**
+ * Gesture-scoped history coalescing.
+ *
+ * Drag/resize interactions (block position drag, block resize, timeline edge
+ * drag, timeline whole-block drag) call `beginTemporalGesture()` at the start
+ * and `endTemporalGesture()` at the end, pausing zundo's tracking in between
+ * so the dozens of intermediate `updateBlock()` calls fired on every
+ * mousemove don't each become their own undo step.
+ *
+ * zundo's `resume()` alone does NOT create a history checkpoint — it just
+ * flips tracking back on. Without an explicit push here, the entire gesture
+ * (and anything before it, back to the last real history entry) silently
+ * merges into whatever unrelated edit happens to come next, so a single
+ * Undo click can revert several unrelated prior actions at once. These
+ * helpers close that gap by snapshotting state before the pause and pushing
+ * exactly one history entry for the whole gesture after resuming.
+ */
+let gestureSnapshot: { template: Template | null } | null = null;
+
+export function beginTemporalGesture() {
+  gestureSnapshot = { template: useAdminTemplateStore.getState().template };
+  useAdminTemplateStore.temporal.getState().pause();
+}
+
+export function endTemporalGesture() {
+  const snapshot = gestureSnapshot;
+  gestureSnapshot = null;
+  useAdminTemplateStore.temporal.getState().resume();
+  if (!snapshot) return;
+
+  const currentTemplate = useAdminTemplateStore.getState().template;
+  if (snapshot.template === currentTemplate) return; // nothing actually changed during the gesture
+
+  const temporalApi = useAdminTemplateStore.temporal;
+  const { pastStates } = temporalApi.getState();
+  const nextPastStates = [...pastStates, snapshot];
+  if (nextPastStates.length > HISTORY_LIMIT) nextPastStates.shift();
+  temporalApi.setState({ pastStates: nextPastStates, futureStates: [] });
+}
+
 export const useAdminTemplateStore = create<AdminTemplateState>()(
   temporal(
     (set) => ({
@@ -241,7 +283,7 @@ export const useAdminTemplateStore = create<AdminTemplateState>()(
         const { template } = state;
         return { template } as AdminTemplateState;
       },
-      limit: 50,
+      limit: HISTORY_LIMIT,
       equality: (pastState, currentState) =>
         pastState.template === currentState.template,
     },

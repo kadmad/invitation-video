@@ -74,6 +74,8 @@ class TextBlockCreate(BaseModel):
     font_size_ratio: float = 0.05
     text_color: str = "#FFFFFF"
     text_align: str = "center"
+    letter_spacing: float | None = None
+    font_weight: str | None = None
     animation_type: str = "fade_in"
     animation_out: str = "none"
     anim_in_direction: str = "ltr"
@@ -97,6 +99,8 @@ class TextBlockUpdate(BaseModel):
     font_size_ratio: float | None = None
     text_color: str | None = None
     text_align: str | None = None
+    letter_spacing: float | None = None
+    font_weight: str | None = None
     animation_type: str | None = None
     animation_out: str | None = None
     anim_in_direction: str | None = None
@@ -122,6 +126,8 @@ class TextBlockResponse(BaseModel):
     font_size_ratio: float
     text_color: str
     text_align: str
+    letter_spacing: float | None = None
+    font_weight: str | None = None
     animation_type: str
     animation_out: str
     anim_in_direction: str

@@ -1,7 +1,7 @@
 import { useRef, useState, useCallback, useMemo, useEffect } from "react";
 import { useParams } from "react-router-dom";
 import type { PlayerRef } from "@remotion/player";
-import { useAdminTemplateStore } from "@/store/adminTemplateStore";
+import { useAdminTemplateStore, beginTemporalGesture, endTemporalGesture } from "@/store/adminTemplateStore";
 import { updateTextBlock } from "@/api/admin";
 import { clearAdminDraft } from "@/lib/adminDraft";
 
@@ -112,7 +112,7 @@ export default function TimelineFooter({ playerRef, pdfSnapshotTimestamps, onPdf
   }, [totalSeconds, fps, storeSetCurrentTime]);
 
   const handleTimelineMouseDown = (e: React.MouseEvent) => {
-    if ((e.target as HTMLElement).closest("[data-block-marker]")) return;
+    if ((e.target as HTMLElement).closest("[data-block-marker], [data-playhead-marker]")) return;
     if (!timelineRef.current) return;
 
     const rect = timelineRef.current.getBoundingClientRect();
@@ -196,12 +196,36 @@ export default function TimelineFooter({ playerRef, pdfSnapshotTimestamps, onPdf
     window.addEventListener("mouseup", handleMouseUp);
   };
 
+  // --- Playhead scrubbing (drag the red vertical bar) ---
+  const isDraggingPlayhead = useRef(false);
+
+  const handlePlayheadMouseDown = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    e.preventDefault();
+    isDraggingPlayhead.current = true;
+    playerRef.current?.pause();
+
+    const handleMouseMove = (ev: MouseEvent) => {
+      if (!isDraggingPlayhead.current) return;
+      seekToTime(xToTime(ev.clientX));
+    };
+
+    const handleMouseUp = () => {
+      isDraggingPlayhead.current = false;
+      window.removeEventListener("mousemove", handleMouseMove);
+      window.removeEventListener("mouseup", handleMouseUp);
+    };
+
+    window.addEventListener("mousemove", handleMouseMove);
+    window.addEventListener("mouseup", handleMouseUp);
+  };
+
   const handleEdgeDragStart = (e: React.MouseEvent, blockId: string, edge: "start" | "end") => {
     e.stopPropagation();
     e.preventDefault();
     dragEdge.current = { blockId, edge };
     playerRef.current?.pause();
-    useAdminTemplateStore.temporal.getState().pause();
+    beginTemporalGesture();
 
     const handleMouseMove = (ev: MouseEvent) => {
       if (!dragEdge.current) return;
@@ -235,7 +259,7 @@ export default function TimelineFooter({ playerRef, pdfSnapshotTimestamps, onPdf
         }
       }
       dragEdge.current = null;
-      useAdminTemplateStore.temporal.getState().resume();
+      endTemporalGesture();
       window.removeEventListener("mousemove", handleMouseMove);
       window.removeEventListener("mouseup", handleMouseUp);
     };
@@ -267,7 +291,7 @@ export default function TimelineFooter({ playerRef, pdfSnapshotTimestamps, onPdf
       if (!moved && Math.abs(deltaTime) > 0.05) {
         moved = true;
         playerRef.current?.pause();
-        useAdminTemplateStore.temporal.getState().pause();
+        beginTemporalGesture();
       }
       if (!moved) return;
 
@@ -296,7 +320,7 @@ export default function TimelineFooter({ playerRef, pdfSnapshotTimestamps, onPdf
         seekToTime(block.start_time);
         return;
       }
-      useAdminTemplateStore.temporal.getState().resume();
+      endTemporalGesture();
       // Persist all dragged blocks
       if (templateId) {
         for (const orig of dragBlockIds) {
@@ -542,12 +566,15 @@ export default function TimelineFooter({ playerRef, pdfSnapshotTimestamps, onPdf
             );
           })}
 
-          {/* Playhead line */}
+          {/* Playhead line — wider invisible hit-area (12px) so it's draggable without pixel-perfect aim */}
           <div
-            className="absolute top-0 bottom-0 w-px bg-red-500 z-20 pointer-events-none"
-            style={{ left: `${progressPct}%` }}
+            data-playhead-marker
+            className="absolute top-0 bottom-0 z-40 cursor-ew-resize"
+            style={{ left: `${progressPct}%`, width: 12, marginLeft: -6 }}
+            onMouseDown={handlePlayheadMouseDown}
           >
-            <div className="absolute -top-1 left-1/2 -translate-x-1/2 w-2.5 h-2.5 bg-red-500 rounded-full shadow" />
+            <div className="absolute top-0 bottom-0 left-1/2 -translate-x-1/2 w-px bg-red-500 pointer-events-none" />
+            <div className="absolute -top-1 left-1/2 -translate-x-1/2 w-2.5 h-2.5 bg-red-500 rounded-full shadow pointer-events-none" />
           </div>
 
           {/* Rubber band selection rectangle */}

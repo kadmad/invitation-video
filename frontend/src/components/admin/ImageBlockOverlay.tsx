@@ -1,7 +1,7 @@
 import { useRef, useCallback, useState, useEffect } from "react";
 import { useParams } from "react-router-dom";
 import Moveable from "react-moveable";
-import { useAdminTemplateStore } from "@/store/adminTemplateStore";
+import { useAdminTemplateStore, beginTemporalGesture, endTemporalGesture } from "@/store/adminTemplateStore";
 import { updateImageBlock } from "@/api/admin";
 import type { ImageBlock } from "@/types";
 
@@ -113,6 +113,9 @@ export default function ImageBlockOverlay({
             right: containerWidth,
             bottom: containerHeight,
           }}
+          onDragStart={() => {
+            beginTemporalGesture();
+          }}
           onDrag={({ target, left, top }) => {
             target.style.left = `${left}px`;
             target.style.top = `${top}px`;
@@ -122,7 +125,11 @@ export default function ImageBlockOverlay({
             });
           }}
           onDragEnd={() => {
+            endTemporalGesture();
             persist();
+          }}
+          onResizeStart={() => {
+            beginTemporalGesture();
           }}
           onResize={({ target, width, height, drag }) => {
             target.style.width = `${width}px`;
@@ -137,6 +144,7 @@ export default function ImageBlockOverlay({
             });
           }}
           onResizeEnd={() => {
+            endTemporalGesture();
             persist();
           }}
         />

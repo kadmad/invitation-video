@@ -1,7 +1,7 @@
 import { useRef, useCallback, useState, useEffect } from "react";
 import { useParams } from "react-router-dom";
 import Moveable from "react-moveable";
-import { useAdminTemplateStore } from "@/store/adminTemplateStore";
+import { useAdminTemplateStore, beginTemporalGesture, endTemporalGesture } from "@/store/adminTemplateStore";
 import { updateTextBlock } from "@/api/admin";
 import type { TextBlock } from "@/types";
 
@@ -281,7 +281,7 @@ export default function TextBlockOverlay({
             bottom: containerHeight,
           }}
           onDragStart={() => {
-            useAdminTemplateStore.temporal.getState().pause();
+            beginTemporalGesture();
             const store = useAdminTemplateStore.getState();
             const origins: Record<string, { posX: number; posY: number }> = {};
             const allBlocks = store.template?.text_blocks ?? [];
@@ -321,12 +321,12 @@ export default function TextBlockOverlay({
             }
           }}
           onDragEnd={() => {
-            useAdminTemplateStore.temporal.getState().resume();
+            endTemporalGesture();
             dragOriginsRef.current = {};
             persist();
           }}
           onResizeStart={() => {
-            useAdminTemplateStore.temporal.getState().pause();
+            beginTemporalGesture();
           }}
           onResize={({ target, width, height, drag }) => {
             target.style.width = `${width}px`;
@@ -347,7 +347,7 @@ export default function TextBlockOverlay({
             });
           }}
           onResizeEnd={() => {
-            useAdminTemplateStore.temporal.getState().resume();
+            endTemporalGesture();
             persist();
           }}
         />

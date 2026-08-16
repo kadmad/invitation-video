@@ -34,6 +34,14 @@ export default function VideoPreviewCanvas({ playerRef }: VideoPreviewCanvasProp
   const [uploading, setUploading] = useState(false);
   const [currentFrame, setCurrentFrame] = useState(0);
   const [fontList, setFontList] = useState<Font[]>([]);
+  const [zoomPct, setZoomPct] = useState(100);
+  const zoom = zoomPct / 100;
+  const ZOOM_MIN = 50;
+  const ZOOM_MAX = 200;
+  const ZOOM_STEP = 25;
+  const zoomOut = useCallback(() => setZoomPct((z) => Math.max(ZOOM_MIN, z - ZOOM_STEP)), []);
+  const zoomIn = useCallback(() => setZoomPct((z) => Math.min(ZOOM_MAX, z + ZOOM_STEP)), []);
+  const zoomReset = useCallback(() => setZoomPct(100), []);
 
   const fps = template?.fps || 30;
   const totalFrames = template?.duration_frames || 300;
@@ -369,11 +377,11 @@ export default function VideoPreviewCanvas({ playerRef }: VideoPreviewCanvasProp
   return (
     <div className="flex flex-col flex-1 min-h-0">
       {/* Canvas */}
-      <div className="flex-1 flex justify-center overflow-hidden min-h-0 relative">
+      <div className={`flex-1 flex justify-center min-h-0 relative ${zoomPct !== 100 ? "overflow-auto" : "overflow-hidden"}`}>
         <div
           ref={containerRef}
-          className="relative bg-black rounded-lg overflow-hidden"
-          style={{ aspectRatio: "9/16", height: "100%", maxWidth: "100%" }}
+          className="relative bg-black rounded-lg overflow-hidden shrink-0"
+          style={{ aspectRatio: "9/16", height: "100%", maxWidth: "100%", transform: `scale(${zoom})`, transformOrigin: "top left" }}
           onMouseDown={() => {
             selectBlock(null);
             selectImageBlock(null);
@@ -433,10 +441,40 @@ export default function VideoPreviewCanvas({ playerRef }: VideoPreviewCanvasProp
           <span className="text-[10px] text-white/70 tabular-nums bg-black/40 rounded px-1.5 py-0.5 pointer-events-auto">
             {currentTime.toFixed(1)}s / {(totalFrames / fps).toFixed(1)}s
           </span>
-          <label className="text-[10px] text-white/80 bg-black/40 hover:bg-black/60 rounded px-2 py-1 cursor-pointer pointer-events-auto transition">
-            {uploading ? "Uploading..." : videoUrl ? "Replace Video" : "Upload Video"}
-            <input type="file" accept="video/*" onChange={handleUpload} className="hidden" disabled={uploading} />
-          </label>
+          <div className="flex items-center gap-1.5 pointer-events-auto">
+            <div className="flex items-center gap-0.5 bg-black/40 rounded px-1 py-0.5">
+              <button
+                type="button"
+                onClick={zoomOut}
+                disabled={zoomPct <= ZOOM_MIN}
+                className="text-white/80 hover:text-white hover:bg-white/10 disabled:opacity-30 disabled:hover:bg-transparent rounded w-5 h-5 flex items-center justify-center text-xs leading-none transition"
+                title="Zoom out"
+              >
+                −
+              </button>
+              <button
+                type="button"
+                onClick={zoomReset}
+                className="text-[10px] text-white/80 hover:text-white tabular-nums px-1 min-w-[32px] text-center transition"
+                title="Reset zoom to 100%"
+              >
+                {zoomPct}%
+              </button>
+              <button
+                type="button"
+                onClick={zoomIn}
+                disabled={zoomPct >= ZOOM_MAX}
+                className="text-white/80 hover:text-white hover:bg-white/10 disabled:opacity-30 disabled:hover:bg-transparent rounded w-5 h-5 flex items-center justify-center text-xs leading-none transition"
+                title="Zoom in"
+              >
+                +
+              </button>
+            </div>
+            <label className="text-[10px] text-white/80 bg-black/40 hover:bg-black/60 rounded px-2 py-1 cursor-pointer transition">
+              {uploading ? "Uploading..." : videoUrl ? "Replace Video" : "Upload Video"}
+              <input type="file" accept="video/*" onChange={handleUpload} className="hidden" disabled={uploading} />
+            </label>
+          </div>
         </div>
       </div>
     </div>

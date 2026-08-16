@@ -297,6 +297,37 @@ function BlockEditForm({
     }
   }, [isRegionalFont, buildOverridesMap, onSave]);
 
+  // Auto-save to the server a moment after the last edit, and flush
+  // immediately if this block is collapsed/switched away from before that
+  // timer fires. Previously an edit only lived in local component state
+  // until "Save Block" was clicked, so switching blocks or navigating away
+  // without remembering to click it silently discarded the change.
+  const pendingSaveRef = useRef(false);
+  const isFirstRenderRef = useRef(true);
+  const saveRef = useRef(handleSaveWithOverrides);
+  saveRef.current = handleSaveWithOverrides;
+
+  useEffect(() => {
+    if (isFirstRenderRef.current) {
+      isFirstRenderRef.current = false;
+      return;
+    }
+    pendingSaveRef.current = true;
+    const timer = setTimeout(() => {
+      pendingSaveRef.current = false;
+      saveRef.current();
+    }, 1200);
+    return () => clearTimeout(timer);
+  }, [block]);
+
+  useEffect(() => {
+    return () => {
+      if (pendingSaveRef.current) {
+        saveRef.current();
+      }
+    };
+  }, []);
+
   useEffect(() => {
     if (!isRegionalFont || !block.content.trim()) {
       setTranslitCandidates([]);
@@ -544,7 +575,7 @@ function BlockEditForm({
         </div>
       </CollapsibleSection>
 
-      <CollapsibleSection title="Styling" defaultOpen={false}>
+      <CollapsibleSection title="Styling" defaultOpen={true}>
         <div>
           <label className="block text-xs text-slate-500 mb-1">
             Font Size Ratio: {(block.font_size_ratio ?? 0.04).toFixed(3)}
@@ -575,30 +606,12 @@ function BlockEditForm({
         </div>
         <div>
           <label className="block text-xs text-slate-500 mb-1">Text Color</label>
-          <div className="flex items-center gap-1.5">
-            <input
-              type="color"
-              value={block.text_color || "#ffffff"}
-              onChange={(e) => onUpdateField("text_color", e.target.value)}
-              className="flex-1 h-8 rounded-xl border border-slate-200 cursor-pointer"
-            />
-            {"EyeDropper" in window && (
-              <button
-                type="button"
-                onClick={async () => {
-                  try {
-                    const dropper = new (window as any).EyeDropper();
-                    const result = await dropper.open();
-                    onUpdateField("text_color", result.sRGBHex);
-                  } catch {}
-                }}
-                className="w-8 h-8 rounded border border-slate-200 flex items-center justify-center hover:bg-slate-50 transition shrink-0"
-                title="Pick color from screen"
-              >
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m2 22 1-1h3l9-9"/><path d="M3 21v-3l9-9"/><path d="m15 6 3.4-3.4a2.1 2.1 0 1 1 3 3L18 9l.4.4a2.1 2.1 0 1 1-3 3l-3.8-3.8a2.1 2.1 0 1 1 3-3L15 6"/></svg>
-              </button>
-            )}
-          </div>
+          <input
+            type="color"
+            value={block.text_color || "#ffffff"}
+            onChange={(e) => onUpdateField("text_color", e.target.value)}
+            className="w-full h-8 rounded-xl border border-slate-200 cursor-pointer"
+          />
         </div>
         <div>
           <label className="block text-xs text-slate-500 mb-1">Text Align</label>
@@ -612,6 +625,37 @@ function BlockEditForm({
                 {a.charAt(0).toUpperCase() + a.slice(1)}
               </option>
             ))}
+          </select>
+        </div>
+        <div>
+          <label className="block text-xs text-slate-500 mb-1">
+            Letter Spacing: {(block.letter_spacing ?? 0).toFixed(2)}em
+          </label>
+          <input
+            type="range"
+            min="-0.1"
+            max="0.5"
+            step="0.01"
+            value={block.letter_spacing ?? 0}
+            onChange={(e) => onUpdateField("letter_spacing", parseFloat(e.target.value))}
+            className="w-full accent-primary-500"
+          />
+        </div>
+        <div>
+          <label className="block text-xs text-slate-500 mb-1">Font Weight</label>
+          <select
+            value={block.font_weight || ""}
+            onChange={(e) => onUpdateField("font_weight", e.target.value || null)}
+            className="input-field text-sm w-full"
+          >
+            <option value="">Default (font's own weight)</option>
+            <option value="300">Light (300)</option>
+            <option value="normal">Normal (400)</option>
+            <option value="500">Medium (500)</option>
+            <option value="600">SemiBold (600)</option>
+            <option value="bold">Bold (700)</option>
+            <option value="800">ExtraBold (800)</option>
+            <option value="900">Black (900)</option>
           </select>
         </div>
       </CollapsibleSection>
@@ -978,6 +1022,8 @@ export default function TextBlockPanel() {
         font_size_ratio: source.font_size_ratio,
         text_color: source.text_color,
         text_align: source.text_align,
+        letter_spacing: source.letter_spacing,
+        font_weight: source.font_weight,
         font_id: source.font_id,
         animation_type: source.animation_type,
         animation_out: source.animation_out,

@@ -5,7 +5,7 @@ import tempfile
 import uuid
 from datetime import datetime, timedelta, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, status
+from fastapi import APIRouter, Depends, HTTPException, Request, UploadFile, status
 from sqlalchemy import select, func, case, and_
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -431,6 +431,7 @@ async def upload_template_video(
 @router.get("/templates/{template_id}/video-url")
 async def get_template_video_url(
     template_id: uuid.UUID,
+    request: Request,
     db: AsyncSession = Depends(get_db),
     _admin=Depends(get_admin_user),
 ):
@@ -441,7 +442,7 @@ async def get_template_video_url(
     if not template.video_key:
         raise HTTPException(status_code=400, detail="No video uploaded")
 
-    url = storage_service.presigned_url(template.video_key)
+    url = storage_service.presigned_url(template.video_key, public_host=request.url.hostname)
     return {"url": url}
 
 

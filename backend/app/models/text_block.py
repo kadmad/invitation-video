@@ -28,6 +28,13 @@ class TextBlock(UUIDMixin, Base):
     font_size_ratio: Mapped[float] = mapped_column(Float, default=0.05)
     text_color: Mapped[str] = mapped_column(String(20), default="#FFFFFF")
     text_align: Mapped[str] = mapped_column(String(10), default="center")
+    # Letter spacing as an em multiplier of the block's own font size (scales
+    # correctly across templates/resolutions, same pattern as font_size_ratio).
+    # None/0 = normal spacing.
+    letter_spacing: Mapped[float | None] = mapped_column(Float, nullable=True)
+    # CSS font-weight value, e.g. "normal", "500", "700", "bold". None = use
+    # the selected font's own default weight.
+    font_weight: Mapped[str | None] = mapped_column(String(10), nullable=True)
 
     # Animation
     animation_type: Mapped[str] = mapped_column(
