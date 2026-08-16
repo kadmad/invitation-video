@@ -1,5 +1,6 @@
 import json
 import os
+import re
 import subprocess
 import tempfile
 import uuid
@@ -30,6 +31,9 @@ from app.schemas.admin import (
     TextBlockCreate,
     TextBlockUpdate,
     TextBlockResponse,
+    AEImportRequest,
+    AEImportPreviewLayer,
+    AEImportPreviewResponse,
     ImageBlockCreate,
     ImageBlockUpdate,
     ImageBlockResponse,
@@ -504,6 +508,95 @@ async def delete_text_block(
     await db.delete(block)
     await db.commit()
     return {"status": "deleted"}
+
+
+_AE_STYLE_SUFFIXES = (
+    "extrabolditalic", "extrabold", "semibolditalic", "semibold",
+    "bolditalic", "bold", "mediumitalic", "medium", "lightitalic", "light",
+    "thinitalic", "thin", "blackitalic", "black", "italic", "oblique",
+    "regular",
+)
+
+
+def _ae_font_family_guess(ps_name: str) -> str:
+    """Best-effort PostScript name -> family name, e.g.
+    "PlayfairDisplay-BoldItalic" -> "Playfair Display"."""
+    name = ps_name.replace("_", "-")
+    base = name.split("-")[0] if "-" in name else name
+
+    # If no hyphen, the style suffix (if any) is usually just appended in
+    # CamelCase, e.g. "MontserratBold" — strip a known suffix off the end.
+    if "-" not in name:
+        lower = base.lower()
+        for suf in _AE_STYLE_SUFFIXES:
+            if lower.endswith(suf) and len(lower) > len(suf):
+                base = base[: len(base) - len(suf)]
+                break
+
+    # CamelCase -> spaced words: "PlayfairDisplay" -> "Playfair Display"
+    spaced = re.sub(r"(?<=[a-z0-9])(?=[A-Z])", " ", base)
+    spaced = re.sub(r"(?<=[A-Z])(?=[A-Z][a-z])", " ", spaced)
+    return spaced.strip()
+
+
+async def _match_ae_font(font_ps_name: str, db: AsyncSession) -> Font | None:
+    """Fuzzy-match an After Effects PostScript font name against our fonts
+    table by family name. Best-effort only — admin reviews/overrides in the
+    import preview before anything is created."""
+    guess = _ae_font_family_guess(font_ps_name)
+    if not guess:
+        return None
+
+    result = await db.execute(select(Font).where(func.lower(Font.family_name) == guess.lower()))
+    match = result.scalars().first()
+    if match:
+        return match
+
+    result = await db.execute(select(Font).where(Font.family_name.ilike(f"%{guess}%")))
+    return result.scalars().first()
+
+
+@router.post("/templates/{template_id}/text-blocks/import-ae", response_model=AEImportPreviewResponse)
+async def preview_ae_import(
+    template_id: uuid.UUID,
+    body: AEImportRequest,
+    db: AsyncSession = Depends(get_db),
+    _admin=Depends(get_admin_user),
+):
+    """Analyze an After Effects layout export and propose text_blocks from
+    it (font, position, start/stop time — no animation). Nothing is created
+    yet; the admin reviews this preview and confirms via the normal
+    create_text_block calls for whichever rows they accept."""
+    result = await db.execute(select(Template).where(Template.id == template_id))
+    if not result.scalar_one_or_none():
+        raise HTTPException(status_code=404, detail="Template not found")
+
+    if body.comp_width <= 0 or body.comp_height <= 0:
+        raise HTTPException(status_code=400, detail="Invalid comp dimensions in export file")
+
+    preview_layers = []
+    for layer in body.layers:
+        matched = await _match_ae_font(layer.font, db)
+        preview_layers.append(
+            AEImportPreviewLayer(
+                name=layer.name,
+                requested_font=layer.font,
+                matched_font_id=matched.id if matched else None,
+                matched_font_name=matched.name if matched else None,
+                position_x=round(layer.x / body.comp_width, 4),
+                position_y=round(layer.y / body.comp_height, 4),
+                font_size_ratio=round(layer.font_size / body.comp_height, 4),
+                start_time=round(layer.in_point, 2),
+                end_time=round(layer.out, 2),
+            )
+        )
+
+    return AEImportPreviewResponse(
+        comp_name=body.comp_name,
+        comp_width=body.comp_width,
+        comp_height=body.comp_height,
+        layers=preview_layers,
+    )
 
 
 # --- Image Blocks ---

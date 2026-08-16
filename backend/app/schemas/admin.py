@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 # --- Categories ---
@@ -141,6 +141,49 @@ class TextBlockResponse(BaseModel):
     transliteration_overrides: dict | None
 
     model_config = {"from_attributes": True}
+
+
+# --- After Effects layout import ---
+# Font, position, and start/stop time only — no animation. Admin runs
+# scripts/ae-export/export_text_layers.jsx inside AE to produce this JSON.
+
+class AEImportLayer(BaseModel):
+    name: str
+    font: str
+    font_size: float
+    x: float
+    y: float
+    in_point: float = Field(alias="in")
+    out: float
+
+    model_config = {"populate_by_name": True}
+
+
+class AEImportRequest(BaseModel):
+    comp_name: str
+    comp_width: float
+    comp_height: float
+    fps: float | None = None
+    layers: list[AEImportLayer]
+
+
+class AEImportPreviewLayer(BaseModel):
+    name: str
+    requested_font: str
+    matched_font_id: uuid.UUID | None
+    matched_font_name: str | None
+    position_x: float
+    position_y: float
+    font_size_ratio: float
+    start_time: float
+    end_time: float
+
+
+class AEImportPreviewResponse(BaseModel):
+    comp_name: str
+    comp_width: float
+    comp_height: float
+    layers: list[AEImportPreviewLayer]
 
 
 # --- Image Blocks ---

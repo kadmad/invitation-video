@@ -82,6 +82,26 @@ export interface TextBlock {
   transliteration_overrides: Record<string, string> | null;
 }
 
+// From scripts/ae-export/export_text_layers.jsx
+export interface AEImportPreviewLayer {
+  name: string;
+  requested_font: string;
+  matched_font_id: string | null;
+  matched_font_name: string | null;
+  position_x: number;
+  position_y: number;
+  font_size_ratio: number;
+  start_time: number;
+  end_time: number;
+}
+
+export interface AEImportPreviewResponse {
+  comp_name: string;
+  comp_width: number;
+  comp_height: number;
+  layers: AEImportPreviewLayer[];
+}
+
 export interface ImageBlock {
   id: string;
   sort_order: number;

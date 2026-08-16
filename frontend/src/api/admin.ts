@@ -1,6 +1,6 @@
 import client, { API_URL, IS_PROXIED_API } from "@/api/client";
 import type { Category, Template, Font, TextBlock, ImageBlock } from "@/types";
-import type { AdminStats } from "@/types";
+import type { AdminStats, AEImportPreviewResponse } from "@/types";
 
 // ── Stats ──────────────────────────────────────────────────────────────────────
 export const getAdminStats = () =>
@@ -72,6 +72,14 @@ export const updateTextBlock = (
     .put<TextBlock>(
       `/admin/templates/${templateId}/text-blocks/${blockId}`,
       data,
+    )
+    .then((r) => r.data);
+
+export const previewAeImport = (templateId: string, manifest: unknown) =>
+  client
+    .post<AEImportPreviewResponse>(
+      `/admin/templates/${templateId}/text-blocks/import-ae`,
+      manifest,
     )
     .then((r) => r.data);
 
