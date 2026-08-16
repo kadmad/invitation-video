@@ -1,7 +1,14 @@
 # Production stack. Pulls pre-built images from GHCR (built by
 # .github/workflows/deploy.yml) instead of building from source, runs
-# without --reload/dev bind-mounts, and keeps postgres/redis/minio off the
+# without --reload/dev bind-mounts, and keeps postgres/redis off the
 # host's public network entirely — only Caddy (80/443) is exposed.
+#
+# Rendering happens on a local worker (not on this server) and storage is
+# R2 (S3-compatible), not MinIO — so this stack no longer runs `worker`,
+# `renderer`, or `minio` services. The local worker needs its own way to
+# reach this server's Redis (broker) and Postgres (job status writes) —
+# do NOT publish those ports to the public internet; use a Tailscale/
+# WireGuard tunnel between the server and the local worker machine instead.
 #
 # Usage on the server:
 #   docker compose -f docker-compose.prod.yml --env-file .env pull
@@ -37,35 +44,6 @@ services:
       retries: 5
     restart: unless-stopped
 
-  minio:
-    image: minio/minio:latest
-    command: server /data --console-address ":9001"
-    environment:
-      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
-      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin123}
-      MINIO_API_CORS_ALLOW_ORIGIN: ${MINIO_CORS_ORIGIN:-*}
-    volumes:
-      - minio-data:/data
-    healthcheck:
-      test: ["CMD", "mc", "ready", "local"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
-    restart: unless-stopped
-
-  minio-init:
-    image: minio/mc:latest
-    depends_on:
-      minio:
-        condition: service_healthy
-    entrypoint: >
-      /bin/sh -c '
-      mc alias set local http://minio:9000 $${MINIO_ROOT_USER:-minioadmin} $${MINIO_ROOT_PASSWORD:-minioadmin123};
-      mc mb local/$${S3_BUCKET_NAME:-invitation-video} --ignore-existing;
-      mc anonymous set download local/$${S3_BUCKET_NAME:-invitation-video}/fonts;
-      exit 0;
-      '
-
   backend:
     image: ${GHCR_NAMESPACE}-backend:latest
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000
@@ -76,8 +54,6 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-      minio-init:
-        condition: service_completed_successfully
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
       interval: 10s
@@ -85,38 +61,8 @@ services:
       retries: 5
     restart: unless-stopped
 
-  worker:
-    image: ${GHCR_NAMESPACE}-backend:latest
-    command: celery -A app.workers.celery_app worker --loglevel=info --concurrency=1
-    env_file:
-      - .env
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-      minio-init:
-        condition: service_completed_successfully
-    restart: unless-stopped
-
   frontend:
     image: ${GHCR_NAMESPACE}-frontend:latest
-    restart: unless-stopped
-
-  renderer:
-    image: ${GHCR_NAMESPACE}-renderer:latest
-    shm_size: "4gb"
-    environment:
-      RENDERER_PORT: 3100
-      RENDER_CONCURRENCY: ${RENDER_CONCURRENCY:-4}
-      MAX_PARALLEL_JOBS: ${MAX_PARALLEL_JOBS:-2}
-    deploy:
-      resources:
-        limits:
-          memory: 6g
-    depends_on:
-      minio-init:
-        condition: service_completed_successfully
     restart: unless-stopped
 
   caddy:
@@ -138,6 +84,5 @@ services:
 volumes:
   pg-data:
   redis-data:
-  minio-data:
   caddy-data:
   caddy-config:

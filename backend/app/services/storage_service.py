@@ -51,12 +51,19 @@ class StorageService:
             self._public_clients_by_host[host] = client
         return client
 
-    def upload(self, key: str, data: bytes, content_type: str = "application/octet-stream"):
+    def upload(
+        self,
+        key: str,
+        data: bytes,
+        content_type: str = "application/octet-stream",
+        cache_control: str = "public, max-age=31536000, immutable",
+    ):
         self._client.put_object(
             Bucket=self._bucket,
             Key=key,
             Body=data,
             ContentType=content_type,
+            CacheControl=cache_control,
         )
 
     def upload_file(self, key: str, file_path: str, content_type: str = "application/octet-stream"):
@@ -94,6 +101,12 @@ class StorageService:
 
     def delete(self, key: str):
         self._client.delete_object(Bucket=self._bucket, Key=key)
+
+    def public_url(self, key: str) -> str:
+        """Stable, cacheable public URL for a key (R2/CDN), for redirecting
+        browsers to fetch bytes directly instead of proxying through the API."""
+        base = settings.CDN_BASE_URL or settings.S3_PUBLIC_URL
+        return f"{base.rstrip('/')}/{key}"
 
 
 storage_service = StorageService()

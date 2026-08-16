@@ -1,7 +1,7 @@
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from fastapi.responses import Response
+from fastapi.responses import RedirectResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -155,15 +155,7 @@ async def download_render(
     if job.status != "completed" or not job.output_key:
         raise HTTPException(status_code=400, detail="Render not ready for download")
 
-    data = storage_service.download(job.output_key)
-    return Response(
-        content=data,
-        media_type="video/mp4",
-        headers={
-            "Content-Disposition": f'attachment; filename="render_{render_id}.mp4"',
-            "Cache-Control": "private, max-age=3600",
-        },
-    )
+    return RedirectResponse(storage_service.public_url(job.output_key), status_code=307)
 
 
 @router.get("/{render_id}/download-pdf")
@@ -181,12 +173,4 @@ async def download_pdf(
     if job.status != "completed" or not job.pdf_key:
         raise HTTPException(status_code=400, detail="PDF not ready for download")
 
-    data = storage_service.download(job.pdf_key)
-    return Response(
-        content=data,
-        media_type="application/pdf",
-        headers={
-            "Content-Disposition": f'attachment; filename="invitation_{render_id}.pdf"',
-            "Cache-Control": "private, max-age=3600",
-        },
-    )
+    return RedirectResponse(storage_service.public_url(job.pdf_key), status_code=307)

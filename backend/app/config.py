@@ -23,6 +23,10 @@ class Settings(BaseSettings):
     # S3 public URL (browser-accessible, defaults to localhost MinIO)
     S3_PUBLIC_URL: str | None = "http://localhost:9000"
 
+    # Public CDN base URL for serving render output/pdf (R2 custom domain or
+    # r2.dev public bucket URL). When unset, falls back to S3_PUBLIC_URL.
+    CDN_BASE_URL: str | None = None
+
     # Razorpay
     RAZORPAY_KEY_ID: str = ""
     RAZORPAY_KEY_SECRET: str = ""

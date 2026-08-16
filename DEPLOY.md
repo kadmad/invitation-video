@@ -7,10 +7,11 @@ active development, so deploys stay a deliberate action until things
 settle down. To make it automatic later, add a `push: branches: [main]`
 trigger alongside `workflow_dispatch`.
 
-It builds three images (backend — also used for the `worker` service,
-frontend, renderer) from their `Dockerfile.prod` files, pushes them to
-GHCR, then SSHes into your server, pulls the new images, runs Alembic
-migrations, and restarts the stack with `docker-compose.prod.yml`.
+It builds two images (backend, frontend) from their `Dockerfile.prod`
+files, pushes them to GHCR, then SSHes into your server, pulls the new
+images, runs Alembic migrations, and restarts the stack with
+`docker-compose.prod.yml`. Rendering runs on a local worker (not this
+server) — see the note at the top of `docker-compose.prod.yml`.
 
 None of this touches the existing `docker-compose.yml` / `Dockerfile`s
 used for local dev — production has its own `Dockerfile.prod` files and
@@ -78,9 +79,15 @@ DEBUG=false
 BACKEND_CORS_ORIGINS=https://yourdomain.com
 
 # Real (non-placeholder) values for everything else already in your local
-# .env: POSTGRES_*, MINIO_*/S3_* (or real AWS S3 credentials once you have
-# them — storage_service.py is a plain S3 client, works identically
-# either way, see below), RAZORPAY_* (live keys), TWILIO_*, etc.
+# .env: POSTGRES_*, RAZORPAY_* (live keys), TWILIO_*, etc.
+
+# Storage is R2 (S3-compatible), not MinIO, in production:
+S3_ENDPOINT_URL=https://<account-id>.r2.cloudflarestorage.com
+S3_ACCESS_KEY=<r2 access key id>
+S3_SECRET_KEY=<r2 secret access key>
+S3_BUCKET_NAME=<r2 bucket name>
+S3_REGION=auto
+CDN_BASE_URL=https://<r2 public dev URL or custom domain>
 ```
 
 Then bring the stack up for the first time:
