@@ -107,6 +107,12 @@ services:
       - /app/node_modules
     env_file:
       - .env
+    environment:
+      # Empty by default = identical to unset, i.e. normal behavior (API_URL
+      # inferred from the browser's own host:8000). scripts/demo-ngrok.sh
+      # exports VITE_API_URL=/api in the shell before `up` to switch this one
+      # run into single-tunnel proxy mode, without touching .env.
+      VITE_API_URL: ${VITE_API_URL:-}
 
   renderer:
     build:

@@ -1,11 +1,11 @@
-import client from "./client";
+import client, { API_URL, IS_PROXIED_API } from "./client";
 import type { Template } from "@/types";
 
 export async function listTemplates(categoryId?: string, search?: string) {
   const params: Record<string, string> = {};
   if (categoryId) params.category_id = categoryId;
   if (search) params.search = search;
-  const { data } = await client.get<Template[]>("/templates", { params });
+  const { data } = await client.get<Template[]>("/templates/", { params });
   return data;
 }
 
@@ -15,16 +15,16 @@ export async function getTemplate(slug: string) {
 }
 
 export async function fetchVideoUrl(templateId: string): Promise<string> {
-  const baseUrl = import.meta.env.VITE_API_URL || "http://localhost:8000/api";
+  const baseUrl = API_URL;
   const res = await fetch(`${baseUrl}/templates/${templateId}/video-token`);
   if (!res.ok) throw new Error("Failed to get video token");
-  const { video_url } = await res.json();
-  return video_url;
+  const { video_url, video_stream_url } = await res.json();
+  return IS_PROXIED_API ? video_stream_url : video_url;
 }
 
 /** @deprecated use fetchVideoUrl (async) */
 export function getTemplateVideoUrl(templateId: string) {
-  const baseUrl = import.meta.env.VITE_API_URL || "http://localhost:8000/api";
+  const baseUrl = API_URL;
   return `${baseUrl}/templates/${templateId}/video`;
 }
 

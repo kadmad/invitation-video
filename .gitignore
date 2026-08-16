@@ -66,3 +66,6 @@ skills-lock.json
 
 # Video assets (large binaries)
 assets/*.mp4
+
+# Scratch drop zone for bulk font imports (source files, not app code)
+/font-library-import/

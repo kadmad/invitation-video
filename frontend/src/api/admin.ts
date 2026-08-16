@@ -1,4 +1,4 @@
-import client from "@/api/client";
+import client, { API_URL, IS_PROXIED_API } from "@/api/client";
 import type { Category, Template, Font, TextBlock, ImageBlock } from "@/types";
 import type { AdminStats } from "@/types";
 
@@ -47,11 +47,11 @@ export const uploadTemplateVideo = (templateId: string, file: File) => {
 };
 
 export const getTemplateVideoUrl = async (templateId: string): Promise<string> => {
-  const baseUrl = import.meta.env.VITE_API_URL || "http://localhost:8000/api";
+  const baseUrl = API_URL;
   const res = await fetch(`${baseUrl}/templates/${templateId}/video-token`);
   if (!res.ok) throw new Error("Failed to get video token");
-  const { video_url } = await res.json();
-  return video_url;
+  const { video_url, video_stream_url } = await res.json();
+  return IS_PROXIED_API ? video_stream_url : video_url;
 };
 
 // ── Text Blocks ────────────────────────────────────────────────────────────────

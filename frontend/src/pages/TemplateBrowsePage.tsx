@@ -1,12 +1,15 @@
 import { useEffect, useRef, useState, useCallback } from "react";
-import { Link } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 import { listTemplates } from "@/api/templates";
 import { listCategories } from "@/api/categories";
 import PageTransition from "@/components/common/PageTransition";
+import { useSeo } from "@/lib/seo";
+import { API_URL, IS_PROXIED_API } from "@/api/client";
+import { SITE_DESCRIPTION, SITE_NAME, SITE_URL } from "@/lib/site";
 import type { Template, Category } from "@/types";
 
 /* ── Shared token cache across all cards ── */
-const BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:8000/api";
+const BASE_URL = API_URL;
 
 interface CachedToken { url: string; expiresAt: number; previewStatus?: string | null }
 const tokenCache = new Map<string, CachedToken>();
@@ -25,9 +28,20 @@ async function getVideoUrl(templateId: string, forceRefresh = false): Promise<Ca
 
   const promise = (async () => {
     const res = await fetch(`${BASE_URL}/templates/${templateId}/video-token`);
-    const { expires_at, has_preview, preview_status, video_url, preview_url } = await res.json();
+    const {
+      expires_at,
+      has_preview,
+      preview_status,
+      video_url,
+      preview_url,
+      video_stream_url,
+      preview_stream_url,
+    } = await res.json();
+    const url = IS_PROXIED_API
+      ? (has_preview && preview_stream_url ? preview_stream_url : video_stream_url)
+      : (has_preview && preview_url ? preview_url : video_url);
     const entry: CachedToken = {
-      url: has_preview && preview_url ? preview_url : video_url,
+      url,
       expiresAt: expires_at,
       previewStatus: preview_status,
     };
@@ -310,6 +324,31 @@ function Pagination({
 }
 
 export default function TemplateBrowsePage() {
+  // "/" and "/templates" render this page — keep the canonical honest.
+  const { pathname } = useLocation();
+
+  useSeo({
+    title:
+      pathname === "/templates"
+        ? "Invitation Video Templates"
+        : `${SITE_NAME} — Online Invitation Video Maker`,
+    description: SITE_DESCRIPTION,
+    path: pathname === "/templates" ? "/templates" : "/",
+    jsonLd: {
+      "@context": "https://schema.org",
+      "@type": "WebSite",
+      name: SITE_NAME,
+      url: SITE_URL,
+      description: SITE_DESCRIPTION,
+      publisher: { "@type": "Organization", name: SITE_NAME, url: SITE_URL },
+      potentialAction: {
+        "@type": "SearchAction",
+        target: `${SITE_URL}/templates?search={search_term_string}`,
+        "query-input": "required name=search_term_string",
+      },
+    },
+  });
+
   const [templates, setTemplates] = useState<Template[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [selectedCategory, setSelectedCategory] = useState<string>("");

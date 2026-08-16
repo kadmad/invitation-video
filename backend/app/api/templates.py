@@ -3,8 +3,9 @@ import hmac
 import time
 import uuid
 
+import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, UploadFile, status
-from fastapi.responses import RedirectResponse, Response
+from fastapi.responses import RedirectResponse, Response, StreamingResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -86,6 +87,7 @@ async def get_template(slug_or_id: str, db: AsyncSession = Depends(get_db)):
 @router.get("/{template_id}/video-token")
 async def get_video_token(
     template_id: uuid.UUID,
+    request: Request,
     db: AsyncSession = Depends(get_db),
 ):
     """Issue a short-lived signed token for video playback."""
@@ -94,8 +96,9 @@ async def get_video_token(
     if not template or not template.video_key:
         raise HTTPException(status_code=404, detail="Template not found")
     token, expires_at = _generate_video_token(str(template_id))
+    host = request.url.hostname
     # Presigned S3 URL for direct browser access (native range requests, no proxy)
-    video_url = storage_service.presigned_url(template.video_key, expires=300)
+    video_url = storage_service.presigned_url(template.video_key, expires=300, public_host=host)
     # Extract version from preview_key for cache busting (preview_<ts>.mp4)
     preview_version = ""
     preview_url = None
@@ -103,13 +106,20 @@ async def get_video_token(
         import re as _re
         m = _re.search(r"preview_(\d+)\.mp4$", template.preview_key)
         preview_version = m.group(1) if m else ""
-        preview_url = storage_service.presigned_url(template.preview_key, expires=3600)
+        preview_url = storage_service.presigned_url(template.preview_key, expires=3600, public_host=host)
     return {
         "token": token,
         "expires_at": expires_at,
         "has_preview": bool(template.preview_key),
         "preview_status": template.preview_status,
         "preview_v": preview_version,
+        # Same-origin (relative) alternative to video_url/preview_url, for
+        # setups where MinIO isn't separately reachable by the browser — the
+        # frontend picks these when VITE_API_URL is a relative path.
+        "video_stream_url": f"/api/templates/{template_id}/video-file?token={token}",
+        "preview_stream_url": (
+            f"/api/templates/{template_id}/preview-file?token={token}" if template.preview_key else None
+        ),
         "video_url": video_url,
         "preview_url": preview_url,
     }
@@ -118,6 +128,7 @@ async def get_video_token(
 @router.get("/{template_id}/preview-video")
 async def get_preview_video(
     template_id: uuid.UUID,
+    request: Request,
     token: str = Query(...),
     db: AsyncSession = Depends(get_db),
 ):
@@ -128,13 +139,14 @@ async def get_preview_video(
     template = result.scalar_one_or_none()
     if not template or not template.preview_key:
         raise HTTPException(status_code=404, detail="No preview available")
-    url = storage_service.presigned_url(template.preview_key, expires=3600)
+    url = storage_service.presigned_url(template.preview_key, expires=3600, public_host=request.url.hostname)
     return RedirectResponse(url=url, status_code=302)
 
 
 @router.get("/{template_id}/video")
 async def get_video(
     template_id: uuid.UUID,
+    request: Request,
     token: str = Query(...),
     db: AsyncSession = Depends(get_db),
 ):
@@ -147,8 +159,82 @@ async def get_video(
         raise HTTPException(status_code=404, detail="Template not found")
     if not template.video_key:
         raise HTTPException(status_code=400, detail="No video uploaded")
-    url = storage_service.presigned_url(template.video_key, expires=300)
+    url = storage_service.presigned_url(template.video_key, expires=300, public_host=request.url.hostname)
     return RedirectResponse(url=url, status_code=302)
+
+
+async def _stream_from_storage(request: Request, key: str) -> StreamingResponse:
+    """Proxy bytes from MinIO through the backend, forwarding Range requests so
+    video seeking still works. Only meant for setups where the browser can't
+    reach MinIO directly (e.g. the single-tunnel ngrok demo, where only the
+    frontend's port is exposed) — normal/LAN access uses the direct presigned
+    S3 URL instead, which is cheaper for the backend."""
+    internal_url = storage_service.internal_presigned_url(key, expires=600)
+    headers = {}
+    range_header = request.headers.get("range")
+    if range_header:
+        headers["range"] = range_header
+
+    client = httpx.AsyncClient(timeout=30)
+    upstream = await client.send(
+        client.build_request("GET", internal_url, headers=headers), stream=True
+    )
+
+    async def body():
+        try:
+            async for chunk in upstream.aiter_bytes(65536):
+                yield chunk
+        finally:
+            await upstream.aclose()
+            await client.aclose()
+
+    passthrough_headers = {}
+    for h in ("content-range", "content-length", "accept-ranges", "cache-control"):
+        if h in upstream.headers:
+            passthrough_headers[h] = upstream.headers[h]
+    passthrough_headers.setdefault("accept-ranges", "bytes")
+
+    return StreamingResponse(
+        body(),
+        status_code=upstream.status_code,
+        media_type=upstream.headers.get("content-type", "video/mp4"),
+        headers=passthrough_headers,
+    )
+
+
+@router.get("/{template_id}/video-file")
+async def stream_video_file(
+    template_id: uuid.UUID,
+    request: Request,
+    token: str = Query(...),
+    db: AsyncSession = Depends(get_db),
+):
+    """Same video as /video, streamed through the backend instead of redirecting
+    to MinIO directly — for setups where only the backend is externally reachable."""
+    if not _verify_video_token(token, str(template_id)):
+        raise HTTPException(status_code=403, detail="Invalid or expired token")
+    result = await db.execute(select(Template).where(Template.id == template_id))
+    template = result.scalar_one_or_none()
+    if not template or not template.video_key:
+        raise HTTPException(status_code=404, detail="No video uploaded")
+    return await _stream_from_storage(request, template.video_key)
+
+
+@router.get("/{template_id}/preview-file")
+async def stream_preview_file(
+    template_id: uuid.UUID,
+    request: Request,
+    token: str = Query(...),
+    db: AsyncSession = Depends(get_db),
+):
+    """Same preview video as /preview-video, streamed through the backend."""
+    if not _verify_video_token(token, str(template_id)):
+        raise HTTPException(status_code=403, detail="Invalid or expired token")
+    result = await db.execute(select(Template).where(Template.id == template_id))
+    template = result.scalar_one_or_none()
+    if not template or not template.preview_key:
+        raise HTTPException(status_code=404, detail="No preview available")
+    return await _stream_from_storage(request, template.preview_key)
 
 
 @router.get("/{slug}/thumbnail")
@@ -200,6 +286,7 @@ async def upload_user_image(
     template_id: uuid.UUID,
     block_id: uuid.UUID,
     file: UploadFile,
+    request: Request,
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
@@ -218,5 +305,5 @@ async def upload_user_image(
     data = await file.read()
     storage_service.upload(image_key, data, content_type="image/webp")
 
-    url = storage_service.presigned_url(image_key)
+    url = storage_service.presigned_url(image_key, public_host=request.url.hostname)
     return {"image_key": image_key, "url": url}

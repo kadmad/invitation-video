@@ -8,10 +8,11 @@ import {
   getTemplateVideoUrl,
 } from "@/api/admin";
 import ConfirmModal from "@/components/admin/ConfirmModal";
+import { API_URL } from "@/api/client";
 import type { Template, Category } from "@/types";
 
 const PER_PAGE = 12;
-const BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:8000/api";
+const BASE_URL = API_URL;
 
 /* ── Shared video URL cache ── */
 interface CachedUrl { url: string; fetchedAt: number }
