@@ -1,0 +1,28 @@
+# Production renderer: bakes the frontend's Remotion source into the image
+# instead of relying on the dev-only bind mount (`./frontend:/frontend` in
+# docker-compose.yml). Build context must be the REPO ROOT, not ./renderer,
+# e.g.: docker build -f renderer/Dockerfile.prod -t <tag> .
+FROM node:20-slim
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    chromium \
+    ffmpeg \
+    fonts-noto-core \
+    && rm -rf /var/lib/apt/lists/*
+
+ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
+ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
+ENV CHROMIUM_PATH=/usr/bin/chromium
+
+WORKDIR /app
+COPY renderer/package.json renderer/package-lock.json* ./
+RUN npm install
+COPY renderer/ .
+
+# server.js looks for /frontend/src to find the Remotion composition source
+# (see the fs.existsSync check) — dev mounts this as a volume, prod copies
+# it in at build time instead.
+COPY frontend/ /frontend/
+
+EXPOSE 3100
+CMD ["node", "server.js"]

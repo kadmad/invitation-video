@@ -1,0 +1,16 @@
+# Reverse proxy + automatic HTTPS (Let's Encrypt) for production.
+# {$DOMAIN} is read from the environment — set DOMAIN=yourdomain.com in the
+# production .env on the server. Caddy handles certificate issuance and
+# renewal on its own; nothing else to configure for TLS.
+
+{$DOMAIN} {
+    encode gzip
+
+    handle /api/* {
+        reverse_proxy backend:8000
+    }
+
+    handle {
+        reverse_proxy frontend:80
+    }
+}

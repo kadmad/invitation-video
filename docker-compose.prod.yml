@@ -1,0 +1,143 @@
+# Production stack. Pulls pre-built images from GHCR (built by
+# .github/workflows/deploy.yml) instead of building from source, runs
+# without --reload/dev bind-mounts, and keeps postgres/redis/minio off the
+# host's public network entirely — only Caddy (80/443) is exposed.
+#
+# Usage on the server:
+#   docker compose -f docker-compose.prod.yml --env-file .env pull
+#   docker compose -f docker-compose.prod.yml --env-file .env up -d
+#
+# Set GHCR_NAMESPACE in .env to your "ghcr.io/<owner>/<repo>" prefix (see
+# DEPLOY.md) — the workflow pushes images there.
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-invitation}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-invitation_secret}
+      POSTGRES_DB: ${POSTGRES_DB:-invitation_video}
+    volumes:
+      - pg-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-invitation}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  minio:
+    image: minio/minio:latest
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin123}
+      MINIO_API_CORS_ALLOW_ORIGIN: ${MINIO_CORS_ORIGIN:-*}
+    volumes:
+      - minio-data:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  minio-init:
+    image: minio/mc:latest
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: >
+      /bin/sh -c '
+      mc alias set local http://minio:9000 $${MINIO_ROOT_USER:-minioadmin} $${MINIO_ROOT_PASSWORD:-minioadmin123};
+      mc mb local/$${S3_BUCKET_NAME:-invitation-video} --ignore-existing;
+      mc anonymous set download local/$${S3_BUCKET_NAME:-invitation-video}/fonts;
+      exit 0;
+      '
+
+  backend:
+    image: ${GHCR_NAMESPACE}-backend:latest
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000
+    env_file:
+      - .env
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio-init:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  worker:
+    image: ${GHCR_NAMESPACE}-backend:latest
+    command: celery -A app.workers.celery_app worker --loglevel=info --concurrency=1
+    env_file:
+      - .env
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio-init:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+  frontend:
+    image: ${GHCR_NAMESPACE}-frontend:latest
+    restart: unless-stopped
+
+  renderer:
+    image: ${GHCR_NAMESPACE}-renderer:latest
+    shm_size: "4gb"
+    environment:
+      RENDERER_PORT: 3100
+      RENDER_CONCURRENCY: ${RENDER_CONCURRENCY:-4}
+      MAX_PARALLEL_JOBS: ${MAX_PARALLEL_JOBS:-2}
+    deploy:
+      resources:
+        limits:
+          memory: 6g
+    depends_on:
+      minio-init:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+  caddy:
+    image: caddy:2-alpine
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      DOMAIN: ${DOMAIN}
+    volumes:
+      - ./ops/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      - backend
+      - frontend
+    restart: unless-stopped
+
+volumes:
+  pg-data:
+  redis-data:
+  minio-data:
+  caddy-data:
+  caddy-config:
