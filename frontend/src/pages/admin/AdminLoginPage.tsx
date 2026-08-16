@@ -29,7 +29,7 @@ export default function AdminLoginPage() {
       <div className="w-full max-w-sm">
         <div className="text-center mb-8">
           <h1 className="text-2xl font-bold text-slate-900">Admin Login</h1>
-          <p className="text-slate-500 text-sm mt-1">Invitation Video — Admin Panel</p>
+          <p className="text-slate-500 text-sm mt-1">Bring My Matter — Admin Panel</p>
         </div>
 
         <div className="card p-6">

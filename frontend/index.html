@@ -3,11 +3,74 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Invitation Video</title>
+    <meta name="theme-color" content="#4f6ef7" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+
+    <title>Bring My Matter — Online Invitation Video Maker for Indian Weddings</title>
+    <meta
+      name="description"
+      content="Create wedding, engagement, birthday and housewarming video invitations online. Pick a template, add your names, dates and photos in English, Hindi or Gujarati, and download an HD video and PDF card in minutes."
+    />
+    <meta name="robots" content="index, follow, max-image-preview:large" />
+    <link rel="canonical" href="https://bringmymatter.com/" />
+
+    <!-- Font loading: preconnect early, load non-blocking (avoids the render-blocking
+         @import that used to sit in index.css and delay first paint on mobile). -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap"
+      media="print"
+      onload="this.media='all'"
+    />
+    <noscript>
+      <link
+        rel="stylesheet"
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap"
+      />
+    </noscript>
+
+    <!-- Open Graph -->
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Bring My Matter" />
+    <meta property="og:title" content="Bring My Matter — Online Invitation Video Maker" />
+    <meta
+      property="og:description"
+      content="Design and download HD video invitations and PDF cards for weddings, engagements, birthdays and housewarmings — in English, Hindi or Gujarati."
+    />
+    <meta property="og:url" content="https://bringmymatter.com/" />
+    <meta property="og:locale" content="en_IN" />
+
+    <!-- Twitter -->
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Bring My Matter — Online Invitation Video Maker" />
+    <meta
+      name="twitter:description"
+      content="Design and download HD video invitations and PDF cards for weddings, engagements, birthdays and housewarmings."
+    />
+
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "Organization",
+        "name": "Bring My Matter",
+        "url": "https://bringmymatter.com",
+        "description": "Online invitation video and card maker for Indian weddings and celebrations.",
+        "areaServed": "IN",
+        "contactPoint": {
+          "@type": "ContactPoint",
+          "contactType": "customer support",
+          "email": "support@bringmymatter.com",
+          "availableLanguage": ["en", "hi", "gu"]
+        }
+      }
+    </script>
   </head>
   <body>
     <div id="root"></div>
-    <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
+    <!-- defer: only needed at checkout, shouldn't block initial HTML parse/paint -->
+    <script src="https://checkout.razorpay.com/v1/checkout.js" defer></script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

@@ -10,6 +10,9 @@ import RenderStatusPage from "@/pages/RenderStatusPage";
 import MyOrdersPage from "@/pages/MyOrdersPage";
 import InvoicePage from "@/pages/InvoicePage";
 import MyCustomizationsPage from "@/pages/MyCustomizationsPage";
+import TermsPage from "@/pages/legal/TermsPage";
+import PrivacyPage from "@/pages/legal/PrivacyPage";
+import RefundPage from "@/pages/legal/RefundPage";
 import AdminRoute from "@/components/admin/AdminRoute";
 import AdminLayout from "@/components/admin/AdminLayout";
 import AdminDashboardPage from "@/pages/admin/AdminDashboardPage";
@@ -41,6 +44,9 @@ export default function App() {
         <Route path="/" element={<TemplateBrowsePage />} />
         <Route path="/templates" element={<TemplateBrowsePage />} />
         <Route path="/editor/:slug" element={<EditorPage />} />
+        <Route path="/terms" element={<TermsPage />} />
+        <Route path="/privacy" element={<PrivacyPage />} />
+        <Route path="/refund" element={<RefundPage />} />
 
         {/* Protected routes */}
         <Route

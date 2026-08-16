@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from "react";
+import { Link } from "react-router-dom";
 import { useAuthStore } from "@/store/authStore";
 
 type Step = "phone" | "otp";
@@ -11,6 +12,9 @@ export default function AuthModal() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [resendTimer, setResendTimer] = useState(0);
+  // Pre-ticked, as agreed with the product owner. Users can untick it, and the
+  // consent that is actually recorded is the state of this box at verify time.
+  const [acceptedTerms, setAcceptedTerms] = useState(true);
   const otpRefs = useRef<(HTMLInputElement | null)[]>([]);
   const timerRef = useRef<ReturnType<typeof setInterval>>();
 
@@ -23,6 +27,7 @@ export default function AuthModal() {
       setError("");
       setLoading(false);
       setResendTimer(0);
+      setAcceptedTerms(true);
     }
     return () => clearInterval(timerRef.current);
   }, [showAuthModal]);
@@ -44,6 +49,10 @@ export default function AuthModal() {
   const handleSendOTP = async () => {
     if (phone.length < 10) {
       setError("Enter valid 10-digit mobile number");
+      return;
+    }
+    if (!acceptedTerms) {
+      setError("Please accept the Terms & Conditions and Privacy Policy to continue");
       return;
     }
     setLoading(true);
@@ -86,7 +95,7 @@ export default function AuthModal() {
     setLoading(true);
     setError("");
     try {
-      await verifyOTP(phone, code);
+      await verifyOTP(phone, code, acceptedTerms);
       // Modal closes automatically via store
     } catch (err: any) {
       setError(err.response?.data?.detail || "Invalid OTP");
@@ -180,19 +189,60 @@ export default function AuthModal() {
               />
             </div>
 
+            <label className="flex items-start gap-2.5 mb-4 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={acceptedTerms}
+                onChange={(e) => {
+                  setAcceptedTerms(e.target.checked);
+                  setError("");
+                }}
+                className="mt-0.5 w-4 h-4 shrink-0 rounded accent-primary-500 cursor-pointer"
+              />
+              <span className="text-xs text-slate-500 leading-relaxed">
+                I agree to the{" "}
+                <Link
+                  to="/terms"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  onClick={(e) => e.stopPropagation()}
+                  className="text-primary-500 hover:underline font-medium"
+                >
+                  Terms &amp; Conditions
+                </Link>
+                ,{" "}
+                <Link
+                  to="/privacy"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  onClick={(e) => e.stopPropagation()}
+                  className="text-primary-500 hover:underline font-medium"
+                >
+                  Privacy Policy
+                </Link>{" "}
+                and{" "}
+                <Link
+                  to="/refund"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  onClick={(e) => e.stopPropagation()}
+                  className="text-primary-500 hover:underline font-medium"
+                >
+                  Refund Policy
+                </Link>
+                , and to receiving OTP and order updates on this number.
+              </span>
+            </label>
+
             {error && <p className="text-red-500 text-sm mb-3">{error}</p>}
 
             <button
               onClick={handleSendOTP}
-              disabled={loading || phone.length < 10}
+              disabled={loading || phone.length < 10 || !acceptedTerms}
               className="btn-primary w-full py-3 text-base disabled:opacity-50"
             >
               {loading ? "Sending..." : "Send OTP"}
             </button>
-
-            <p className="text-xs text-slate-400 text-center mt-4">
-              By continuing, you agree to our Terms & Conditions
-            </p>
           </>
         ) : (
           <>

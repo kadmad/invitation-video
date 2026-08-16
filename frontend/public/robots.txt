@@ -1,0 +1,14 @@
+User-agent: *
+Allow: /$
+Allow: /templates
+Allow: /terms
+Allow: /privacy
+Allow: /refund
+Disallow: /admin
+Disallow: /dashboard
+Disallow: /my-orders
+Disallow: /my-customizations
+Disallow: /invoice/
+Disallow: /render/
+
+Sitemap: https://bringmymatter.com/sitemap.xml

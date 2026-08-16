@@ -334,7 +334,7 @@ def _geocode_nominatim(location_text: str) -> tuple[float | None, float | None]:
         resp = httpx.get(
             "https://nominatim.openstreetmap.org/search",
             params={"q": location_text, "format": "json", "limit": 1},
-            headers={"User-Agent": "InvitationVideoPDF/1.0"},
+            headers={"User-Agent": "BringMyMatterPDF/1.0"},
             timeout=10,
         )
         results = resp.json()
@@ -385,7 +385,7 @@ def _fetch_map_image(lat: float, lng: float, google_api_key: str | None, marker_
         f"&markers={lat},{lng},red-pushpin"
     )
     try:
-        resp = httpx.get(osm_url, timeout=15, headers={"User-Agent": "InvitationVideoPDF/1.0"})
+        resp = httpx.get(osm_url, timeout=15, headers={"User-Agent": "BringMyMatterPDF/1.0"})
         if resp.status_code == 200 and len(resp.content) > 1000:
             with open(map_path, "wb") as f:
                 f.write(resp.content)

@@ -48,7 +48,7 @@ export default function InvoicePage() {
           <div className="flex flex-col sm:flex-row justify-between items-start gap-4 mb-8 border-b border-slate-100 pb-6">
             <div>
               <h1 className="text-2xl font-bold text-slate-900">Invoice</h1>
-              <p className="text-slate-500 mt-1">Invitation Video</p>
+              <p className="text-slate-500 mt-1">Bring My Matter</p>
             </div>
             <div className="text-right">
               <p className="text-lg font-semibold text-slate-900">

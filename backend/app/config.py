@@ -42,9 +42,10 @@ class Settings(BaseSettings):
     APP_BASE_URL: str = "http://localhost:5173"  # frontend URL for download links
 
     # App
-    APP_NAME: str = "Invitation Video"
+    APP_NAME: str = "Bring My Matter"
     BACKEND_CORS_ORIGINS: str = "http://localhost:5173,http://localhost:3000"
     DEBUG: bool = True
+    TERMS_VERSION: str = "2026-08-15"
 
     model_config = {"env_file": ".env", "extra": "ignore"}
 

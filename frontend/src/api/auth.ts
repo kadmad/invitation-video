@@ -9,11 +9,15 @@ export async function sendOTP(phone_number: string) {
   return data;
 }
 
-export async function verifyOTP(phone_number: string, otp: string) {
+export async function verifyOTP(
+  phone_number: string,
+  otp: string,
+  accepted_terms: boolean
+) {
   const { data } = await client.post<{
     access_token: string;
     is_new_user: boolean;
-  }>("/auth/verify-otp", { phone_number, otp });
+  }>("/auth/verify-otp", { phone_number, otp, accepted_terms });
   return data;
 }
 

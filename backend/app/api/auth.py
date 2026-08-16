@@ -1,4 +1,5 @@
 import re
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
@@ -95,14 +96,29 @@ async def verify_otp_endpoint(body: VerifyOTPRequest, db: AsyncSession = Depends
     is_new_user = False
 
     if not user:
+        if not body.accepted_terms:
+            raise HTTPException(
+                status_code=400,
+                detail="You must accept the Terms & Conditions and Privacy Policy to create an account",
+            )
         user = User(
             phone_number=phone,
             full_name="User",
+            terms_accepted_at=datetime.now(timezone.utc),
+            terms_version=settings.TERMS_VERSION,
         )
         db.add(user)
         await db.commit()
         await db.refresh(user)
         is_new_user = True
+    elif body.accepted_terms and (
+        user.terms_accepted_at is None or user.terms_version != settings.TERMS_VERSION
+    ):
+        # Existing user re-consenting (first time, or to an updated terms version)
+        user.terms_accepted_at = datetime.now(timezone.utc)
+        user.terms_version = settings.TERMS_VERSION
+        await db.commit()
+        await db.refresh(user)
 
     if not user.is_active:
         raise HTTPException(status_code=403, detail="Account disabled")

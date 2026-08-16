@@ -10,7 +10,11 @@ interface AuthState {
   authModalCallback: (() => void) | null;
   adminLogin: (email: string, password: string) => Promise<void>;
   sendOTP: (phone: string) => Promise<void>;
-  verifyOTP: (phone: string, otp: string) => Promise<{ is_new_user: boolean }>;
+  verifyOTP: (
+    phone: string,
+    otp: string,
+    acceptedTerms: boolean
+  ) => Promise<{ is_new_user: boolean }>;
   logout: () => void;
   loadUser: () => Promise<void>;
   openAuthModal: (onSuccess?: () => void) => void;
@@ -41,8 +45,8 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     await sendOTPApi(phone);
   },
 
-  verifyOTP: async (phone, otp) => {
-    const { access_token, is_new_user } = await verifyOTPApi(phone, otp);
+  verifyOTP: async (phone, otp, acceptedTerms) => {
+    const { access_token, is_new_user } = await verifyOTPApi(phone, otp, acceptedTerms);
     localStorage.setItem("token", access_token);
     set({ token: access_token });
     const user = await getMe();

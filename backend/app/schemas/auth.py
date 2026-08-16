@@ -1,4 +1,5 @@
 import uuid
+from datetime import datetime
 
 from pydantic import BaseModel, EmailStr
 
@@ -26,6 +27,8 @@ class UserResponse(BaseModel):
     full_name: str
     is_active: bool
     is_admin: bool
+    terms_accepted_at: datetime | None = None
+    terms_version: str | None = None
 
     model_config = {"from_attributes": True}
 
@@ -42,6 +45,7 @@ class SendOTPResponse(BaseModel):
 class VerifyOTPRequest(BaseModel):
     phone_number: str
     otp: str
+    accepted_terms: bool = False
 
 
 class VerifyOTPResponse(BaseModel):
