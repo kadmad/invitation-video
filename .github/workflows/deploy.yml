@@ -47,6 +47,8 @@ jobs:
           file: ./frontend/Dockerfile.prod
           push: true
           tags: ${{ steps.namespace.outputs.value }}-frontend:latest
+          build-args: |
+            VITE_API_URL=${{ vars.VITE_API_URL }}
 
   deploy:
     needs: build-and-push
