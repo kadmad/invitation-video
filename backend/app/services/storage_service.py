@@ -83,7 +83,14 @@ class StorageService:
         """Presigned URL for browser access. Pass `public_host` (the hostname
         the requesting browser used, e.g. from `request.url.hostname`) so the
         URL works whether the app is opened via localhost or a LAN IP; falls
-        back to the static S3_PUBLIC_URL setting when omitted."""
+        back to the static S3_PUBLIC_URL setting when omitted.
+
+        When CDN_BASE_URL is set (R2/production), the `public_host` LAN
+        matching is meaningless (there's no per-host MinIO port to hit) —
+        serve the stable public CDN URL instead, which is also cacheable
+        unlike a presigned URL that's unique on every call."""
+        if settings.CDN_BASE_URL:
+            return self.public_url(key)
         client = self._client_for_host(public_host) if public_host else self._public_client
         return client.generate_presigned_url(
             "get_object",
