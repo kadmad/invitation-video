@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { Player, type PlayerRef } from "@remotion/player";
 import GenericTemplate from "@/remotion/compositions/GenericTemplate";
 import { useEditorStore } from "@/store/editorStore";
@@ -109,6 +110,23 @@ export default function PreviewPlayer() {
   const [translitDone, setTranslitDone] = useState(false);
   const blockTranslitTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const wasPlayingRef = useRef(false);
+
+  // The Remotion Player's own fullscreen button promotes ITS internal
+  // container to the browser's fullscreen top-layer — our watermark div,
+  // sitting outside that subtree as a sibling, would otherwise be left
+  // behind (elements outside the fullscreen element can't render over it,
+  // regardless of z-index). Portal the watermark into whatever the browser
+  // reports as fullscreenElement so it stays visible there too.
+  const [fullscreenTarget, setFullscreenTarget] = useState<Element | null>(null);
+  useEffect(() => {
+    const handler = () => setFullscreenTarget(document.fullscreenElement);
+    document.addEventListener("fullscreenchange", handler);
+    document.addEventListener("webkitfullscreenchange", handler);
+    return () => {
+      document.removeEventListener("fullscreenchange", handler);
+      document.removeEventListener("webkitfullscreenchange", handler);
+    };
+  }, []);
 
   useEffect(() => {
     if (!template || fontList.length === 0) return;
@@ -368,7 +386,8 @@ export default function PreviewPlayer() {
     }
   }, [previewReady]);
 
-  // Seek to block start_time when user focuses an input
+  // Seek to a block's start frame when the user focuses its input, then keep
+  // playing from there so they see their edit in motion, not a frozen frame.
   useEffect(() => {
     if (seekToTime === null || !template) return;
     if (!playerRef.current) {
@@ -387,9 +406,12 @@ export default function PreviewPlayer() {
   if (!template) return null;
 
   return (
-    <div className="card p-4 sticky top-20">
-      <p className="text-sm font-medium text-slate-500 mb-3">Live Preview</p>
-      <div style={{ position: "relative", width: 360, height: 640 }}>
+    <div className="card p-2.5 sm:p-3 lg:p-4 lg:sticky lg:top-20">
+      <p className="hidden lg:block text-sm font-medium text-slate-500 mb-3">Live Preview</p>
+      <div
+        className="relative mx-auto w-40 sm:w-52 lg:w-[390px]"
+        style={{ aspectRatio: `${template.width} / ${template.height}` }}
+      >
         {!previewReady && (
           <div className="absolute inset-0 flex items-center justify-center rounded-xl z-10 pointer-events-none"
             style={{ background: "rgba(0,0,0,0.3)", backdropFilter: "blur(2px)" }}
@@ -409,8 +431,8 @@ export default function PreviewPlayer() {
           compositionWidth={template.width}
           compositionHeight={template.height}
           style={{
-            width: 360,
-            height: 640,
+            width: "100%",
+            height: "100%",
             borderRadius: 12,
             overflow: "hidden",
             boxShadow: "0 4px 24px rgba(0,0,0,0.15)",
@@ -421,40 +443,45 @@ export default function PreviewPlayer() {
           autoPlay
           numberOfSharedAudioTags={5}
         />
-        <div
-          style={{
-            position: "absolute",
-            inset: 0,
-            pointerEvents: "none",
-            overflow: "hidden",
-            borderRadius: 12,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-          }}
-        >
-          <div
-            style={{
-              transform: "rotate(-30deg)",
-              whiteSpace: "nowrap",
-              fontSize: 28,
-              fontWeight: 700,
-              color: "rgba(255, 255, 255, 0.4)",
-              letterSpacing: "0.2em",
-              lineHeight: "3.5em",
-              textAlign: "center",
-              userSelect: "none",
-              width: "200%",
-            }}
-          >
-            {Array.from({ length: 8 }, (_, i) => (
-              <div key={i}>
-                PREVIEW &nbsp; PREVIEW &nbsp; PREVIEW &nbsp; PREVIEW
-              </div>
-            ))}
-          </div>
-        </div>
+        {fullscreenTarget ? createPortal(watermarkOverlay, fullscreenTarget) : watermarkOverlay}
       </div>
     </div>
   );
 }
+
+const watermarkOverlay = (
+  <div
+    style={{
+      position: "absolute",
+      inset: 0,
+      pointerEvents: "none",
+      overflow: "hidden",
+      borderRadius: 12,
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      zIndex: 2147483647,
+    }}
+  >
+    <div
+      style={{
+        transform: "rotate(-30deg)",
+        whiteSpace: "nowrap",
+        fontSize: 28,
+        fontWeight: 700,
+        color: "rgba(255, 255, 255, 0.4)",
+        letterSpacing: "0.2em",
+        lineHeight: "3.5em",
+        textAlign: "center",
+        userSelect: "none",
+        width: "200%",
+      }}
+    >
+      {Array.from({ length: 8 }, (_, i) => (
+        <div key={i}>
+          PREVIEW &nbsp; PREVIEW &nbsp; PREVIEW &nbsp; PREVIEW
+        </div>
+      ))}
+    </div>
+  </div>
+);

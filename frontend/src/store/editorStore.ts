@@ -18,6 +18,9 @@ interface PrefillData {
   fieldValues: Record<string, string>;
   fontId: string | null;
   textColorOverrides: Record<string, string> | null;
+  editorMode?: string | null;
+  blockOverrides?: Record<string, string> | null;
+  blockFormatOverrides?: Record<string, FormatRange[]> | null;
 }
 
 interface EditorState {
@@ -73,14 +76,22 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   blockFormatOverrides: {},
   transliteratedBlockOverrides: {},
 
-  setTemplate: (template) => {
-    const fieldValues: Record<string, string> = {};
-    const tags = extractTags(template);
-    tags.forEach((tag) => {
-      fieldValues[tag] = "";
-    });
-    set({ template, fieldValues, transliteratedValues: {}, textColorOverrides: {} });
-  },
+  setTemplate: (template) =>
+    set((state) => {
+      // A redundant re-fetch of the SAME template (StrictMode's double effect
+      // invocation in dev, a retry, etc.) must not clobber field values a
+      // draft/prefill restore may already have applied. Only a genuine
+      // template switch resets the form.
+      if (state.template?.id === template.id) {
+        return { template };
+      }
+      const fieldValues: Record<string, string> = {};
+      const tags = extractTags(template);
+      tags.forEach((tag) => {
+        fieldValues[tag] = "";
+      });
+      return { template, fieldValues, transliteratedValues: {}, textColorOverrides: {} };
+    }),
 
   setFont: (font, url) => set({ font, fontUrl: url }),
 

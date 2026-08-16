@@ -27,6 +27,9 @@ export default function MyCustomizationsPage() {
       fieldValues: draft.field_values,
       fontId: draft.font_id,
       textColorOverrides: draft.text_color_override,
+      editorMode: draft.editor_mode,
+      blockOverrides: draft.block_overrides,
+      blockFormatOverrides: draft.block_format_overrides,
     });
     navigate(`/editor/${draft.template_slug}`);
   };

@@ -16,6 +16,9 @@ export interface DraftListItem {
   field_values: Record<string, string>;
   font_id: string | null;
   text_color_override: Record<string, string> | null;
+  editor_mode?: string | null;
+  block_overrides?: Record<string, string> | null;
+  block_format_overrides?: Record<string, any[]> | null;
   updated_at: string;
 }
 

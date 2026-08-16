@@ -98,16 +98,69 @@ export default function EditorPage() {
   const saveDraftTimer = useRef<ReturnType<typeof setTimeout>>();
   const draftApplied = useRef(false);
 
+  // Reads live state straight from the stores (never a stale closure) so it is
+  // safe to call from cleanup / unload handlers, not just the debounced effect.
+  const flushDraftSave = useCallback(() => {
+    const state = useEditorStore.getState();
+    if (!state.template || !draftApplied.current) return;
+
+    const hasValues = Object.values(state.fieldValues).some((v) => v.trim());
+    const hasBlockOverrides = state.editorMode === "advanced" && Object.values(state.blockOverrides).some((v) => v.trim());
+    if (!hasValues && !hasBlockOverrides) return;
+
+    const draftData: {
+      field_values: Record<string, string>;
+      font_id: string | null;
+      text_color_override: Record<string, string> | null;
+      editor_mode?: string;
+      block_overrides?: Record<string, string>;
+      block_format_overrides?: Record<string, any[]>;
+    } = {
+      field_values: state.fieldValues,
+      font_id: state.font?.id ?? null,
+      text_color_override: Object.keys(state.textColorOverrides).length > 0 ? state.textColorOverrides : null,
+    };
+
+    if (state.editorMode === "advanced") {
+      draftData.editor_mode = state.editorMode;
+      draftData.block_overrides = state.blockOverrides;
+      if (Object.keys(state.blockFormatOverrides).length > 0) {
+        draftData.block_format_overrides = state.blockFormatOverrides;
+      }
+    }
+
+    if (useAuthStore.getState().token) {
+      saveDraft(state.template.id, draftData).catch(() => {});
+    } else {
+      saveGuestDraft(state.template.id, draftData);
+    }
+  }, []);
+
+  // Save immediately when the browser tab closes or refreshes mid-edit, so the
+  // 1s autosave debounce below can't lose the last few keystrokes.
+  useEffect(() => {
+    window.addEventListener("beforeunload", flushDraftSave);
+    window.addEventListener("pagehide", flushDraftSave);
+    return () => {
+      window.removeEventListener("beforeunload", flushDraftSave);
+      window.removeEventListener("pagehide", flushDraftSave);
+    };
+  }, [flushDraftSave]);
+
   useEffect(() => {
     if (slug) {
       getTemplate(slug).then(setTemplate);
     }
     listFonts().then(setFonts);
     return () => {
+      // Same reason as above, for in-app navigation away from the editor —
+      // flush before reset() clears the store the cleanup is reading from.
+      clearTimeout(saveDraftTimer.current);
+      flushDraftSave();
       draftApplied.current = false;
       reset();
     };
-  }, [slug]);
+  }, [slug, flushDraftSave]);
 
   // Load draft or prefill once template AND fonts are loaded
   useEffect(() => {
@@ -117,7 +170,14 @@ export default function EditorPage() {
     // Prefill from re-edit takes priority
     const prefill = consumePrefill();
     if (prefill) {
-      applyDraftData(prefill.fieldValues, prefill.fontId, prefill.textColorOverrides);
+      applyDraftData(
+        prefill.fieldValues,
+        prefill.fontId,
+        prefill.textColorOverrides,
+        prefill.editorMode ?? undefined,
+        prefill.blockOverrides ?? undefined,
+        prefill.blockFormatOverrides ?? undefined
+      );
       return;
     }
 
@@ -178,40 +238,9 @@ export default function EditorPage() {
   useEffect(() => {
     if (!template || !draftApplied.current) return;
     clearTimeout(saveDraftTimer.current);
-    saveDraftTimer.current = setTimeout(() => {
-      const hasValues = Object.values(fieldValues).some((v) => v.trim());
-      const hasBlockOverrides = editorMode === "advanced" && Object.values(blockOverrides).some((v) => v.trim());
-      if (!hasValues && !hasBlockOverrides) return;
-
-      const draftData: {
-        field_values: Record<string, string>;
-        font_id: string | null;
-        text_color_override: Record<string, string> | null;
-        editor_mode?: string;
-        block_overrides?: Record<string, string>;
-        block_format_overrides?: Record<string, any[]>;
-      } = {
-        field_values: fieldValues,
-        font_id: font?.id ?? null,
-        text_color_override: Object.keys(textColorOverrides).length > 0 ? textColorOverrides : null,
-      };
-
-      if (editorMode === "advanced") {
-        draftData.editor_mode = editorMode;
-        draftData.block_overrides = blockOverrides;
-        if (Object.keys(blockFormatOverrides).length > 0) {
-          draftData.block_format_overrides = blockFormatOverrides;
-        }
-      }
-
-      if (isLoggedIn) {
-        saveDraft(template.id, draftData).catch(() => {});
-      } else {
-        saveGuestDraft(template.id, draftData);
-      }
-    }, 1000);
+    saveDraftTimer.current = setTimeout(flushDraftSave, 1000);
     return () => clearTimeout(saveDraftTimer.current);
-  }, [fieldValues, font, textColorOverrides, template, isLoggedIn, editorMode, blockOverrides, blockFormatOverrides]);
+  }, [fieldValues, font, textColorOverrides, template, isLoggedIn, editorMode, blockOverrides, blockFormatOverrides, flushDraftSave]);
 
   const tags = useMemo(
     () => (template ? extractTags(template) : []),
@@ -517,7 +546,7 @@ export default function EditorPage() {
     const expanded: Record<string, string> = {};
     for (const block of textBlocks) {
       if (!block.content) continue;
-      const expandedText = block.content.replace(/\{(\w+)\}/g, (_, tag) => effectiveValues[tag] ?? "");
+      const expandedText = block.content.replace(/\{(\w+)\}/g, (_, tag) => fieldValues[tag] ?? "");
       expanded[block.id] = expandedText;
     }
     initAdvancedMode(expanded);
@@ -598,7 +627,7 @@ export default function EditorPage() {
         key: order.key_id,
         amount: order.amount,
         currency: order.currency,
-        name: "Invitation Video",
+        name: "Bring My Matter",
         description: "Video Render",
         order_id: order.razorpay_order_id,
         handler: async (response: {
@@ -708,8 +737,8 @@ export default function EditorPage() {
 
   return (
     <PageTransition>
-    <div className="flex flex-col lg:flex-row gap-8">
-      {/* Form Panel -- order-2 on mobile (preview first), order-1 on desktop (form left) */}
+    <div className="flex flex-col lg:flex-row gap-4 lg:gap-8">
+      {/* Form Panel -- scrolls under the pinned preview on mobile, left column on desktop */}
       <div className="w-full lg:w-[420px] lg:flex-shrink-0 lg:overflow-y-auto lg:max-h-[calc(100vh-5rem)] order-2 lg:order-1">
         <h1 className="text-lg font-bold text-slate-800 mb-3">{template.name}</h1>
 
@@ -802,7 +831,7 @@ export default function EditorPage() {
               {textBlocksWithContent.map((block, idx) => {
                 const regionalBlockLabel = transliteratedLabels[`block:${idx}`];
                 return (
-                  <div key={block.id} onClick={() => seekTo(block.start_time ?? 0)}>
+                  <div key={block.id} onClick={() => seekTo(block.start_time ?? 0)} onFocus={() => seekTo(block.start_time ?? 0)}>
                     <label className="block text-xs font-medium text-slate-600 mb-0.5">
                       {regionalBlockLabel || `Block ${idx + 1}`}
                     </label>
@@ -1064,8 +1093,10 @@ export default function EditorPage() {
         )}
       </div>
 
-      {/* Preview Panel -- order-1 on mobile (shown first), order-2 on desktop (right side) */}
-      <div className="flex-1 flex justify-center order-1 lg:order-2">
+      {/* Preview Panel -- pinned compact bar under the navbar on mobile so the
+          user can see edits update live without losing their place in the
+          form; full-size sticky sidebar on desktop (order-1 mobile, order-2 desktop). */}
+      <div className="sticky top-16 z-30 -mx-4 px-4 pb-3 bg-[#FAFBFC]/95 backdrop-blur-sm lg:static lg:mx-0 lg:px-0 lg:pb-0 lg:bg-transparent lg:backdrop-blur-none flex-1 flex justify-center order-1 lg:order-2">
         <PreviewPlayer />
       </div>
     </div>

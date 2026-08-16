@@ -30,14 +30,19 @@ async def _google_transliterate(text: str, itc: str) -> str:
                 continue
             line_results = []
             for word in words:
-                resp = await client.get(
-                    GOOGLE_URL,
-                    params={"text": word, "itc": itc, "num": 1},
-                )
-                data = resp.json()
-                if data[0] == "SUCCESS" and data[1] and data[1][0][1]:
-                    line_results.append(data[1][0][1][0])
-                else:
+                try:
+                    resp = await client.get(
+                        GOOGLE_URL,
+                        params={"text": word, "itc": itc, "num": 1},
+                    )
+                    data = resp.json()
+                    if data[0] == "SUCCESS" and data[1] and data[1][0][1]:
+                        line_results.append(data[1][0][1][0])
+                    else:
+                        line_results.append(word)
+                except (httpx.HTTPError, ValueError, IndexError, KeyError):
+                    # Google's service unreachable/malformed reply — fall back to
+                    # the original word rather than failing the whole request.
                     line_results.append(word)
             result_lines.append(" ".join(line_results))
 
@@ -111,13 +116,18 @@ async def _google_transliterate_candidates(
         return []
 
     async def fetch_word(client: httpx.AsyncClient, word: str) -> WordCandidates:
-        resp = await client.get(
-            GOOGLE_URL,
-            params={"text": word, "itc": itc, "num": num},
-        )
-        data = resp.json()
-        if data[0] == "SUCCESS" and data[1] and data[1][0][1]:
-            return WordCandidates(word=word, candidates=data[1][0][1])
+        try:
+            resp = await client.get(
+                GOOGLE_URL,
+                params={"text": word, "itc": itc, "num": num},
+            )
+            data = resp.json()
+            if data[0] == "SUCCESS" and data[1] and data[1][0][1]:
+                return WordCandidates(word=word, candidates=data[1][0][1])
+        except (httpx.HTTPError, ValueError, IndexError, KeyError):
+            # Google's service unreachable/malformed reply — fall back to the
+            # original word rather than failing the whole batch.
+            pass
         return WordCandidates(word=word, candidates=[word])
 
     async with httpx.AsyncClient(timeout=10) as client:
