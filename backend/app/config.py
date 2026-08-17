@@ -34,7 +34,7 @@ class Settings(BaseSettings):
 
     # OTP
     OTP_EXPIRE_SECONDS: int = 300
-    OTP_MOCK: bool = True  # True: always "123456", no SMS sent. False: real random code sent via Twilio SMS.
+    OTP_MOCK: bool = True  # True: always "123456", no SMS sent. False: real random code sent via MSG91 SMS.
     OTP_RATE_LIMIT_MAX: int = 3
     OTP_RATE_LIMIT_WINDOW: int = 600
     # Comma-separated phone numbers (E.164, e.g. "+919999999999,+918888888888")
@@ -43,12 +43,22 @@ class Settings(BaseSettings):
     # so real-OTP mode can be enabled without locking them out.
     OTP_BYPASS_NUMBERS: str = ""
 
-    # Twilio (WhatsApp notifications + SMS OTP)
-    TWILIO_ACCOUNT_SID: str = ""
-    TWILIO_AUTH_TOKEN: str = ""
-    TWILIO_WHATSAPP_FROM: str = ""  # e.g. "whatsapp:+17372212163"
-    TWILIO_CONTENT_SID: str = ""  # Content Template SID (e.g. HXa9d0fd...)
-    TWILIO_SMS_FROM: str = ""  # plain SMS-capable number, e.g. "+17372508034" (separate from the WhatsApp number)
+    # MSG91 (WhatsApp notifications + SMS OTP) — replaced Twilio: MSG91
+    # handles Indian DLT registration directly and is materially cheaper for
+    # India-only traffic, which is all this app sends.
+    MSG91_AUTH_KEY: str = ""
+    # SMS (Flow API — DLT-compliant templated SMS, see sms_service.py).
+    # flow_id maps to the DLT-approved template on the MSG91 dashboard; the
+    # template's variable placeholder must be named VAR1 (single-variable:
+    # the OTP code). sender_id is the 6-char DLT-approved sender ID.
+    MSG91_SMS_FLOW_ID: str = ""
+    MSG91_SMS_SENDER_ID: str = ""
+    # WhatsApp (Business API — see whatsapp_service.py). integrated_number is
+    # the WhatsApp-enabled number registered to this MSG91 account. Template
+    # must be pre-approved with a single body variable (body_1).
+    MSG91_WHATSAPP_INTEGRATED_NUMBER: str = ""
+    MSG91_WHATSAPP_TEMPLATE_NAME: str = ""
+    MSG91_WHATSAPP_TEMPLATE_NAMESPACE: str = ""
     APP_BASE_URL: str = "http://localhost:5173"  # frontend URL for download links
 
     # App

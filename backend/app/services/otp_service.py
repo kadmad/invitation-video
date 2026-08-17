@@ -1,4 +1,5 @@
 import logging
+import secrets
 
 import redis.asyncio as redis
 
@@ -10,6 +11,10 @@ logger = logging.getLogger(__name__)
 _redis: redis.Redis | None = None
 
 MOCK_CODE = "123456"
+
+
+def _generate_code() -> str:
+    return f"{secrets.randbelow(1_000_000):06d}"
 
 
 def _bypass_numbers() -> set[str]:
@@ -36,16 +41,12 @@ async def generate_otp(phone: str) -> str:
         code = MOCK_CODE
         logger.info("OTP for %s: %s (mock)", phone, code)
     else:
-        # Twilio's trial-account SMS template picks the code itself (see
-        # sms_service.send_otp_sms) — we store whatever it actually sent,
-        # not one we generate ourselves.
-        code = send_otp_sms(phone)
-        if not code:
+        code = _generate_code()
+        if not send_otp_sms(phone, code):
             if phone in _bypass_numbers():
-                # Real send failed (e.g. this number isn't a verified
-                # recipient on the trial account yet) — this number can
-                # always fall back to the mock code, so don't hard-fail the
-                # request; just let it through without a real code stored.
+                # Real send failed — this number can always fall back to
+                # the mock code, so don't hard-fail the request; just let
+                # it through without a real code stored.
                 logger.warning("SMS send failed for bypass number %s; falling back to mock code", phone)
                 code = MOCK_CODE
             else:
