@@ -51,7 +51,7 @@ export default function MyOrdersPage() {
   const renderBadge = (status: string) => {
     const colors: Record<string, string> = {
       pending: "bg-amber-50 text-amber-600",
-      processing: "bg-primary-50 text-primary-600",
+      processing: "bg-brand-50 text-brand-600",
       completed: "bg-accent-50 text-accent-700",
       failed: "bg-red-50 text-red-600",
     };
@@ -72,7 +72,7 @@ export default function MyOrdersPage() {
       <div className="flex items-center mb-6">
         <h1 className="text-3xl font-bold text-slate-900">My Orders</h1>
         {orders.length > 0 && (
-          <span className="ml-2 bg-primary-100 text-primary-700 rounded-full px-2.5 py-0.5 text-sm font-semibold">
+          <span className="ml-2 bg-brand-100 text-brand-700 rounded-full px-2.5 py-0.5 text-sm font-semibold">
             {orders.length}
           </span>
         )}
@@ -83,7 +83,7 @@ export default function MyOrdersPage() {
           <p>No orders yet.</p>
           <Link
             to="/templates"
-            className="text-primary-500 hover:underline mt-2 inline-block"
+            className="text-brand-500 hover:underline mt-2 inline-block"
           >
             Browse templates
           </Link>
@@ -138,7 +138,7 @@ export default function MyOrdersPage() {
                   <div className="mb-4">
                     <div className="bg-slate-100 rounded-full h-2">
                       <div
-                        className="bg-gradient-to-r from-primary-400 to-primary-600 rounded-full h-2 transition-all"
+                        className="bg-gradient-to-r from-brand-400 to-brand-600 rounded-full h-2 transition-all"
                         style={{ width: `${order.render.progress}%` }}
                       />
                     </div>
@@ -153,14 +153,14 @@ export default function MyOrdersPage() {
                 {order.render && (
                   <Link
                     to={`/render/${order.render.id}`}
-                    className="btn-secondary text-sm px-3 py-1.5"
+                    className="btn-brand-outline text-sm px-3 py-1.5"
                   >
                     {order.render.status === "completed" ? "View Status" : "View / Edit Order"}
                   </Link>
                 )}
                 <Link
                   to={`/invoice/${order.id}`}
-                  className="btn-secondary text-sm px-3 py-1.5"
+                  className="btn-brand-outline text-sm px-3 py-1.5"
                 >
                   View Invoice
                 </Link>

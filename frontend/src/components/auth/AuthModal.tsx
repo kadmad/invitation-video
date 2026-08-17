@@ -197,7 +197,7 @@ export default function AuthModal() {
                   setAcceptedTerms(e.target.checked);
                   setError("");
                 }}
-                className="mt-0.5 w-4 h-4 shrink-0 rounded accent-primary-500 cursor-pointer"
+                className="mt-0.5 w-4 h-4 shrink-0 rounded accent-brand-500 cursor-pointer"
               />
               <span className="text-xs text-slate-500 leading-relaxed">
                 I agree to the{" "}
@@ -206,7 +206,7 @@ export default function AuthModal() {
                   target="_blank"
                   rel="noopener noreferrer"
                   onClick={(e) => e.stopPropagation()}
-                  className="text-primary-500 hover:underline font-medium"
+                  className="text-brand-500 hover:underline font-medium"
                 >
                   Terms &amp; Conditions
                 </Link>
@@ -216,7 +216,7 @@ export default function AuthModal() {
                   target="_blank"
                   rel="noopener noreferrer"
                   onClick={(e) => e.stopPropagation()}
-                  className="text-primary-500 hover:underline font-medium"
+                  className="text-brand-500 hover:underline font-medium"
                 >
                   Privacy Policy
                 </Link>{" "}
@@ -226,7 +226,7 @@ export default function AuthModal() {
                   target="_blank"
                   rel="noopener noreferrer"
                   onClick={(e) => e.stopPropagation()}
-                  className="text-primary-500 hover:underline font-medium"
+                  className="text-brand-500 hover:underline font-medium"
                 >
                   Refund Policy
                 </Link>
@@ -239,7 +239,7 @@ export default function AuthModal() {
             <button
               onClick={handleSendOTP}
               disabled={loading || phone.length < 10 || !acceptedTerms}
-              className="btn-primary w-full py-3 text-base disabled:opacity-50"
+              className="btn-brand w-full py-3 text-base disabled:opacity-50"
             >
               {loading ? "Sending..." : "Send OTP"}
             </button>
@@ -251,7 +251,7 @@ export default function AuthModal() {
               Sent to {displayPhone}
               <button
                 onClick={() => { setStep("phone"); setError(""); }}
-                className="text-primary-500 ml-2 hover:underline"
+                className="text-brand-500 ml-2 hover:underline"
               >
                 Change
               </button>
@@ -269,7 +269,7 @@ export default function AuthModal() {
                   value={digit}
                   onChange={(e) => handleOtpChange(i, e.target.value)}
                   onKeyDown={(e) => handleOtpKeyDown(i, e)}
-                  className="w-11 h-13 sm:w-12 sm:h-14 text-center text-xl font-semibold border-2 border-slate-200 rounded-xl focus:border-primary-500 focus:ring-2 focus:ring-primary-100 outline-none transition-colors"
+                  className="w-11 h-13 sm:w-12 sm:h-14 text-center text-xl font-semibold border-2 border-slate-200 rounded-xl focus:border-brand-500 focus:ring-2 focus:ring-brand-100 outline-none transition-colors"
                 />
               ))}
             </div>
@@ -279,7 +279,7 @@ export default function AuthModal() {
             <button
               onClick={handleVerifyOTP}
               disabled={loading || otp.join("").length !== 6}
-              className="btn-primary w-full py-3 text-base disabled:opacity-50"
+              className="btn-brand w-full py-3 text-base disabled:opacity-50"
             >
               {loading ? "Verifying..." : "Verify & Continue"}
             </button>
@@ -291,7 +291,7 @@ export default function AuthModal() {
                 <button
                   onClick={handleResendOTP}
                   disabled={loading}
-                  className="text-primary-500 hover:underline font-medium"
+                  className="text-brand-500 hover:underline font-medium"
                 >
                   Resend OTP
                 </button>

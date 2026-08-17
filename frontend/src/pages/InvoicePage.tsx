@@ -37,7 +37,7 @@ export default function InvoicePage() {
         <div className="no-print mb-4">
           <button
             onClick={() => window.print()}
-            className="btn-primary text-sm px-4 py-2"
+            className="btn-brand text-sm px-4 py-2"
           >
             Print Invoice
           </button>

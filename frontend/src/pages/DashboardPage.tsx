@@ -26,10 +26,10 @@ export default function DashboardPage() {
           Create beautiful video invitations in minutes
         </p>
         <div className="flex justify-center gap-4">
-          <Link to="/templates" className="btn-primary text-lg">
+          <Link to="/templates" className="btn-brand text-lg">
             Browse Templates
           </Link>
-          <Link to="/my-orders" className="btn-secondary text-lg">
+          <Link to="/my-orders" className="btn-brand-outline text-lg">
             My Orders
           </Link>
         </div>
@@ -39,9 +39,9 @@ export default function DashboardPage() {
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-5 mt-8 animate-slide-up">
         {/* Renders stat */}
         <div className="card p-5 flex items-center gap-4">
-          <div className="flex-shrink-0 w-12 h-12 rounded-full bg-primary-100 flex items-center justify-center">
+          <div className="flex-shrink-0 w-12 h-12 rounded-full bg-brand-100 flex items-center justify-center">
             <svg
-              className="w-6 h-6 text-primary-600"
+              className="w-6 h-6 text-brand-600"
               fill="none"
               viewBox="0 0 24 24"
               stroke="currentColor"
@@ -127,9 +127,9 @@ export default function DashboardPage() {
                 to="/my-orders"
                 className="card p-4 flex items-center gap-3"
               >
-                <div className="flex-shrink-0 w-10 h-10 rounded-lg bg-primary-50 flex items-center justify-center">
+                <div className="flex-shrink-0 w-10 h-10 rounded-lg bg-brand-50 flex items-center justify-center">
                   <svg
-                    className="w-5 h-5 text-primary-500"
+                    className="w-5 h-5 text-brand-500"
                     fill="none"
                     viewBox="0 0 24 24"
                     stroke="currentColor"

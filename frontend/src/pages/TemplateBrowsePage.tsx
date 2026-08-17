@@ -201,7 +201,7 @@ function TemplateCard({
 
         {/* CTA overlay */}
         <div className="absolute inset-0 bg-black/20 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center z-10">
-          <span className="btn-primary text-sm pointer-events-none">Use Template</span>
+          <span className="btn-brand text-sm pointer-events-none">Use Template</span>
         </div>
 
         {/* Hover preview generating status notice */}
@@ -235,7 +235,7 @@ function TemplateCard({
             {t.duration_frames / t.fps}s &middot; {t.width}x{t.height}
           </span>
           {category && (
-            <span className="bg-primary-50 text-primary-600 rounded-full px-2 py-0.5 text-xs font-medium">
+            <span className="bg-brand-50 text-brand-600 rounded-full px-2 py-0.5 text-xs font-medium">
               {category.name}
             </span>
           )}
@@ -272,7 +272,7 @@ function Pagination({
         p === "..." ? (
           <span key={`d${i}`} className="px-2 text-slate-400">...</span>
         ) : (
-          <button key={p} onClick={() => onPageChange(p)} className={`px-3 py-1.5 text-sm rounded-lg border ${p === page ? "bg-primary-500 text-white border-primary-500" : "border-slate-200 hover:bg-slate-50"}`}>{p}</button>
+          <button key={p} onClick={() => onPageChange(p)} className={`px-3 py-1.5 text-sm rounded-lg border ${p === page ? "bg-brand-500 text-white border-brand-500" : "border-slate-200 hover:bg-slate-50"}`}>{p}</button>
         ),
       )}
       <button onClick={() => onPageChange(page + 1)} disabled={page === totalPages} className="px-3 py-1.5 text-sm rounded-lg border border-slate-200 disabled:opacity-40 hover:bg-slate-50">Next</button>
@@ -356,7 +356,7 @@ export default function TemplateBrowsePage() {
           onClick={() => setSelectedCategory("")}
           className={
             selectedCategory === ""
-              ? "bg-primary-500 text-white rounded-full px-4 py-1.5 text-sm font-medium whitespace-nowrap"
+              ? "bg-brand-500 text-white rounded-full px-4 py-1.5 text-sm font-medium whitespace-nowrap"
               : "bg-white ring-1 ring-slate-200 text-slate-600 rounded-full px-4 py-1.5 text-sm font-medium hover:bg-slate-50 whitespace-nowrap"
           }
         >
@@ -368,7 +368,7 @@ export default function TemplateBrowsePage() {
             onClick={() => setSelectedCategory(cat.id)}
             className={
               selectedCategory === cat.id
-                ? "bg-primary-500 text-white rounded-full px-4 py-1.5 text-sm font-medium whitespace-nowrap"
+                ? "bg-brand-500 text-white rounded-full px-4 py-1.5 text-sm font-medium whitespace-nowrap"
                 : "bg-white ring-1 ring-slate-200 text-slate-600 rounded-full px-4 py-1.5 text-sm font-medium hover:bg-slate-50 whitespace-nowrap"
             }
           >

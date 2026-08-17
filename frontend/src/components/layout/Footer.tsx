@@ -20,7 +20,7 @@ export default function Footer() {
         <div className="grid gap-8 sm:grid-cols-3">
           <div>
             <Link to="/" className="inline-block">
-              <img src="/logo.png" alt={SITE_NAME} className="h-32 w-auto" />
+              <img src="/logo.png" alt={SITE_NAME} className="h-14 sm:h-20 w-auto" />
             </Link>
             <p className="text-sm text-slate-500 mt-2 max-w-xs">{SITE_TAGLINE}</p>
           </div>
@@ -30,7 +30,7 @@ export default function Footer() {
             <ul className="space-y-2 text-sm">
               {productLinks.map((l) => (
                 <li key={l.to}>
-                  <Link to={l.to} className="text-slate-500 hover:text-primary-500 transition-colors">
+                  <Link to={l.to} className="text-slate-500 hover:text-brand-500 transition-colors">
                     {l.label}
                   </Link>
                 </li>
@@ -43,7 +43,7 @@ export default function Footer() {
             <ul className="space-y-2 text-sm">
               {legalLinks.map((l) => (
                 <li key={l.to}>
-                  <Link to={l.to} className="text-slate-500 hover:text-primary-500 transition-colors">
+                  <Link to={l.to} className="text-slate-500 hover:text-brand-500 transition-colors">
                     {l.label}
                   </Link>
                 </li>
@@ -51,7 +51,7 @@ export default function Footer() {
               <li>
                 <a
                   href={`mailto:${SUPPORT_EMAIL}`}
-                  className="text-slate-500 hover:text-primary-500 transition-colors"
+                  className="text-slate-500 hover:text-brand-500 transition-colors"
                 >
                   Contact support
                 </a>
@@ -65,13 +65,13 @@ export default function Footer() {
             © {new Date().getFullYear()} {SITE_NAME}. All rights reserved.
           </p>
           <p className="flex gap-4">
-            <Link to="/terms" className="hover:text-primary-500 transition-colors">
+            <Link to="/terms" className="hover:text-brand-500 transition-colors">
               Terms
             </Link>
-            <Link to="/privacy" className="hover:text-primary-500 transition-colors">
+            <Link to="/privacy" className="hover:text-brand-500 transition-colors">
               Privacy
             </Link>
-            <Link to="/refund" className="hover:text-primary-500 transition-colors">
+            <Link to="/refund" className="hover:text-brand-500 transition-colors">
               Refunds
             </Link>
           </p>

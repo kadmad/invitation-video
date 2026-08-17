@@ -27,6 +27,19 @@
            transition-all duration-200 px-5 py-2.5;
   }
 
+  .btn-brand {
+    @apply bg-[#2A2420] text-[#F6EFE1] font-semibold rounded-xl shadow-md
+           hover:bg-[#3A322B] hover:shadow-lg
+           active:bg-[#4A3B26] active:shadow-sm
+           transition-all duration-200 px-5 py-2.5;
+  }
+
+  .btn-brand-outline {
+    @apply ring-1 ring-[#2A2420] text-[#2A2420] font-semibold rounded-xl bg-white
+           hover:bg-[#2A2420] hover:text-[#F6EFE1]
+           transition-all duration-200 px-5 py-2.5;
+  }
+
   .btn-accent {
     @apply bg-gradient-to-r from-accent-500 to-accent-600 text-white font-semibold rounded-xl shadow-md
            hover:from-accent-600 hover:to-accent-700 hover:shadow-lg

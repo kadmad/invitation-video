@@ -13,7 +13,7 @@ export default function Navbar() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between py-3 items-center">
           <Link to="/" className="flex items-center">
-            <img src="/logo.png" alt="Bring My Matter" className="h-28 w-auto" />
+            <img src="/logo.png" alt="Bring My Matter" className="h-10 sm:h-14 md:h-20 w-auto" />
           </Link>
 
           {/* Desktop nav */}
@@ -23,8 +23,8 @@ export default function Navbar() {
               className={({ isActive }) =>
                 `text-sm font-medium transition-colors ${
                   isActive
-                    ? "text-primary-500 underline underline-offset-4 decoration-2"
-                    : "text-slate-600 hover:text-primary-500"
+                    ? "text-brand-500 underline underline-offset-4 decoration-2"
+                    : "text-slate-600 hover:text-brand-500"
                 }`
               }
             >
@@ -38,8 +38,8 @@ export default function Navbar() {
                   className={({ isActive }) =>
                     `text-sm font-medium transition-colors ${
                       isActive
-                        ? "text-primary-500 underline underline-offset-4 decoration-2"
-                        : "text-slate-600 hover:text-primary-500"
+                        ? "text-brand-500 underline underline-offset-4 decoration-2"
+                        : "text-slate-600 hover:text-brand-500"
                     }`
                   }
                 >
@@ -50,8 +50,8 @@ export default function Navbar() {
                   className={({ isActive }) =>
                     `text-sm font-medium transition-colors ${
                       isActive
-                        ? "text-primary-500 underline underline-offset-4 decoration-2"
-                        : "text-slate-600 hover:text-primary-500"
+                        ? "text-brand-500 underline underline-offset-4 decoration-2"
+                        : "text-slate-600 hover:text-brand-500"
                     }`
                   }
                 >
@@ -63,8 +63,8 @@ export default function Navbar() {
                     className={({ isActive }) =>
                       `text-sm font-medium transition-colors ${
                         isActive
-                          ? "text-primary-500 underline underline-offset-4 decoration-2"
-                          : "text-slate-600 hover:text-primary-500"
+                          ? "text-brand-500 underline underline-offset-4 decoration-2"
+                          : "text-slate-600 hover:text-brand-500"
                       }`
                     }
                   >
@@ -72,7 +72,7 @@ export default function Navbar() {
                   </NavLink>
                 )}
                 <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 rounded-full bg-primary-100 text-primary-700 flex items-center justify-center text-sm font-semibold">
+                  <div className="w-8 h-8 rounded-full bg-brand-100 text-brand-700 flex items-center justify-center text-sm font-semibold">
                     {user.full_name?.charAt(0)?.toUpperCase() || "U"}
                   </div>
                   <button
@@ -84,7 +84,7 @@ export default function Navbar() {
                 </div>
               </>
             ) : (
-              <button onClick={() => openAuthModal()} className="btn-primary text-sm">
+              <button onClick={() => openAuthModal()} className="btn-brand text-sm">
                 Login
               </button>
             )}
@@ -93,12 +93,12 @@ export default function Navbar() {
           {/* Mobile: login button (guests) + hamburger */}
           <div className="flex md:hidden items-center gap-3">
             {!user && (
-              <button onClick={() => openAuthModal()} className="btn-primary text-sm px-4 py-2">
+              <button onClick={() => openAuthModal()} className="btn-brand text-sm px-4 py-2">
                 Login
               </button>
             )}
             {user && (
-              <div className="w-8 h-8 rounded-full bg-primary-100 text-primary-700 flex items-center justify-center text-sm font-semibold">
+              <div className="w-8 h-8 rounded-full bg-brand-100 text-brand-700 flex items-center justify-center text-sm font-semibold">
                 {user.full_name?.charAt(0)?.toUpperCase() || "U"}
               </div>
             )}

@@ -53,7 +53,7 @@ export default function MyCustomizationsPage() {
           <p>No saved customizations yet.</p>
           <Link
             to="/templates"
-            className="text-primary-500 hover:underline mt-2 inline-block"
+            className="text-brand-500 hover:underline mt-2 inline-block"
           >
             Browse templates to get started
           </Link>
@@ -96,7 +96,7 @@ export default function MyCustomizationsPage() {
                 <div className="flex items-center gap-2 mt-4">
                   <button
                     onClick={() => handleResume(draft)}
-                    className="btn-primary text-sm"
+                    className="btn-brand text-sm"
                   >
                     Continue Editing
                   </button>

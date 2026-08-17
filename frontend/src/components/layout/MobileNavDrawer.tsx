@@ -93,7 +93,7 @@ export default function MobileNavDrawer({ open, onClose }: Props) {
         aria-modal="true"
       >
         <div className="flex items-center justify-between py-3 px-5 border-b border-slate-100 flex-shrink-0">
-          <img src="/logo.png" alt="Bring My Matter" className="h-24 w-auto" />
+          <img src="/logo.png" alt="Bring My Matter" className="h-9 w-auto" />
           <button
             onClick={onClose}
             aria-label="Close menu"
@@ -107,7 +107,7 @@ export default function MobileNavDrawer({ open, onClose }: Props) {
 
         {user && (
           <div className="flex items-center gap-3 px-5 py-4 border-b border-slate-100 flex-shrink-0">
-            <div className="w-10 h-10 rounded-full bg-primary-100 text-primary-700 flex items-center justify-center text-base font-semibold flex-shrink-0">
+            <div className="w-10 h-10 rounded-full bg-brand-100 text-brand-700 flex items-center justify-center text-base font-semibold flex-shrink-0">
               {user.full_name?.charAt(0)?.toUpperCase() || "U"}
             </div>
             <div className="min-w-0">
@@ -126,7 +126,7 @@ export default function MobileNavDrawer({ open, onClose }: Props) {
               onClick={onClose}
               className={({ isActive }) =>
                 `flex items-center gap-3 px-5 py-3 text-sm font-medium transition-colors ${
-                  isActive ? "text-primary-600 bg-primary-50" : "text-slate-600 hover:bg-slate-50"
+                  isActive ? "text-brand-600 bg-brand-50" : "text-slate-600 hover:bg-slate-50"
                 }`
               }
             >

@@ -30,6 +30,21 @@ export default {
           900: '#055748',
           950: '#02312a',
         },
+        // Landing-page gold/ink palette — used on all audience-facing screens
+        // (nav, footer, storefront, editor) so buttons/links match the hero theme.
+        brand: {
+          50: '#F6EFE1',
+          100: '#F1E4CC',
+          200: '#E9D6B0',
+          300: '#DCC28A',
+          400: '#C9A15E',
+          500: '#B98D4C',
+          600: '#8B6F47',
+          700: '#6B5738',
+          800: '#4A3B26',
+          900: '#3A322B',
+          950: '#2A2420',
+        },
       },
       fontFamily: {
         sans: ['Inter', 'system-ui', 'sans-serif'],
