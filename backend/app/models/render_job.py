@@ -21,7 +21,7 @@ class RenderJob(UUIDMixin, TimestampMixin, Base):
     )
     status: Mapped[str] = mapped_column(
         String(20), default="pending"
-    )  # pending, processing, completed, failed
+    )  # pending, processing, completed, failed, cancelled (manual jobs only — admin-stopped)
     field_values: Mapped[dict] = mapped_column(JSONB, default=dict)
     output_key: Mapped[str | None] = mapped_column(String(500), nullable=True)
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)

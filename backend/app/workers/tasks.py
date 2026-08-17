@@ -167,6 +167,17 @@ def _block_to_dict(b, content_override: str | None = None, format_ranges_overrid
 def render_video_task(self, job_id: str):
     with SyncSession() as db:
         job = db.execute(select(RenderJob).where(RenderJob.id == uuid.UUID(job_id))).scalar_one()
+
+        # Admin cancel (see admin.py cancel_render) revokes this task via the
+        # Celery control broadcast, which only reaches a worker that's
+        # currently connected. If this job was cancelled while it was still
+        # queued with no worker online, the broadcast was never seen by
+        # anyone — so the DB status is the actual source of truth here, not
+        # the broadcast. A worker that later picks this task up (e.g. after
+        # restarting) must bail out itself rather than render a cancelled job.
+        if job.status == "cancelled":
+            return
+
         job.status = "processing"
         job.progress = 0
         db.commit()

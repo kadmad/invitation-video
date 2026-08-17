@@ -156,7 +156,7 @@ export interface RenderJob {
   id: string;
   template_id: string;
   font_id: string | null;
-  status: "pending" | "processing" | "completed" | "failed";
+  status: "pending" | "processing" | "completed" | "failed" | "cancelled";
   field_values: Record<string, string>;
   text_color_override: Record<string, string> | null;
   block_overrides?: Record<string, string> | null;
@@ -193,6 +193,7 @@ export interface AwaitingRender {
   block_format_overrides: Record<string, FormatRange[]> | null;
   location_url: string | null;
   has_pdf: boolean;
+  error_message: string | null;
   auto_dispatched: boolean;
 }
 
@@ -219,7 +220,7 @@ export interface PaymentOrder {
 
 export interface OrderRenderSummary {
   id: string;
-  status: "pending" | "processing" | "completed" | "failed";
+  status: "pending" | "processing" | "completed" | "failed" | "cancelled";
   progress: number;
   output_key: string | null;
 }

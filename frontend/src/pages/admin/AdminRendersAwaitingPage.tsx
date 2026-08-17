@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
-import { listAwaitingRenders, claimRender, completeRender } from "@/api/admin";
+import { listAwaitingRenders, claimRender, cancelRender, completeRender } from "@/api/admin";
 import { listFonts } from "@/api/fonts";
+import ConfirmModal from "@/components/admin/ConfirmModal";
 import type { AwaitingRender, Font } from "@/types";
 
 function timeAgo(iso: string): string {
@@ -23,6 +24,8 @@ function RenderRow({
   onCompleted: (id: string) => void;
 }) {
   const [claiming, setClaiming] = useState(false);
+  const [cancelling, setCancelling] = useState(false);
+  const [confirmingCancel, setConfirmingCancel] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState("");
   const [videoFile, setVideoFile] = useState<File | null>(null);
@@ -38,6 +41,20 @@ function RenderRow({
       setError(err.response?.data?.detail || "Failed to claim");
     } finally {
       setClaiming(false);
+    }
+  };
+
+  const handleCancel = async () => {
+    setConfirmingCancel(false);
+    setCancelling(true);
+    setError("");
+    try {
+      const updated = await cancelRender(render.id);
+      onClaimed(updated);
+    } catch (err: any) {
+      setError(err.response?.data?.detail || "Failed to cancel");
+    } finally {
+      setCancelling(false);
     }
   };
 
@@ -68,10 +85,22 @@ function RenderRow({
             {render.order_number}
             <span
               className={`ml-2 text-xs font-medium px-2 py-0.5 rounded-full ${
-                render.status === "processing" ? "bg-primary-100 text-primary-700" : "bg-amber-100 text-amber-700"
+                {
+                  pending: "bg-amber-100 text-amber-700",
+                  processing: "bg-primary-100 text-primary-700",
+                  failed: "bg-red-100 text-red-700",
+                  cancelled: "bg-slate-200 text-slate-600",
+                }[render.status] ?? "bg-slate-100 text-slate-600"
               }`}
             >
-              {render.status === "processing" ? "Claimed" : "Waiting"}
+              {
+                {
+                  pending: "Waiting",
+                  processing: "Rendering",
+                  failed: "Failed",
+                  cancelled: "Cancelled",
+                }[render.status] ?? render.status
+              }
             </span>
           </p>
           <p className="text-sm text-slate-500 mt-0.5">
@@ -121,15 +150,44 @@ function RenderRow({
 
       {error && <p className="text-red-500 text-sm mb-2">{error}</p>}
 
-      {render.status === "pending" && render.auto_dispatched ? (
-        <p className="text-xs text-slate-500">
-          Queued — will render automatically on the next available local worker, oldest first. No action needed.
-        </p>
-      ) : render.status === "pending" ? (
-        <button onClick={handleClaim} disabled={claiming} className="btn-primary text-sm disabled:opacity-50">
-          {claiming ? "Claiming..." : "Run Render (claim this order)"}
-        </button>
-      ) : (
+      {(render.status === "failed" || render.status === "cancelled") && (
+        <div className="space-y-3">
+          {render.status === "failed" && render.error_message && (
+            <p className="text-xs text-red-500 bg-red-50 border border-red-100 rounded-lg px-3 py-2">
+              {render.error_message}
+            </p>
+          )}
+          {render.status === "cancelled" && (
+            <p className="text-xs text-slate-500">Stopped by an admin. Restart to try again.</p>
+          )}
+          <button onClick={handleClaim} disabled={claiming} className="btn-primary text-sm disabled:opacity-50">
+            {claiming ? "Restarting..." : "Restart Render"}
+          </button>
+        </div>
+      )}
+
+      {render.status === "pending" && (
+        <div className="space-y-2">
+          {render.auto_dispatched ? (
+            <p className="text-xs text-slate-500">
+              Queued — will render automatically on the next available local worker, oldest first. No action needed.
+            </p>
+          ) : (
+            <button onClick={handleClaim} disabled={claiming} className="btn-primary text-sm disabled:opacity-50">
+              {claiming ? "Claiming..." : "Run Render (claim this order)"}
+            </button>
+          )}
+          <button
+            onClick={() => setConfirmingCancel(true)}
+            disabled={cancelling}
+            className="block text-xs text-red-500 hover:text-red-600 hover:underline disabled:opacity-50"
+          >
+            {cancelling ? "Cancelling..." : "Cancel order"}
+          </button>
+        </div>
+      )}
+
+      {render.status === "processing" && (
         <div className="space-y-3">
           {render.auto_dispatched && (
             <div>
@@ -175,8 +233,31 @@ function RenderRow({
               {uploading ? "Uploading..." : "Mark Completed & Notify Customer"}
             </button>
           </div>
+
+          <button
+            onClick={() => setConfirmingCancel(true)}
+            disabled={cancelling}
+            className="block text-xs text-red-500 hover:text-red-600 hover:underline disabled:opacity-50"
+          >
+            {cancelling ? "Cancelling..." : "Cancel render"}
+          </button>
         </div>
       )}
+
+      <ConfirmModal
+        open={confirmingCancel}
+        title="Cancel this render?"
+        message={
+          render.status === "processing"
+            ? "This stops the render currently in progress on whatever worker is running it. The customer's order stays in the queue as \"Cancelled\" until you restart it."
+            : "This removes the order from the render queue until you restart it. The customer's order is marked \"Cancelled\"."
+        }
+        confirmLabel="Cancel render"
+        cancelLabel="Never mind"
+        variant="danger"
+        onConfirm={handleCancel}
+        onCancel={() => setConfirmingCancel(false)}
+      />
     </div>
   );
 }
@@ -211,7 +292,7 @@ export default function AdminRendersAwaitingPage() {
         <h1 className="text-2xl font-bold text-slate-800">Renders Awaiting</h1>
       </div>
       <p className="text-sm text-slate-500 mb-6">
-        {renders.length} order{renders.length === 1 ? "" : "s"} waiting, oldest first
+        {renders.length} order{renders.length === 1 ? "" : "s"} need attention, oldest first
         {typicalHours != null && <> · typical turnaround ~{typicalHours}h</>}
       </p>
 

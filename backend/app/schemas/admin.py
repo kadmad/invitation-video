@@ -210,6 +210,7 @@ class AwaitingRenderResponse(BaseModel):
     block_format_overrides: dict | None
     location_url: str | None
     has_pdf: bool
+    error_message: str | None
     auto_dispatched: bool  # has a celery_task_id — already queued/running on some connected worker, no click needed
 
 

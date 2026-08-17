@@ -54,6 +54,7 @@ export default function MyOrdersPage() {
       processing: "bg-brand-50 text-brand-600",
       completed: "bg-accent-50 text-accent-700",
       failed: "bg-red-50 text-red-600",
+      cancelled: "bg-slate-100 text-slate-500",
     };
     return (
       <span

@@ -102,6 +102,7 @@ export default function RenderStatusPage() {
     processing: "text-brand-600",
     completed: "text-accent-500",
     failed: "text-red-500",
+    cancelled: "text-slate-500",
   };
 
   const currentStep =
@@ -178,6 +179,18 @@ export default function RenderStatusPage() {
               />
             </svg>
           )}
+          {job.status === "cancelled" && (
+            <svg
+              className="w-16 h-16 text-slate-400"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+              strokeWidth={1.5}
+            >
+              <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="1.5" fill="none" />
+              <path strokeLinecap="round" strokeLinejoin="round" d="M9.75 9.75v4.5m4.5-4.5v4.5" />
+            </svg>
+          )}
         </div>
 
         <p className={`text-2xl font-bold mb-6 ${statusColors[job.status]}`}>
@@ -225,6 +238,15 @@ export default function RenderStatusPage() {
               </div>
             )}
           </>
+        )}
+
+        {/* Order was paused by an admin mid-queue (e.g. to fix something on
+            their end) — not a failure, just temporarily on hold. They'll
+            restart it from their side; nothing for the customer to do. */}
+        {job.status === "cancelled" && (
+          <p className="text-slate-500 text-sm">
+            Your order is temporarily on hold — we'll pick it back up shortly. No action needed on your end.
+          </p>
         )}
 
         {/* Live progress from the worker — automatic renders always, manual

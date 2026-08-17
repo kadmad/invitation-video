@@ -182,6 +182,9 @@ export const listAwaitingRenders = () =>
 export const claimRender = (renderId: string) =>
   client.post<AwaitingRender>(`/admin/renders/${renderId}/claim`).then((r) => r.data);
 
+export const cancelRender = (renderId: string) =>
+  client.post<AwaitingRender>(`/admin/renders/${renderId}/cancel`).then((r) => r.data);
+
 export const completeRender = (renderId: string, video: File, pdf?: File | null) => {
   const form = new FormData();
   form.append("video", video);

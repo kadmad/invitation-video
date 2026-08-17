@@ -47,6 +47,7 @@ from app.schemas.admin import (
 from app.schemas.font import FontResponse
 from app.services.storage_service import storage_service
 from app.services import whatsapp_service
+from app.workers.celery_app import celery_app
 from app.workers.tasks import render_video_task
 
 router = APIRouter()
@@ -791,47 +792,67 @@ def _order_number(n: int | None, fallback_id) -> str:
     return f"INV-{n:06d}" if n else str(fallback_id)
 
 
-@router.get("/renders/awaiting", response_model=AwaitingRendersListResponse)
-async def list_awaiting_renders(
-    db: AsyncSession = Depends(get_db),
-    _admin=Depends(get_admin_user),
-):
-    """Manual (SERVER_RENDERING=false) renders still needing a local render +
-    upload, oldest request first. Not paginated — this queue is meant to stay
-    small/empty in normal operation."""
+def _awaiting_render_response(job: RenderJob, order_no, usr: User, tmpl: Template) -> AwaitingRenderResponse:
+    return AwaitingRenderResponse(
+        id=job.id,
+        order_number=_order_number(order_no, job.id),
+        status=job.status,
+        progress=job.progress,
+        created_at=job.created_at,
+        user_name=usr.full_name or "Customer",
+        user_phone=usr.phone_number,
+        template_id=tmpl.id,
+        template_name=tmpl.name,
+        template_video_key=tmpl.video_key,
+        font_id=job.font_id,
+        field_values=job.field_values,
+        text_color_override=job.text_color_override,
+        block_overrides=job.block_overrides,
+        block_format_overrides=job.block_format_overrides,
+        location_url=job.location_url,
+        has_pdf=bool(tmpl.pdf_snapshot_timestamps),
+        error_message=job.error_message,
+        # In flight on some connected worker right now — not true once the
+        # job has been explicitly stopped (cancelled) or has already errored
+        # out (failed), even though celery_task_id is still set from that run.
+        auto_dispatched=bool(job.celery_task_id) and job.status not in ("failed", "cancelled"),
+    )
+
+
+async def _get_manual_job(db: AsyncSession, render_id: uuid.UUID):
     result = await db.execute(
         select(RenderJob, Payment.order_number, User, Template)
         .join(Payment, Payment.render_job_id == RenderJob.id)
         .join(User, User.id == RenderJob.user_id)
         .join(Template, Template.id == RenderJob.template_id)
-        .where(RenderJob.render_method == "manual", RenderJob.status.in_(["pending", "processing"]))
+        .where(RenderJob.id == render_id, RenderJob.render_method == "manual")
+    )
+    row = result.first()
+    if not row:
+        raise HTTPException(status_code=404, detail="Manual render job not found")
+    return row
+
+
+@router.get("/renders/awaiting", response_model=AwaitingRendersListResponse)
+async def list_awaiting_renders(
+    db: AsyncSession = Depends(get_db),
+    _admin=Depends(get_admin_user),
+):
+    """Manual (SERVER_RENDERING=false) renders that still need attention —
+    queued/rendering, or stopped/errored and awaiting an admin decision to
+    restart them — oldest request first. Not paginated — this queue is meant
+    to stay small/empty in normal operation."""
+    result = await db.execute(
+        select(RenderJob, Payment.order_number, User, Template)
+        .join(Payment, Payment.render_job_id == RenderJob.id)
+        .join(User, User.id == RenderJob.user_id)
+        .join(Template, Template.id == RenderJob.template_id)
+        .where(RenderJob.render_method == "manual", RenderJob.status.in_(["pending", "processing", "failed", "cancelled"]))
         .order_by(RenderJob.created_at.asc())
     )
     rows = result.all()
 
-    renders = [
-        AwaitingRenderResponse(
-            id=job.id,
-            order_number=_order_number(order_no, job.id),
-            status=job.status,
-            progress=job.progress,
-            created_at=job.created_at,
-            user_name=usr.full_name or "Customer",
-            user_phone=usr.phone_number,
-            template_id=tmpl.id,
-            template_name=tmpl.name,
-            template_video_key=tmpl.video_key,
-            font_id=job.font_id,
-            field_values=job.field_values,
-            text_color_override=job.text_color_override,
-            block_overrides=job.block_overrides,
-            block_format_overrides=job.block_format_overrides,
-            location_url=job.location_url,
-            has_pdf=bool(tmpl.pdf_snapshot_timestamps),
-            auto_dispatched=bool(job.celery_task_id) and job.status != "failed",
-        )
-        for job, order_no, usr, tmpl in rows
-    ]
+    renders = [_awaiting_render_response(job, order_no, usr, tmpl) for job, order_no, usr, tmpl in rows]
 
     # Typical turnaround = median (created_at -> updated_at) over past
     # completed manual jobs, shown to reassure the waiting user it's usually
@@ -866,51 +887,54 @@ async def claim_render(
     So in the normal case this endpoint is a no-op: the job already has a
     celery_task_id from checkout, and clicking here would just enqueue a
     second concurrent render of the same job. It only actually (re)dispatches
-    when there's no task in flight — i.e. a manual retry after a failed
-    render, or a legacy job from before auto-dispatch existed."""
-    result = await db.execute(
-        select(RenderJob, Payment.order_number, User, Template)
-        .join(Payment, Payment.render_job_id == RenderJob.id)
-        .join(User, User.id == RenderJob.user_id)
-        .join(Template, Template.id == RenderJob.template_id)
-        .where(RenderJob.id == render_id, RenderJob.render_method == "manual")
-    )
-    row = result.first()
-    if not row:
-        raise HTTPException(status_code=404, detail="Manual render job not found")
-    job, order_no, usr, tmpl = row
+    when there's no task in flight — i.e. a manual retry after a failed or
+    cancelled render, or a legacy job from before auto-dispatch existed. This
+    doubles as the "Restart" action for a failed/cancelled job."""
+    job, order_no, usr, tmpl = await _get_manual_job(db, render_id)
 
-    if job.status not in ("pending", "processing", "failed"):
+    if job.status not in ("pending", "processing", "failed", "cancelled"):
         raise HTTPException(status_code=400, detail=f"Render is already {job.status}")
 
-    already_in_flight = bool(job.celery_task_id) and job.status != "failed"
+    already_in_flight = bool(job.celery_task_id) and job.status not in ("failed", "cancelled")
     if not already_in_flight:
         job.status = "processing"
+        job.error_message = None
+        job.progress = 0
         task = render_video_task.delay(str(job.id))
         job.celery_task_id = task.id
         await db.commit()
     await db.refresh(job)
 
-    return AwaitingRenderResponse(
-        id=job.id,
-        order_number=_order_number(order_no, job.id),
-        status=job.status,
-        progress=job.progress,
-        created_at=job.created_at,
-        user_name=usr.full_name or "Customer",
-        user_phone=usr.phone_number,
-        template_id=tmpl.id,
-        template_name=tmpl.name,
-        template_video_key=tmpl.video_key,
-        font_id=job.font_id,
-        field_values=job.field_values,
-        text_color_override=job.text_color_override,
-        block_overrides=job.block_overrides,
-        block_format_overrides=job.block_format_overrides,
-        location_url=job.location_url,
-        has_pdf=bool(tmpl.pdf_snapshot_timestamps),
-        auto_dispatched=bool(job.celery_task_id) and job.status != "failed",
-    )
+    return _awaiting_render_response(job, order_no, usr, tmpl)
+
+
+@router.post("/renders/{render_id}/cancel", response_model=AwaitingRenderResponse)
+async def cancel_render(
+    render_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    _admin=Depends(get_admin_user),
+):
+    """Stop a manual render that's queued or actively rendering. Revokes the
+    Celery task — if it's already running on a worker, terminate=True sends
+    SIGTERM to the process actually executing it (default prefork pool), so
+    it stops instead of running to completion in the background. This is
+    deliberately not the same path as a crashed worker: an explicit revoke
+    is not requeued, unlike task_reject_on_worker_lost in celery_app.py.
+    Restart it later via /claim, which treats "cancelled" the same as
+    "failed" — no task in flight, safe to dispatch fresh."""
+    job, order_no, usr, tmpl = await _get_manual_job(db, render_id)
+
+    if job.status not in ("pending", "processing"):
+        raise HTTPException(status_code=400, detail=f"Render is already {job.status}, nothing to cancel")
+
+    if job.celery_task_id:
+        celery_app.control.revoke(job.celery_task_id, terminate=True, signal="SIGTERM")
+
+    job.status = "cancelled"
+    await db.commit()
+    await db.refresh(job)
+
+    return _awaiting_render_response(job, order_no, usr, tmpl)
 
 
 @router.post("/renders/{render_id}/complete")
