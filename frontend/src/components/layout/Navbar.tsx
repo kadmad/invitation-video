@@ -8,9 +8,10 @@ export default function Navbar() {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
 
-  // Mobile only: once the page has scrolled past the top, swap the full
-  // logo (mark + wordmark + tagline) for just the "B" mark so the sticky
-  // header stays a reasonable height instead of eating scroll real estate.
+  // Mobile only: once the page has scrolled past the top, morph the full
+  // logo down to just its "B" mark (see the crop-window comment below) so
+  // the sticky header stays a reasonable height instead of eating scroll
+  // real estate.
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 24);
     onScroll();
@@ -24,16 +25,41 @@ export default function Navbar() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between py-3 items-center">
           <Link to="/" className="flex items-center">
-            <img
-              src="/logo.png"
-              alt="Bring My Matter"
-              className={`${scrolled ? "hidden md:block" : "block"} h-20 sm:h-28 md:h-40 w-auto`}
-            />
-            <img
-              src="/logo-mark.png"
-              alt="Bring My Matter"
-              className={`${scrolled ? "block md:hidden" : "hidden"} h-10 w-auto`}
-            />
+            {/* Below md: a single-image crop-window morph, not an asset
+                swap or crossfade. The "window" (outer div, overflow
+                hidden) shrinks from the full logo's own bounding box down
+                to exactly the "B" mark's region inside that same image,
+                while the image underneath shifts up-left by the same
+                amount so that region stays put in view — reads as the
+                whole logo continuously zooming/cropping down to its mark,
+                not two things fading into each other. The crop box below
+                (29x26 at -47,-18) was measured directly against the same
+                B region used to make logo-mark.png (top:350 left:920
+                559x500 out of the 2400x1554 source, scaled to this 80px
+                render height). md+ is untouched: plain static full logo. */}
+            <div
+              className="md:hidden relative overflow-hidden"
+              style={{
+                width: scrolled ? 29 : 124,
+                height: scrolled ? 26 : 80,
+                transition: "width 600ms cubic-bezier(0.4,0,0.2,1), height 600ms cubic-bezier(0.4,0,0.2,1)",
+              }}
+            >
+              <img
+                src="/logo.png"
+                alt="Bring My Matter"
+                draggable={false}
+                style={{
+                  position: "absolute",
+                  height: 80,
+                  width: "auto",
+                  top: scrolled ? -18 : 0,
+                  left: scrolled ? -47 : 0,
+                  transition: "top 600ms cubic-bezier(0.4,0,0.2,1), left 600ms cubic-bezier(0.4,0,0.2,1)",
+                }}
+              />
+            </div>
+            <img src="/logo.png" alt="Bring My Matter" className="hidden md:block h-40 w-auto" />
           </Link>
 
           {/* Desktop nav */}
