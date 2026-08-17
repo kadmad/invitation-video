@@ -445,7 +445,7 @@ export default function PreviewPlayer() {
           loop
           numberOfSharedAudioTags={5}
         />
-        {fullscreenTarget ? createPortal(watermarkOverlay, fullscreenTarget) : watermarkOverlay}
+        {fullscreenTarget ? createPortal(<Watermark />, fullscreenTarget) : <Watermark />}
       </div>
     </div>
   );
@@ -467,58 +467,87 @@ const WATERMARK_COLUMN_GAP_PX = 13; // horizontal distance between tiles
 const WATERMARK_ROW_GAP_PX = 38; // vertical distance between tiles
 const WATERMARK_ITEM_COUNT = 60; // generous — extra ones just get clipped
 
-const watermarkOverlay = (
-  <div
-    style={{
-      position: "absolute",
-      inset: 0,
-      pointerEvents: "none",
-      overflow: "hidden",
-      borderRadius: 12,
-      zIndex: 2147483647,
-      // Inverts against whatever's underneath instead of a fixed white,
-      // so it stays visible on light AND dark video backgrounds alike —
-      // a flat white fill alone washes out on light/cream templates.
-      // Opacity belongs HERE, on the same element as mix-blend-mode, not
-      // on the tiles below — putting it there dilutes the diff math back
-      // toward plain semi-transparent white before blending, which washes
-      // out again on light backgrounds. Here it fades the already-blended
-      // (high-contrast) result as a single flat layer.
-      mixBlendMode: "difference",
-      opacity: 0.3,
-    }}
-  >
+// The desktop tile size reads as oversized on a phone-width preview
+// player — same tile/gap ratio, scaled down for the user-facing editor's
+// mobile view only (this component has no admin usage).
+const WATERMARK_MOBILE_BREAKPOINT_PX = 640;
+const WATERMARK_TILE_PX_MOBILE = 128;
+const WATERMARK_COLUMN_GAP_PX_MOBILE = 7;
+const WATERMARK_ROW_GAP_PX_MOBILE = 19;
+
+function useIsMobileViewport(breakpointPx: number): boolean {
+  const [isMobile, setIsMobile] = useState(
+    () => typeof window !== "undefined" && window.innerWidth < breakpointPx
+  );
+  useEffect(() => {
+    const mql = window.matchMedia(`(max-width: ${breakpointPx - 1}px)`);
+    const handler = () => setIsMobile(mql.matches);
+    handler();
+    mql.addEventListener("change", handler);
+    return () => mql.removeEventListener("change", handler);
+  }, [breakpointPx]);
+  return isMobile;
+}
+
+function Watermark() {
+  const isMobile = useIsMobileViewport(WATERMARK_MOBILE_BREAKPOINT_PX);
+  const tilePx = isMobile ? WATERMARK_TILE_PX_MOBILE : WATERMARK_TILE_PX;
+  const columnGap = isMobile ? WATERMARK_COLUMN_GAP_PX_MOBILE : WATERMARK_COLUMN_GAP_PX;
+  const rowGap = isMobile ? WATERMARK_ROW_GAP_PX_MOBILE : WATERMARK_ROW_GAP_PX;
+
+  return (
     <div
       style={{
         position: "absolute",
-        // Oversized + centered so the rotated tile pattern still covers
-        // every corner of the frame, not just the middle.
-        inset: "-50%",
-        transform: "rotate(-30deg)",
-        display: "grid",
-        gridTemplateColumns: `repeat(auto-fill, ${WATERMARK_TILE_PX}px)`,
-        columnGap: WATERMARK_COLUMN_GAP_PX,
-        rowGap: WATERMARK_ROW_GAP_PX,
-        justifyContent: "center",
-        alignContent: "center",
+        inset: 0,
+        pointerEvents: "none",
+        overflow: "hidden",
+        borderRadius: 12,
+        zIndex: 2147483647,
+        // Inverts against whatever's underneath instead of a fixed white,
+        // so it stays visible on light AND dark video backgrounds alike —
+        // a flat white fill alone washes out on light/cream templates.
+        // Opacity belongs HERE, on the same element as mix-blend-mode, not
+        // on the tiles below — putting it there dilutes the diff math back
+        // toward plain semi-transparent white before blending, which washes
+        // out again on light backgrounds. Here it fades the already-blended
+        // (high-contrast) result as a single flat layer.
+        mixBlendMode: "difference",
+        opacity: 0.3,
       }}
     >
-      {Array.from({ length: WATERMARK_ITEM_COUNT }, (_, i) => (
-        <img
-          key={i}
-          src="/logo.png"
-          alt=""
-          draggable={false}
-          style={{
-            width: WATERMARK_TILE_PX,
-            height: "auto",
-            // Flat white silhouette so the blend-mode diff math above gets
-            // clean, fully-opaque input.
-            filter: "brightness(0) invert(1)",
-            userSelect: "none",
-          }}
-        />
-      ))}
+      <div
+        style={{
+          position: "absolute",
+          // Oversized + centered so the rotated tile pattern still covers
+          // every corner of the frame, not just the middle.
+          inset: "-50%",
+          transform: "rotate(-30deg)",
+          display: "grid",
+          gridTemplateColumns: `repeat(auto-fill, ${tilePx}px)`,
+          columnGap,
+          rowGap,
+          justifyContent: "center",
+          alignContent: "center",
+        }}
+      >
+        {Array.from({ length: WATERMARK_ITEM_COUNT }, (_, i) => (
+          <img
+            key={i}
+            src="/logo.png"
+            alt=""
+            draggable={false}
+            style={{
+              width: tilePx,
+              height: "auto",
+              // Flat white silhouette so the blend-mode diff math above gets
+              // clean, fully-opaque input.
+              filter: "brightness(0) invert(1)",
+              userSelect: "none",
+            }}
+          />
+        ))}
+      </div>
     </div>
-  </div>
-);
+  );
+}
