@@ -6,6 +6,7 @@ import { useSeo } from "@/lib/seo";
 import { SITE_NAME, SITE_DESCRIPTION, SITE_URL, SITE_TAGLINE } from "@/lib/site";
 import { getTemplateVideoSrc } from "@/lib/templateVideo";
 import PageTransition from "@/components/common/PageTransition";
+import TemplateCarousel from "@/components/common/TemplateCarousel";
 import type { Template } from "@/types";
 
 const BASE_URL = API_URL;
@@ -107,6 +108,40 @@ function PhoneMockup({
   );
 }
 
+// Placeholder cards for the mobile showcase carousel while real templates
+// are still loading (or if the API returns none) — no thumbnail/video keys,
+// so they render as plain named placeholders rather than broken images.
+// Swapped out for real data the moment listTemplates() resolves.
+const DUMMY_SHOWCASE_TEMPLATES: Template[] = [
+  "Wedding Elegance",
+  "Engagement Bliss",
+  "Birthday Sparkle",
+  "Housewarming Joy",
+].map((name, i) => ({
+  id: `dummy-${i}`,
+  name,
+  slug: `dummy-${i}`,
+  category_id: "",
+  thumbnail_key: null,
+  video_key: null,
+  preview_key: null,
+  preview_status: null,
+  duration_frames: 300,
+  fps: 30,
+  width: 1080,
+  height: 1920,
+  remotion_comp: null,
+  created_at: new Date().toISOString(),
+  text_blocks: [],
+  image_blocks: [],
+  is_published: true,
+  tag_labels: null,
+  default_text_color: "#000000",
+  default_font_id: null,
+  render_notes: null,
+  price: 0,
+}));
+
 const steps = [
   {
     title: "Step 1: Browse & Select",
@@ -164,7 +199,7 @@ export default function LandingPage() {
   });
 
   const heroTemplates = templates.slice(0, 3);
-  const showcaseTemplates = templates.slice(0, 6);
+  const showcaseTemplates = templates.length > 0 ? templates.slice(0, 6) : DUMMY_SHOWCASE_TEMPLATES;
 
   return (
     <PageTransition>
@@ -265,7 +300,13 @@ export default function LandingPage() {
             <p className="text-center text-slate-500 mt-2 max-w-2xl mx-auto">
               Each one fully animated, ready to personalize with your own names, dates and venue.
             </p>
-            <div className="mt-10 flex flex-wrap justify-center gap-6 sm:gap-8">
+            {/* Mobile: same centered snap-carousel as the full templates
+                page — active card plays video, neighbors are faded static
+                thumbnails. Desktop/tablet keeps the phone-mockup row. */}
+            <div className="mt-10 -mx-4 sm:hidden">
+              <TemplateCarousel templates={showcaseTemplates} />
+            </div>
+            <div className="hidden sm:flex mt-10 flex-wrap justify-center gap-6 sm:gap-8">
               {showcaseTemplates.map((t) => (
                 <Link key={t.id} to={`/editor/${t.slug}`} className="group flex flex-col items-center">
                   <PhoneMockup template={t} className="transition-transform group-hover:-translate-y-1" />
