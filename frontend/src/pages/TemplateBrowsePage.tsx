@@ -4,6 +4,7 @@ import { listTemplates } from "@/api/templates";
 import { listCategories } from "@/api/categories";
 import PageTransition from "@/components/common/PageTransition";
 import TemplateCarousel from "@/components/common/TemplateCarousel";
+import { DUMMY_TEMPLATES } from "@/lib/dummyTemplates";
 import { useSeo } from "@/lib/seo";
 import { API_URL } from "@/api/client";
 import { SITE_DESCRIPTION, SITE_NAME, SITE_URL } from "@/lib/site";
@@ -320,8 +321,16 @@ export default function TemplateBrowsePage() {
   // Reset page when filters change
   useEffect(() => { setPage(1); }, [selectedCategory, search]);
 
-  const totalPages = Math.max(1, Math.ceil(templates.length / USER_PER_PAGE));
-  const paginated = templates.slice((page - 1) * USER_PER_PAGE, page * USER_PER_PAGE);
+  // No real data at all yet (still loading, or the API genuinely returned
+  // none) and no active search/filter — show placeholder cards so the
+  // section's layout/style is visible immediately rather than blank. A
+  // real search or category filter that comes up empty still shows the
+  // honest "No templates found" message below, not placeholders.
+  const isBrowsingUnfiltered = !search && !selectedCategory;
+  const displayTemplates = templates.length === 0 && isBrowsingUnfiltered ? DUMMY_TEMPLATES : templates;
+
+  const totalPages = Math.max(1, Math.ceil(displayTemplates.length / USER_PER_PAGE));
+  const paginated = displayTemplates.slice((page - 1) * USER_PER_PAGE, page * USER_PER_PAGE);
 
   return (
     <PageTransition>
@@ -379,13 +388,13 @@ export default function TemplateBrowsePage() {
       </div>
 
       {/* Templates */}
-      {templates.length === 0 ? (
+      {displayTemplates.length === 0 ? (
         <p className="text-slate-400 text-center py-12">No templates found</p>
       ) : (
         <>
           {/* Mobile: swipeable carousel, every template, no pagination */}
           <div className="-mx-4 sm:hidden">
-            <TemplateCarousel templates={templates} categories={categories} />
+            <TemplateCarousel templates={displayTemplates} categories={categories} />
           </div>
 
           {/* Tablet/desktop: paginated grid */}
