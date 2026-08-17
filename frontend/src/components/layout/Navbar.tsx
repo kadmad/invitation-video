@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, NavLink } from "react-router-dom";
 import { useAuthStore } from "@/store/authStore";
 import MobileNavDrawer from "./MobileNavDrawer";
@@ -6,6 +6,17 @@ import MobileNavDrawer from "./MobileNavDrawer";
 export default function Navbar() {
   const { user, logout, openAuthModal } = useAuthStore();
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [scrolled, setScrolled] = useState(false);
+
+  // Mobile only: once the page has scrolled past the top, swap the full
+  // logo (mark + wordmark + tagline) for just the "B" mark so the sticky
+  // header stays a reasonable height instead of eating scroll real estate.
+  useEffect(() => {
+    const onScroll = () => setScrolled(window.scrollY > 24);
+    onScroll();
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
+  }, []);
 
   return (
     <>
@@ -13,7 +24,16 @@ export default function Navbar() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between py-3 items-center">
           <Link to="/" className="flex items-center">
-            <img src="/logo.png" alt="Bring My Matter" className="h-10 sm:h-14 md:h-20 w-auto" />
+            <img
+              src="/logo.png"
+              alt="Bring My Matter"
+              className={`${scrolled ? "hidden md:block" : "block"} h-20 sm:h-28 md:h-40 w-auto`}
+            />
+            <img
+              src="/logo-mark.png"
+              alt="Bring My Matter"
+              className={`${scrolled ? "block md:hidden" : "hidden"} h-10 w-auto`}
+            />
           </Link>
 
           {/* Desktop nav */}

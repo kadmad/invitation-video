@@ -3,6 +3,7 @@ import { Routes, Route, Navigate } from "react-router-dom";
 import { useAuthStore } from "@/store/authStore";
 import PageLayout from "@/components/layout/PageLayout";
 import AuthModal from "@/components/auth/AuthModal";
+import ScrollToTop from "@/components/common/ScrollToTop";
 import DashboardPage from "@/pages/DashboardPage";
 import LandingPage from "@/pages/LandingPage";
 import TemplateBrowsePage from "@/pages/TemplateBrowsePage";
@@ -41,6 +42,7 @@ export default function App() {
 
   return (
     <PageLayout>
+      <ScrollToTop />
       <Routes>
         {/* Public routes */}
         <Route path="/" element={<LandingPage />} />

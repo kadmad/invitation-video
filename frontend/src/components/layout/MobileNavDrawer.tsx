@@ -93,7 +93,7 @@ export default function MobileNavDrawer({ open, onClose }: Props) {
         aria-modal="true"
       >
         <div className="flex items-center justify-between py-3 px-5 border-b border-slate-100 flex-shrink-0">
-          <img src="/logo.png" alt="Bring My Matter" className="h-9 w-auto" />
+          <img src="/logo.png" alt="Bring My Matter" className="h-16 w-auto" />
           <button
             onClick={onClose}
             aria-label="Close menu"

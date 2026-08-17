@@ -1,8 +1,9 @@
 import { Link } from "react-router-dom";
+import { useAuthStore } from "@/store/authStore";
 import { SITE_NAME, SITE_TAGLINE, SUPPORT_EMAIL } from "@/lib/site";
 
-const productLinks = [
-  { to: "/templates", label: "Browse templates" },
+const publicProductLinks = [{ to: "/templates", label: "Browse templates" }];
+const authedProductLinks = [
   { to: "/my-customizations", label: "My drafts" },
   { to: "/my-orders", label: "My orders" },
 ];
@@ -14,13 +15,16 @@ const legalLinks = [
 ];
 
 export default function Footer() {
+  const { user } = useAuthStore();
+  const productLinks = user ? [...publicProductLinks, ...authedProductLinks] : publicProductLinks;
+
   return (
     <footer className="border-t border-slate-100 bg-white mt-12">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
         <div className="grid gap-8 sm:grid-cols-3">
           <div>
             <Link to="/" className="inline-block">
-              <img src="/logo.png" alt={SITE_NAME} className="h-14 sm:h-20 w-auto" />
+              <img src="/logo.png" alt={SITE_NAME} className="h-28 sm:h-40 w-auto" />
             </Link>
             <p className="text-sm text-slate-500 mt-2 max-w-xs">{SITE_TAGLINE}</p>
           </div>
