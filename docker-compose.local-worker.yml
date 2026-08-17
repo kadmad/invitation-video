@@ -1,0 +1,79 @@
+# Local render worker, pointed at PRODUCTION data over the Tailscale tunnel
+# (see docker-compose.prod.yml's Postgres/Redis port note). Runs the admin's
+# own backend + worker + renderer + frontend, all talking to production
+# Postgres/Redis/R2 instead of local containers. No local postgres/redis/minio
+# here on purpose — this stack is additive to production's data, not a
+# separate copy of it.
+#
+# Usage:
+#   cp .env.production-worker.example .env.production-worker   # first time, fill in real values
+#   docker compose -f docker-compose.local-worker.yml --env-file .env.production-worker up
+#   # or: make up-worker
+#
+# Manual-render jobs auto-dispatch to Celery at checkout (payments.py
+# verify_payment) — as soon as this stack's `worker` container connects to
+# production Redis it starts draining whatever's queued, oldest first, no
+# admin click needed. Run this on multiple machines at once and they
+# load-balance the same queue automatically (Redis pop is atomic). If this
+# worker dies mid-render, the job is safely requeued for whichever worker
+# picks it up next (see celery_app.py). Open http://localhost:5173/admin
+# "Renders Awaiting" to watch progress or upload a video manually as an
+# override.
+
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./backend:/app
+    env_file:
+      - .env.production-worker
+
+  worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    command: celery -A app.workers.celery_app worker --loglevel=info --concurrency=1
+    volumes:
+      - ./backend:/app
+    env_file:
+      - .env.production-worker
+    depends_on:
+      - renderer
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    command: npm run dev -- --host 0.0.0.0
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    env_file:
+      - .env.production-worker
+
+  renderer:
+    build:
+      context: ./renderer
+      dockerfile: Dockerfile
+    ports:
+      - "3100:3100"
+    shm_size: "4gb"
+    volumes:
+      - ./renderer:/app
+      - ./frontend:/frontend
+      - /app/node_modules
+    environment:
+      RENDERER_PORT: 3100
+      RENDER_CONCURRENCY: ${RENDER_CONCURRENCY:-4}
+      MAX_PARALLEL_JOBS: ${MAX_PARALLEL_JOBS:-2}
+    deploy:
+      resources:
+        limits:
+          memory: 6g

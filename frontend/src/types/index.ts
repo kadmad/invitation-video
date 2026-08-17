@@ -193,6 +193,7 @@ export interface AwaitingRender {
   block_format_overrides: Record<string, FormatRange[]> | null;
   location_url: string | null;
   has_pdf: boolean;
+  auto_dispatched: boolean;
 }
 
 export interface AwaitingRendersList {

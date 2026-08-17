@@ -210,12 +210,13 @@ class AwaitingRenderResponse(BaseModel):
     block_format_overrides: dict | None
     location_url: str | None
     has_pdf: bool
+    auto_dispatched: bool  # has a celery_task_id — already queued/running on some connected worker, no click needed
 
 
 class AwaitingRendersListResponse(BaseModel):
     renders: list[AwaitingRenderResponse]
     typical_turnaround_hours: float | None  # median of past completed manual jobs
-    auto_render_enabled: bool  # settings.DEBUG — claiming dispatches a real render locally
+    auto_render_enabled: bool  # settings.DEBUG — this admin session can see live progress from its own local worker
 
 
 # --- Image Blocks ---

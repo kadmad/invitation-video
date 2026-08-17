@@ -25,9 +25,13 @@ export default function RenderStatusPage() {
         const videoInProgress = data.status === "pending" || data.status === "processing";
         const pdfInProgress = data.pdf_status === "queued" || data.pdf_status === "generating";
         if (videoInProgress || pdfInProgress) {
-          // Manual jobs only change when an admin acts on them — no point
-          // hammering the API every 2s like the live auto-render pipeline.
-          setTimeout(poll, data.render_method === "manual" ? 30000 : 2000);
+          // Manual jobs now auto-dispatch and render live too — poll fast
+          // (same as automatic renders) once a worker's actually on it
+          // (status "processing", progress moving) so the bar looks real-time.
+          // Only back off to a slow poll while still "pending": queued but
+          // no connected worker has picked it up yet, so nothing's changing.
+          const isManualStillWaiting = data.render_method === "manual" && data.status === "pending";
+          setTimeout(poll, isManualStillWaiting ? 30000 : 2000);
         }
       } catch {
         if (active) setTimeout(poll, 5000);
@@ -95,7 +99,7 @@ export default function RenderStatusPage() {
 
   const statusColors: Record<string, string> = {
     pending: "text-yellow-600",
-    processing: "text-primary-600",
+    processing: "text-brand-600",
     completed: "text-accent-500",
     failed: "text-red-500",
   };
@@ -131,7 +135,7 @@ export default function RenderStatusPage() {
           )}
           {job.status === "processing" && (
             <svg
-              className="w-16 h-16 text-primary-500 animate-spin"
+              className="w-16 h-16 text-brand-500 animate-spin"
               fill="none"
               viewBox="0 0 24 24"
               stroke="currentColor"
@@ -180,10 +184,13 @@ export default function RenderStatusPage() {
           {job.status.charAt(0).toUpperCase() + job.status.slice(1)}
         </p>
 
-        {/* Manual-render pending/processing: no live progress exists for this
-            job (no worker touching it), so show a static waiting message
-            instead of a fake progress bar. */}
-        {job.render_method === "manual" && (job.status === "pending" || job.status === "processing") && (
+        {/* Manual-render, still pending: queued for a worker (auto-dispatched
+            at checkout, no admin action needed) but nobody's picked it up
+            yet, so there's no live progress to show — a waiting message and
+            a chance to fix a typo instead. Once it flips to "processing" a
+            worker is actively on it and we fall through to the shared live
+            progress bar below, same as an automatic render. */}
+        {job.render_method === "manual" && job.status === "pending" && (
           <>
             <div className="mt-1 px-4 py-3 bg-green-50 border border-green-100 rounded-xl text-left">
               <div className="flex items-start gap-3">
@@ -207,27 +214,22 @@ export default function RenderStatusPage() {
               </div>
             </div>
 
-            {job.status === "pending" ? (
-              <button onClick={handleEditDetails} className="btn-secondary w-full mt-4">
-                Edit Your Details
-              </button>
-            ) : (
-              <p className="text-xs text-slate-400 mt-4">
-                Your order is now being prepared — details are locked in.
-              </p>
-            )}
+            <button onClick={handleEditDetails} className="btn-brand-outline w-full mt-4">
+              Edit Your Details
+            </button>
 
             {job.render_notes && (
-              <div className="mt-4 px-4 py-3 bg-primary-50 border border-primary-100 rounded-xl text-left">
-                <p className="text-xs font-medium text-primary-400 uppercase tracking-wider mb-1">Note</p>
-                <p className="text-sm text-primary-700">{job.render_notes}</p>
+              <div className="mt-4 px-4 py-3 bg-brand-50 border border-brand-100 rounded-xl text-left">
+                <p className="text-xs font-medium text-brand-400 uppercase tracking-wider mb-1">Note</p>
+                <p className="text-sm text-brand-700">{job.render_notes}</p>
               </div>
             )}
           </>
         )}
 
-        {/* Server-rendered pending/processing: live progress from the worker */}
-        {job.render_method !== "manual" && (job.status === "pending" || job.status === "processing") && (
+        {/* Live progress from the worker — automatic renders always, manual
+            renders once a worker has actually picked the job up. */}
+        {(job.render_method !== "manual" ? job.status === "pending" || job.status === "processing" : job.status === "processing") && (
           <>
             <div className="flex items-center justify-center gap-3 mb-6">
               {steps.map((step, i) => (
@@ -235,12 +237,12 @@ export default function RenderStatusPage() {
                   <div className="flex flex-col items-center gap-1.5">
                     <div
                       className={`w-3 h-3 rounded-full ${
-                        i + 1 <= currentStep ? "bg-primary-500" : "bg-slate-300"
+                        i + 1 <= currentStep ? "bg-brand-500" : "bg-slate-300"
                       }`}
                     />
                     <span
                       className={`text-xs font-medium ${
-                        i + 1 <= currentStep ? "text-primary-500" : "text-slate-300"
+                        i + 1 <= currentStep ? "text-brand-500" : "text-slate-300"
                       }`}
                     >
                       {step}
@@ -249,7 +251,7 @@ export default function RenderStatusPage() {
                   {i < steps.length - 1 && (
                     <div
                       className={`w-10 h-0.5 mb-5 ${
-                        i + 1 < currentStep ? "bg-primary-500" : "bg-slate-200"
+                        i + 1 < currentStep ? "bg-brand-500" : "bg-slate-200"
                       }`}
                     />
                   )}
@@ -260,7 +262,7 @@ export default function RenderStatusPage() {
             {/* Progress Bar */}
             <div className="bg-slate-100 rounded-full h-3 mb-3">
               <div
-                className="bg-gradient-to-r from-primary-400 to-primary-600 rounded-full h-3 transition-all"
+                className="bg-gradient-to-r from-brand-400 to-brand-600 rounded-full h-3 transition-all"
                 style={{ width: `${job.progress}%` }}
               />
             </div>
@@ -283,9 +285,9 @@ export default function RenderStatusPage() {
 
             {/* Render notes from admin */}
             {job.render_notes && (
-              <div className="mt-4 px-4 py-3 bg-primary-50 border border-primary-100 rounded-xl text-left">
-                <p className="text-xs font-medium text-primary-400 uppercase tracking-wider mb-1">Note</p>
-                <p className="text-sm text-primary-700">{job.render_notes}</p>
+              <div className="mt-4 px-4 py-3 bg-brand-50 border border-brand-100 rounded-xl text-left">
+                <p className="text-xs font-medium text-brand-400 uppercase tracking-wider mb-1">Note</p>
+                <p className="text-sm text-brand-700">{job.render_notes}</p>
               </div>
             )}
           </>
@@ -312,25 +314,25 @@ export default function RenderStatusPage() {
               </div>
             )}
             {job.pdf_status === "generating" && (
-              <div className="w-full rounded-xl border border-primary-200 bg-primary-50 py-3 px-4">
+              <div className="w-full rounded-xl border border-brand-200 bg-brand-50 py-3 px-4">
                 <div className="flex items-center gap-3 mb-2">
-                  <svg className="w-5 h-5 text-primary-500 animate-pulse flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                  <svg className="w-5 h-5 text-brand-500 animate-pulse flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" />
                   </svg>
                   <div className="flex-1">
-                    <p className="text-sm font-medium text-primary-700">Creating Invitation PDF</p>
-                    <p className="text-xs text-primary-400">Extracting frames & building pages...</p>
+                    <p className="text-sm font-medium text-brand-700">Creating Invitation PDF</p>
+                    <p className="text-xs text-brand-400">Extracting frames & building pages...</p>
                   </div>
                 </div>
-                <div className="bg-primary-100 rounded-full h-1.5 overflow-hidden">
-                  <div className="bg-primary-500 rounded-full h-1.5 animate-[pdfProgress_2s_ease-in-out_infinite]" />
+                <div className="bg-brand-100 rounded-full h-1.5 overflow-hidden">
+                  <div className="bg-brand-500 rounded-full h-1.5 animate-[pdfProgress_2s_ease-in-out_infinite]" />
                 </div>
               </div>
             )}
             {job.pdf_status === "completed" && job.pdf_key && (
               <button
                 onClick={handlePdfDownload}
-                className="w-full flex items-center justify-center gap-2 rounded-xl border border-primary-200 bg-primary-50 py-3 text-base font-medium text-primary-700 hover:bg-primary-100 transition-colors"
+                className="w-full flex items-center justify-center gap-2 rounded-xl border border-brand-200 bg-brand-50 py-3 text-base font-medium text-brand-700 hover:bg-brand-100 transition-colors"
               >
                 <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" />
@@ -373,7 +375,7 @@ export default function RenderStatusPage() {
 
             <button
               onClick={handleRerender}
-              className="btn-secondary w-full"
+              className="btn-brand-outline w-full"
             >
               Edit & Re-render
             </button>
@@ -386,7 +388,7 @@ export default function RenderStatusPage() {
             <p className="text-red-500 text-sm">{job.error_message}</p>
             <button
               onClick={handleRerender}
-              className="btn-primary w-full"
+              className="btn-brand w-full"
             >
               Edit & Retry
             </button>
@@ -410,7 +412,7 @@ export default function RenderStatusPage() {
       <div className="text-center mt-6 mb-8">
         <Link
           to="/my-orders"
-          className="text-primary-500 hover:text-primary-600 font-medium"
+          className="text-brand-500 hover:text-brand-600 font-medium"
         >
           View all orders
         </Link>

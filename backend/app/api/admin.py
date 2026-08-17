@@ -47,6 +47,7 @@ from app.schemas.admin import (
 from app.schemas.font import FontResponse
 from app.services.storage_service import storage_service
 from app.services import whatsapp_service
+from app.workers.tasks import render_video_task
 
 router = APIRouter()
 
@@ -827,6 +828,7 @@ async def list_awaiting_renders(
             block_format_overrides=job.block_format_overrides,
             location_url=job.location_url,
             has_pdf=bool(tmpl.pdf_snapshot_timestamps),
+            auto_dispatched=bool(job.celery_task_id) and job.status != "failed",
         )
         for job, order_no, usr, tmpl in rows
     ]
@@ -858,24 +860,14 @@ async def claim_render(
     db: AsyncSession = Depends(get_db),
     _admin=Depends(get_admin_user),
 ):
-    """Mark a manual render as being worked on. Locks it from further edits
-    by the customer (edit endpoint only allows changes while status is
-    still "pending").
-
-    In non-production (settings.DEBUG=True — the admin's own local
-    machine), this also dispatches the same render pipeline used in
-    server-render mode. The task runs on whatever Celery worker is
-    currently connected: the admin starts their local worker (pointed at
-    prod DB/S3/Redis once those exist), clicks this button, the task lands
-    on that worker's queue, renders, and uploads the result automatically —
-    same completion path (output_key, WhatsApp notify) as an automatic
-    server render.
-
-    In production, no worker runs there by design (that's the whole point
-    of SERVER_RENDERING=false — keep it off the paid server), so dispatching
-    from the production instance itself would just queue a task nothing
-    ever picks up. There, claiming only marks the job as claimed; the admin
-    renders it locally and uploads the result via the endpoint below."""
+    """Manual render jobs now auto-dispatch to Celery the moment the order is
+    paid (see payments.py verify_payment) — the task sits durably queued in
+    Redis until any connected local worker picks it up, no click required.
+    So in the normal case this endpoint is a no-op: the job already has a
+    celery_task_id from checkout, and clicking here would just enqueue a
+    second concurrent render of the same job. It only actually (re)dispatches
+    when there's no task in flight — i.e. a manual retry after a failed
+    render, or a legacy job from before auto-dispatch existed."""
     result = await db.execute(
         select(RenderJob, Payment.order_number, User, Template)
         .join(Payment, Payment.render_job_id == RenderJob.id)
@@ -888,14 +880,12 @@ async def claim_render(
         raise HTTPException(status_code=404, detail="Manual render job not found")
     job, order_no, usr, tmpl = row
 
-    if job.status not in ("pending", "processing"):
+    if job.status not in ("pending", "processing", "failed"):
         raise HTTPException(status_code=400, detail=f"Render is already {job.status}")
 
-    job.status = "processing"
-    await db.commit()
-
-    if settings.DEBUG:
-        from app.workers.tasks import render_video_task
+    already_in_flight = bool(job.celery_task_id) and job.status != "failed"
+    if not already_in_flight:
+        job.status = "processing"
         task = render_video_task.delay(str(job.id))
         job.celery_task_id = task.id
         await db.commit()
@@ -919,6 +909,7 @@ async def claim_render(
         block_format_overrides=job.block_format_overrides,
         location_url=job.location_url,
         has_pdf=bool(tmpl.pdf_snapshot_timestamps),
+        auto_dispatched=bool(job.celery_task_id) and job.status != "failed",
     )
 
 

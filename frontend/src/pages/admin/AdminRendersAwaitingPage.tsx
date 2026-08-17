@@ -14,13 +14,11 @@ function timeAgo(iso: string): string {
 function RenderRow({
   render,
   fontsById,
-  autoRenderEnabled,
   onClaimed,
   onCompleted,
 }: {
   render: AwaitingRender;
   fontsById: Record<string, Font>;
-  autoRenderEnabled: boolean;
   onClaimed: (r: AwaitingRender) => void;
   onCompleted: (id: string) => void;
 }) {
@@ -123,13 +121,17 @@ function RenderRow({
 
       {error && <p className="text-red-500 text-sm mb-2">{error}</p>}
 
-      {render.status === "pending" ? (
+      {render.status === "pending" && render.auto_dispatched ? (
+        <p className="text-xs text-slate-500">
+          Queued — will render automatically on the next available local worker, oldest first. No action needed.
+        </p>
+      ) : render.status === "pending" ? (
         <button onClick={handleClaim} disabled={claiming} className="btn-primary text-sm disabled:opacity-50">
           {claiming ? "Claiming..." : "Run Render (claim this order)"}
         </button>
       ) : (
         <div className="space-y-3">
-          {autoRenderEnabled && (
+          {render.auto_dispatched && (
             <div>
               <div className="bg-slate-100 rounded-full h-2">
                 <div
@@ -138,18 +140,18 @@ function RenderRow({
                 />
               </div>
               <p className="text-xs text-slate-500 mt-1">
-                Rendering automatically on this machine — {render.progress}% complete
+                Rendering automatically — {render.progress}% complete
               </p>
             </div>
           )}
 
           <div>
-            {autoRenderEnabled && (
+            {render.auto_dispatched && (
               <p className="text-xs text-slate-400 mb-1.5">Or upload a video manually instead (overrides the automatic render):</p>
             )}
             <div className="flex flex-wrap items-center gap-2">
               <label className="text-xs text-slate-500">
-                Video{!autoRenderEnabled && " (required)"}
+                Video{!render.auto_dispatched && " (required)"}
                 <input
                   type="file"
                   accept="video/mp4,video/*"
@@ -182,7 +184,6 @@ function RenderRow({
 export default function AdminRendersAwaitingPage() {
   const [renders, setRenders] = useState<AwaitingRender[]>([]);
   const [typicalHours, setTypicalHours] = useState<number | null>(null);
-  const [autoRenderEnabled, setAutoRenderEnabled] = useState(false);
   const [fontsById, setFontsById] = useState<Record<string, Font>>({});
   const [loading, setLoading] = useState(true);
 
@@ -191,7 +192,6 @@ export default function AdminRendersAwaitingPage() {
       listAwaitingRenders().then((data) => {
         setRenders(data.renders);
         setTypicalHours(data.typical_turnaround_hours);
-        setAutoRenderEnabled(data.auto_render_enabled);
       });
     refresh().finally(() => setLoading(false));
     listFonts().then((fonts) => {
@@ -226,11 +226,8 @@ export default function AdminRendersAwaitingPage() {
               key={r.id}
               render={r}
               fontsById={fontsById}
-              autoRenderEnabled={autoRenderEnabled}
               onClaimed={(updated) =>
-                setRenders((prev) =>
-                  prev.map((x) => (x.id === updated.id ? { ...x, status: updated.status, progress: updated.progress } : x))
-                )
+                setRenders((prev) => prev.map((x) => (x.id === updated.id ? updated : x)))
               }
               onCompleted={(id) => setRenders((prev) => prev.filter((x) => x.id !== id))}
             />

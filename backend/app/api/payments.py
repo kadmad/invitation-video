@@ -133,17 +133,28 @@ async def verify_payment(
     await db.commit()
     await db.refresh(job)
 
-    if settings.SERVER_RENDERING:
-        # Dispatch celery task
-        task = render_video_task.delay(str(job.id))
-        job.celery_task_id = task.id
-        await db.commit()
-    else:
-        # Manual-render mode: no worker running to pick this up. Alert every
-        # admin with a phone number on file; the order waits in the admin
-        # panel's "Renders Awaiting" queue until one of them renders it
-        # locally and uploads the result. Never let a notification failure
-        # block the paid order from completing.
+    # Dispatch celery task. Even in manual mode (SERVER_RENDERING=false, no
+    # worker on this server by design) this is safe and correct: the task
+    # lands durably in Redis and simply sits queued until any connected
+    # local worker (admin's machine, wired to prod Redis/Postgres/S3 over
+    # Tailscale) picks it up — no admin click required. Multiple local
+    # workers online at once each pull the next queued job on their own
+    # (Redis list pop is atomic), so the queue naturally drains oldest-first
+    # across however many machines are connected, one job per machine at a
+    # time (worker_concurrency=1). See celery_app.py for crash-recovery
+    # settings (task_acks_late + reject_on_worker_lost + visibility_timeout)
+    # that requeue a job automatically if the worker handling it dies
+    # mid-render, instead of leaving it stuck.
+    task = render_video_task.delay(str(job.id))
+    job.celery_task_id = task.id
+    await db.commit()
+
+    if not settings.SERVER_RENDERING:
+        # Manual-render mode: still alert every admin with a phone number on
+        # file as a heads-up (e.g. to prompt them to bring a worker online
+        # if none is currently connected) — the render above proceeds on
+        # its own regardless. Never let a notification failure block the
+        # paid order from completing.
         order_number = _format_order_number(payment.order_number) if payment.order_number else str(payment.id)
         admins_result = await db.execute(
             select(User).where(User.is_admin == True, User.phone_number.isnot(None))  # noqa: E712

@@ -1,10 +1,23 @@
-.PHONY: up down build logs shell-backend shell-frontend migrate seed
+.PHONY: up down build logs shell-backend shell-frontend migrate seed up-worker down-worker logs-worker-stack ps-worker
 
 up:
 	docker compose up -d
 
 down:
 	docker compose down
+
+up-worker:
+	docker compose down
+	docker compose -f docker-compose.local-worker.yml --env-file .env.production-worker up -d --build
+
+down-worker:
+	docker compose -f docker-compose.local-worker.yml down
+
+logs-worker-stack:
+	docker compose -f docker-compose.local-worker.yml logs -f
+
+ps-worker:
+	docker compose -f docker-compose.local-worker.yml ps
 
 build:
 	docker compose build
