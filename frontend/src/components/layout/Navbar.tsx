@@ -53,6 +53,7 @@ export default function Navbar() {
                   position: "absolute",
                   height: 80,
                   width: "auto",
+                  maxWidth: "none",
                   top: scrolled ? -18 : 0,
                   left: scrolled ? -47 : 0,
                   transition: "top 600ms cubic-bezier(0.4,0,0.2,1), left 600ms cubic-bezier(0.4,0,0.2,1)",
