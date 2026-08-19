@@ -49,6 +49,7 @@ jobs:
           tags: ${{ steps.namespace.outputs.value }}-frontend:latest
           build-args: |
             VITE_API_URL=${{ vars.VITE_API_URL }}
+            VITE_GOOGLE_CLIENT_ID=${{ vars.VITE_GOOGLE_CLIENT_ID }}
 
   deploy:
     needs: build-and-push

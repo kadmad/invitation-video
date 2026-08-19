@@ -34,6 +34,22 @@ Repo → Settings → Secrets and variables → Actions:
 `GITHUB_TOKEN` (for pushing to GHCR) is provided automatically — nothing
 to add for that.
 
+Repo → Settings → Secrets and variables → Actions → **Variables** tab (not
+Secrets — these aren't sensitive, they're `VITE_*` build args baked into
+the static frontend bundle at build time, so they end up in the shipped
+JS either way):
+
+| Variable | Value |
+|---|---|
+| `VITE_GOOGLE_CLIENT_ID` | The Google OAuth client ID (from Cloud Console → Credentials) |
+| `VITE_API_URL` | Optional — only if the frontend needs to hit a separate API domain; leave unset to auto-infer from the browser's host |
+
+These only take effect on the *next* deploy run — the frontend image
+already built won't pick them up retroactively, since `vite build` bakes
+`VITE_*` vars in at CI build time, not at container runtime. The
+server's `.env` has no effect on these; it's read by the backend
+container at runtime, never by the CI build step.
+
 ### 2. Make the GHCR packages public (recommended)
 
 By default GHCR packages inherit the repo's visibility and can end up
