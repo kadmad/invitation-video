@@ -25,6 +25,7 @@ async def exchange_code_for_claims(code: str, redirect_uri: str) -> dict:
             },
         )
     if resp.status_code != 200:
+        print(f"[google_oauth] token exchange failed ({resp.status_code}): {resp.text}")
         raise ValueError("Google sign-in failed: could not exchange code")
 
     id_token_str = resp.json().get("id_token")
