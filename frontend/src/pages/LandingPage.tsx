@@ -7,6 +7,7 @@ import { SITE_NAME, SITE_DESCRIPTION, SITE_URL, SITE_TAGLINE } from "@/lib/site"
 import { getTemplateVideoSrc } from "@/lib/templateVideo";
 import { DUMMY_TEMPLATES } from "@/lib/dummyTemplates";
 import PageTransition from "@/components/common/PageTransition";
+import Reveal from "@/components/common/Reveal";
 import TemplateCarousel from "@/components/common/TemplateCarousel";
 import type { Template } from "@/types";
 
@@ -212,68 +213,76 @@ export default function LandingPage() {
 
         {/* ── Steps ── */}
         <section>
-          <h2 className="text-2xl sm:text-3xl font-bold text-center text-slate-900">
-            Effortless Creation, Preset Elegance
-          </h2>
-          <p className="text-center text-slate-500 mt-2 max-w-2xl mx-auto">
-            Three simple steps between you and a beautiful invitation your guests will remember.
-          </p>
+          <Reveal>
+            <h2 className="text-2xl sm:text-3xl font-bold text-center text-slate-900">
+              Effortless Creation, Preset Elegance
+            </h2>
+            <p className="text-center text-slate-500 mt-2 max-w-2xl mx-auto">
+              Three simple steps between you and a beautiful invitation your guests will remember.
+            </p>
+          </Reveal>
           <div className="mt-10 grid sm:grid-cols-3 gap-8">
-            {steps.map((s) => (
-              <div key={s.title} className="text-center">
-                <div className="mx-auto w-16 h-16 rounded-2xl bg-[#F6EFE1] text-[#B98D4C] flex items-center justify-center mb-4">
-                  {s.icon}
+            {steps.map((s, i) => (
+              <Reveal key={s.title} delay={i * 120}>
+                <div className="text-center">
+                  <div className="mx-auto w-16 h-16 rounded-2xl bg-[#F6EFE1] text-[#B98D4C] flex items-center justify-center mb-4">
+                    {s.icon}
+                  </div>
+                  <h3 className="font-semibold text-slate-800">{s.title}</h3>
+                  <p className="text-sm text-slate-500 mt-2 max-w-xs mx-auto">{s.desc}</p>
                 </div>
-                <h3 className="font-semibold text-slate-800">{s.title}</h3>
-                <p className="text-sm text-slate-500 mt-2 max-w-xs mx-auto">{s.desc}</p>
-              </div>
+              </Reveal>
             ))}
           </div>
         </section>
 
         {/* ── Live preview mockup ── */}
         {templates[0] && (
-          <section className="rounded-3xl bg-[#2A2420] px-6 py-14 sm:px-12 sm:py-16">
-            <div className="grid lg:grid-cols-2 gap-10 items-center">
-              <div className="flex justify-center">
-                <PhoneMockup template={templates[0]} className="scale-125" />
+          <Reveal>
+            <section className="rounded-3xl bg-[#2A2420] px-6 py-14 sm:px-12 sm:py-16">
+              <div className="grid lg:grid-cols-2 gap-10 items-center">
+                <div className="flex justify-center">
+                  <PhoneMockup template={templates[0]} className="scale-125" />
+                </div>
+                <div className="text-center lg:text-left">
+                  <p className="text-xs font-semibold tracking-wider text-[#C9A15E] uppercase mb-2">Live Preview</p>
+                  <h2 className="text-2xl sm:text-3xl font-bold text-[#F6EFE1]">
+                    Watch your invitation come to life
+                  </h2>
+                  <p className="mt-4 text-[#C9BEAA] max-w-md mx-auto lg:mx-0">
+                    Every template comes with its own preset animation — names, dates and details
+                    gracefully reveal themselves on screen, exactly how your guests will see it.
+                  </p>
+                  <Link
+                    to="/templates"
+                    className="mt-6 inline-flex items-center gap-2 rounded-full bg-[#F6EFE1] text-[#2A2420] px-6 py-3 text-sm font-semibold hover:bg-white transition-colors"
+                  >
+                    Try a Template
+                  </Link>
+                </div>
               </div>
-              <div className="text-center lg:text-left">
-                <p className="text-xs font-semibold tracking-wider text-[#C9A15E] uppercase mb-2">Live Preview</p>
-                <h2 className="text-2xl sm:text-3xl font-bold text-[#F6EFE1]">
-                  Watch your invitation come to life
-                </h2>
-                <p className="mt-4 text-[#C9BEAA] max-w-md mx-auto lg:mx-0">
-                  Every template comes with its own preset animation — names, dates and details
-                  gracefully reveal themselves on screen, exactly how your guests will see it.
-                </p>
-                <Link
-                  to="/templates"
-                  className="mt-6 inline-flex items-center gap-2 rounded-full bg-[#F6EFE1] text-[#2A2420] px-6 py-3 text-sm font-semibold hover:bg-white transition-colors"
-                >
-                  Try a Template
-                </Link>
-              </div>
-            </div>
-          </section>
+            </section>
+          </Reveal>
         )}
 
         {/* ── Template showcase ── */}
         {showcaseTemplates.length > 0 && (
           <section>
-            <h2 className="text-2xl sm:text-3xl font-bold text-center text-slate-900">
-              Handpicked Invitation Templates
-            </h2>
-            <p className="text-center text-slate-500 mt-2 max-w-2xl mx-auto">
-              Each one fully animated, ready to personalize with your own names, dates and venue.
-            </p>
+            <Reveal>
+              <h2 className="text-2xl sm:text-3xl font-bold text-center text-slate-900">
+                Handpicked Invitation Templates
+              </h2>
+              <p className="text-center text-slate-500 mt-2 max-w-2xl mx-auto">
+                Each one fully animated, ready to personalize with your own names, dates and venue.
+              </p>
+            </Reveal>
             {/* Mobile: same centered snap-carousel as the full templates
                 page — active card plays video, neighbors are faded static
                 thumbnails. Desktop/tablet keeps the phone-mockup row. */}
             <div className="mt-10 -mx-4 sm:hidden">
               <TemplateCarousel templates={showcaseTemplates} />
             </div>
-            <div className="hidden sm:flex mt-10 flex-wrap justify-center gap-6 sm:gap-8">
+            <Reveal delay={150} className="hidden sm:flex mt-10 flex-wrap justify-center gap-6 sm:gap-8">
               {showcaseTemplates.map((t) => (
                 <Link key={t.id} to={`/editor/${t.slug}`} className="group flex flex-col items-center">
                   <PhoneMockup template={t} className="transition-transform group-hover:-translate-y-1" />
@@ -282,7 +291,7 @@ export default function LandingPage() {
                   </span>
                 </Link>
               ))}
-            </div>
+            </Reveal>
             <div className="text-center mt-10">
               <Link
                 to="/templates"
@@ -295,20 +304,22 @@ export default function LandingPage() {
         )}
 
         {/* ── Final CTA ── */}
-        <section className="rounded-3xl bg-gradient-to-br from-[#E9D6B0] to-[#F6EFE1] px-6 py-14 sm:px-12 text-center">
-          <h2 className="text-2xl sm:text-3xl font-bold text-[#2A2420]">
-            Ready to create your perfect invite?
-          </h2>
-          <p className="mt-3 text-[#6B6055] max-w-xl mx-auto">
-            Digital invitations, made easy — in English, Hindi or Gujarati.
-          </p>
-          <Link
-            to="/templates"
-            className="mt-7 inline-flex items-center gap-2 rounded-full bg-[#2A2420] text-[#F6EFE1] px-8 py-3.5 text-sm sm:text-base font-semibold hover:bg-[#3A322B] transition-colors shadow-lg shadow-[#2A2420]/20"
-          >
-            Start Designing Now
-          </Link>
-        </section>
+        <Reveal>
+          <section className="rounded-3xl bg-gradient-to-br from-[#E9D6B0] to-[#F6EFE1] px-6 py-14 sm:px-12 text-center">
+            <h2 className="text-2xl sm:text-3xl font-bold text-[#2A2420]">
+              Ready to create your perfect invite?
+            </h2>
+            <p className="mt-3 text-[#6B6055] max-w-xl mx-auto">
+              Digital invitations, made easy — in English, Hindi or Gujarati.
+            </p>
+            <Link
+              to="/templates"
+              className="mt-7 inline-flex items-center gap-2 rounded-full bg-[#2A2420] text-[#F6EFE1] px-8 py-3.5 text-sm sm:text-base font-semibold hover:bg-[#3A322B] transition-colors shadow-lg shadow-[#2A2420]/20"
+            >
+              Start Designing Now
+            </Link>
+          </section>
+        </Reveal>
       </div>
     </PageTransition>
   );

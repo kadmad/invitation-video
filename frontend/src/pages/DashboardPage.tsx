@@ -20,7 +20,7 @@ export default function DashboardPage() {
       {/* Hero greeting */}
       <div className="text-center py-12">
         <h1 className="text-3xl font-bold text-slate-900 mb-2">
-          Welcome back, {user?.full_name}
+          Welcome back, {user?.first_name || user?.full_name}
         </h1>
         <p className="text-slate-500 mb-8">
           Create beautiful video invitations in minutes

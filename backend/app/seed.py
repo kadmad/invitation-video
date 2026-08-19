@@ -12,9 +12,7 @@ from app.models.category import Category
 from app.models.font import Font
 from app.models.template import Template
 from app.models.text_block import TextBlock
-from app.models.user import User
 from app.services.storage_service import storage_service
-from app.utils.security import hash_password
 
 sync_url = settings.DATABASE_URL.replace("+asyncpg", "").replace("postgresql+asyncpg", "postgresql")
 engine = create_engine(sync_url)
@@ -23,18 +21,6 @@ SessionLocal = sessionmaker(engine)
 
 def seed():
     with SessionLocal() as db:
-        # Admin user
-        existing = db.execute(select(User).where(User.email == "admin@example.com")).scalar_one_or_none()
-        if not existing:
-            admin = User(
-                email="admin@example.com",
-                hashed_password=hash_password("admin123"),
-                full_name="Admin User",
-                is_admin=True,
-            )
-            db.add(admin)
-            print("Created admin user: admin@example.com / admin123")
-
         # Categories
         categories_data = [
             {"name": "Wedding", "slug": "wedding", "description": "Wedding invitation templates", "sort_order": 1},

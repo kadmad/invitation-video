@@ -8,10 +8,10 @@ export default function Navbar() {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
 
-  // Mobile only: once the page has scrolled past the top, morph the full
-  // logo down to just its "B" mark (see the crop-window comment below) so
-  // the sticky header stays a reasonable height instead of eating scroll
-  // real estate.
+  // Once the page has scrolled past the top, morph the full logo down to
+  // just its "B" mark (see the crop-window comment below) so the sticky
+  // header stays a reasonable height instead of eating scroll real estate.
+  // Applies on both mobile and desktop.
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 24);
     onScroll();
@@ -25,10 +25,10 @@ export default function Navbar() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between py-3 items-center">
           <Link to="/" className="flex items-center">
-            {/* Below md: a single-image crop-window morph, not an asset
-                swap or crossfade. The "window" (outer div, overflow
-                hidden) shrinks from the full logo's own bounding box down
-                to exactly the "B" mark's region inside that same image,
+            {/* A single-image crop-window morph, not an asset swap or
+                crossfade. The "window" (outer div, overflow hidden)
+                shrinks from the full logo's own bounding box down to
+                exactly the "B" mark's region inside that same image,
                 while the image underneath shifts up-left by the same
                 amount so that region stays put in view — reads as the
                 whole logo continuously zooming/cropping down to its mark,
@@ -36,7 +36,8 @@ export default function Navbar() {
                 (29x26 at -47,-18) was measured directly against the same
                 B region used to make logo-mark.png (top:350 left:920
                 559x500 out of the 2400x1554 source, scaled to this 80px
-                render height). md+ is untouched: plain static full logo. */}
+                render height). The md+ block further below is the same
+                math scaled 2x for its 160px render height. */}
             <div
               className="md:hidden relative overflow-hidden"
               style={{
@@ -60,7 +61,33 @@ export default function Navbar() {
                 }}
               />
             </div>
-            <img src="/logo.png" alt="Bring My Matter" className="hidden md:block h-40 w-auto" />
+            {/* md+: same crop-window morph as mobile, just scaled 2x (this
+                logo renders at h-40/160px vs mobile's 80px, so the full-size
+                box, crop box, and offsets below are exactly double the
+                mobile numbers). */}
+            <div
+              className="hidden md:block relative overflow-hidden"
+              style={{
+                width: scrolled ? 58 : 248,
+                height: scrolled ? 52 : 160,
+                transition: "width 600ms cubic-bezier(0.4,0,0.2,1), height 600ms cubic-bezier(0.4,0,0.2,1)",
+              }}
+            >
+              <img
+                src="/logo.png"
+                alt="Bring My Matter"
+                draggable={false}
+                style={{
+                  position: "absolute",
+                  height: 160,
+                  width: "auto",
+                  maxWidth: "none",
+                  top: scrolled ? -36 : 0,
+                  left: scrolled ? -94 : 0,
+                  transition: "top 600ms cubic-bezier(0.4,0,0.2,1), left 600ms cubic-bezier(0.4,0,0.2,1)",
+                }}
+              />
+            </div>
           </Link>
 
           {/* Desktop nav */}
@@ -119,9 +146,18 @@ export default function Navbar() {
                   </NavLink>
                 )}
                 <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 rounded-full bg-brand-100 text-brand-700 flex items-center justify-center text-sm font-semibold">
-                    {user.full_name?.charAt(0)?.toUpperCase() || "U"}
-                  </div>
+                  {user.avatar_url ? (
+                    <img
+                      src={user.avatar_url}
+                      alt={user.full_name || "User"}
+                      referrerPolicy="no-referrer"
+                      className="w-8 h-8 rounded-full object-cover"
+                    />
+                  ) : (
+                    <div className="w-8 h-8 rounded-full bg-brand-100 text-brand-700 flex items-center justify-center text-sm font-semibold">
+                      {user.first_name?.charAt(0)?.toUpperCase() || user.full_name?.charAt(0)?.toUpperCase() || "U"}
+                    </div>
+                  )}
                   <button
                     onClick={logout}
                     className="text-sm text-slate-500 hover:text-red-600 transition-colors"
@@ -145,9 +181,18 @@ export default function Navbar() {
               </button>
             )}
             {user && (
-              <div className="w-8 h-8 rounded-full bg-brand-100 text-brand-700 flex items-center justify-center text-sm font-semibold">
-                {user.full_name?.charAt(0)?.toUpperCase() || "U"}
-              </div>
+              user.avatar_url ? (
+                <img
+                  src={user.avatar_url}
+                  alt={user.full_name || "User"}
+                  referrerPolicy="no-referrer"
+                  className="w-8 h-8 rounded-full object-cover"
+                />
+              ) : (
+                <div className="w-8 h-8 rounded-full bg-brand-100 text-brand-700 flex items-center justify-center text-sm font-semibold">
+                  {user.first_name?.charAt(0)?.toUpperCase() || user.full_name?.charAt(0)?.toUpperCase() || "U"}
+                </div>
+              )
             )}
             <button
               onClick={() => setDrawerOpen(true)}

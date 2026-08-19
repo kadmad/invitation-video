@@ -6,10 +6,12 @@ import type { Template, Category } from "@/types";
 
 const BASE_URL = API_URL;
 
-/** Mobile carousel card — same visual language as the grid's TemplateCard,
- * but video only ever mounts (and can therefore only ever play) for the
- * centered ("active") card. Everything else stays a static, faded
- * thumbnail — structurally incapable of playing, not just paused. */
+/** Mobile carousel card — same visual language as the grid's TemplateCard.
+ * Once a card's video has played at least once, it stays mounted and simply
+ * freezes on its last frame when the card goes inactive (paused, not
+ * unmounted) instead of reverting to the thumbnail — so swiping away never
+ * shows a hard cut back to a static first frame. Reactivating it resumes
+ * from where it froze. Only the active card ever actually plays. */
 function CarouselTemplateCard({
   template: t,
   category,
@@ -45,9 +47,51 @@ function CarouselTemplateCard({
     return () => observer.disconnect();
   }, [t.id, t.video_key]);
 
+  // Play only while active; pause (freeze in place, no rewind) otherwise.
+  // The element itself stays mounted regardless — see the render below —
+  // so this never has to "restart" a video from scratch, just resume it.
   useEffect(() => {
-    if (!active) setVideoReady(false);
-  }, [active]);
+    const video = videoRef.current;
+    if (!video) return;
+    if (active) {
+      video.play().catch(() => {});
+    } else {
+      video.pause();
+    }
+  }, [active, videoSrc]);
+
+  // Reveal (crossfade from thumbnail to video) the first time this card's
+  // video actually plays smoothly, and never revert it back — `canplay`
+  // fires as soon as one frame is decoded, which is often still ahead of
+  // real-time playback catching up (decoder warm-up), so cross-fading in
+  // right then reads as a jerk/stutter under the fade. Waiting for the
+  // `playing` event (playback genuinely underway), plus one extra rAF so the
+  // first couple of frames have actually painted, makes the swap land on
+  // motion that's already smooth.
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video || videoReady) return;
+    let raf1 = 0;
+    let raf2 = 0;
+    const reveal = () => {
+      raf1 = requestAnimationFrame(() => {
+        raf2 = requestAnimationFrame(() => setVideoReady(true));
+      });
+    };
+    // autoPlay/the effect above can win the race and start playback (and
+    // fire `playing`) before this listener attaches — covered by checking
+    // play state immediately too.
+    if (!video.paused && video.readyState >= 3) {
+      reveal();
+    } else {
+      video.addEventListener("playing", reveal);
+    }
+    return () => {
+      video.removeEventListener("playing", reveal);
+      cancelAnimationFrame(raf1);
+      cancelAnimationFrame(raf2);
+    };
+  }, [videoSrc, active, videoReady]);
 
   return (
     <Link
@@ -56,9 +100,7 @@ function CarouselTemplateCard({
         cardRef(el);
       }}
       to={`/editor/${t.slug}`}
-      className={`card overflow-hidden shrink-0 snap-center w-[260px] select-none transition-all duration-300 ease-out ${
-        active ? "opacity-100 scale-100" : "opacity-40 scale-90"
-      }`}
+      className="card overflow-hidden shrink-0 snap-center w-[260px] select-none transition-all duration-150 ease-out will-change-transform"
       onContextMenu={(e) => e.preventDefault()}
       draggable={false}
     >
@@ -70,8 +112,8 @@ function CarouselTemplateCard({
             loading="lazy"
             draggable={false}
             onContextMenu={(e) => e.preventDefault()}
-            className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-200 pointer-events-none select-none ${
-              active && videoReady ? "opacity-0" : "opacity-100"
+            className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-[400ms] ease-in-out pointer-events-none select-none ${
+              videoReady ? "opacity-0" : "opacity-100"
             }`}
           />
         ) : (
@@ -86,12 +128,12 @@ function CarouselTemplateCard({
           </div>
         )}
 
-        {/* Only the active card ever gets a <video> in the DOM at all */}
-        {active && t.video_key && videoSrc && (
+        {/* Mounts once prefetched (not gated on `active`) so it never has to
+            be torn down and rebuilt — see the play/pause effect above. */}
+        {t.video_key && videoSrc && (
           <video
             ref={videoRef}
             src={videoSrc}
-            autoPlay
             muted
             loop
             playsInline
@@ -99,8 +141,7 @@ function CarouselTemplateCard({
             controlsList="nodownload nofullscreen noremoteplayback"
             disablePictureInPicture
             onContextMenu={(e) => e.preventDefault()}
-            onCanPlay={() => setVideoReady(true)}
-            className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-200 pointer-events-none select-none ${
+            className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-[400ms] ease-in-out pointer-events-none select-none ${
               videoReady ? "opacity-100" : "opacity-0"
             }`}
           />
@@ -116,7 +157,7 @@ function CarouselTemplateCard({
       <div className="p-3">
         <h3 className="font-semibold text-slate-900 text-sm truncate">{t.name}</h3>
         <div className="flex items-center gap-2 mt-1">
-          <span className="text-xs text-slate-400">{t.duration_frames / t.fps}s</span>
+          <span className="text-xs text-slate-400">{parseFloat((t.duration_frames / t.fps).toFixed(2))}s</span>
           {category && (
             <span className="bg-brand-50 text-brand-600 rounded-full px-2 py-0.5 text-xs font-medium truncate">
               {category.name}
@@ -129,10 +170,13 @@ function CarouselTemplateCard({
 }
 
 /** Mobile-only snap carousel — the centered card is active (full opacity,
- * plays video), neighbors are faded static thumbnails. Active card is
- * derived from scroll position each frame (rAF-throttled) rather than a
- * carousel library, so it stays correct through native momentum
- * scrolling/snap instead of fighting it. */
+ * plays video), neighbors recede into a coverflow-style 3D stack (rotated,
+ * scaled down, pulled toward center for overlap). Both the active index and
+ * the continuous per-card depth transform are derived from scroll position
+ * each frame (rAF-throttled) rather than a carousel library, so it stays
+ * correct through native momentum scrolling/snap instead of fighting it.
+ * The depth transform is applied directly to the DOM (not React state) to
+ * stay cheap at scroll-event frequency. */
 export default function TemplateCarousel({
   templates,
   categories = [],
@@ -155,12 +199,27 @@ export default function TemplateCarousel({
       let closestDist = Infinity;
       cardEls.current.forEach((el, i) => {
         if (!el) return;
-        const cardCenter = el.offsetLeft + el.offsetWidth / 2;
+        const cardWidth = el.offsetWidth;
+        const cardCenter = el.offsetLeft + cardWidth / 2;
         const dist = Math.abs(cardCenter - containerCenter);
         if (dist < closestDist) {
           closestDist = dist;
           closestIdx = i;
         }
+
+        // Continuous (fractional) distance in card-widths, so the coverflow
+        // tilt/scale/overlap eases in as a card approaches center instead of
+        // snapping in discrete steps at the active-index boundary.
+        const signedDist = (cardCenter - containerCenter) / cardWidth;
+        const absDist = Math.min(Math.abs(signedDist), 2.5);
+        const sign = signedDist === 0 ? 0 : signedDist > 0 ? 1 : -1;
+        const rotateY = -sign * Math.min(absDist * 34, 55);
+        const translateX = -sign * absDist * 44;
+        const scale = 1 - absDist * 0.14;
+        const opacity = Math.max(1 - absDist * 0.35, 0.3);
+        el.style.transform = `translateX(${translateX}px) scale(${scale}) rotateY(${rotateY}deg)`;
+        el.style.opacity = String(opacity);
+        el.style.zIndex = String(Math.round(100 - absDist * 10));
       });
       setActiveIndex((prev) => (prev === closestIdx ? prev : closestIdx));
     };
@@ -181,6 +240,7 @@ export default function TemplateCarousel({
   return (
     <div
       ref={containerRef}
+      style={{ perspective: "1200px" }}
       className="flex gap-4 overflow-x-auto snap-x snap-mandatory pb-2 px-[calc(50%-130px)] [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
     >
       {templates.map((t, i) => {

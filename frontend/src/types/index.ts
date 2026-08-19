@@ -3,6 +3,9 @@ export interface User {
   email: string | null;
   phone_number: string | null;
   full_name: string;
+  first_name: string | null;
+  last_name: string | null;
+  avatar_url: string | null;
   is_active: boolean;
   is_admin: boolean;
 }

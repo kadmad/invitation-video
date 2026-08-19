@@ -107,12 +107,25 @@ export default function MobileNavDrawer({ open, onClose }: Props) {
 
         {user && (
           <div className="flex items-center gap-3 px-5 py-4 border-b border-slate-100 flex-shrink-0">
-            <div className="w-10 h-10 rounded-full bg-brand-100 text-brand-700 flex items-center justify-center text-base font-semibold flex-shrink-0">
-              {user.full_name?.charAt(0)?.toUpperCase() || "U"}
-            </div>
+            {user.avatar_url ? (
+              <img
+                src={user.avatar_url}
+                alt={user.full_name || "User"}
+                referrerPolicy="no-referrer"
+                className="w-10 h-10 rounded-full object-cover flex-shrink-0"
+              />
+            ) : (
+              <div className="w-10 h-10 rounded-full bg-brand-100 text-brand-700 flex items-center justify-center text-base font-semibold flex-shrink-0">
+                {user.first_name?.charAt(0)?.toUpperCase() || user.full_name?.charAt(0)?.toUpperCase() || "U"}
+              </div>
+            )}
             <div className="min-w-0">
-              <p className="text-sm font-semibold text-slate-800 truncate">{user.full_name || "User"}</p>
-              {user.phone_number && <p className="text-xs text-slate-400 truncate">{user.phone_number}</p>}
+              <p className="text-sm font-semibold text-slate-800 truncate">
+                {user.first_name ? `${user.first_name} ${user.last_name || ""}`.trim() : user.full_name || "User"}
+              </p>
+              {(user.email || user.phone_number) && (
+                <p className="text-xs text-slate-400 truncate">{user.email || user.phone_number}</p>
+              )}
             </div>
           </div>
         )}

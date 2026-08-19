@@ -20,6 +20,13 @@ class Settings(BaseSettings):
     JWT_ALGORITHM: str = "HS256"
     JWT_EXPIRE_MINUTES: int = 1440
 
+    # Google Sign-In (OAuth 2.0 authorization code flow). Redirect URI is
+    # supplied by the frontend per-request (mirrors the window.location
+    # origin it's actually running on), not fixed here — Google itself
+    # rejects any redirect_uri not pre-registered for this client_id.
+    GOOGLE_CLIENT_ID: str = ""
+    GOOGLE_CLIENT_SECRET: str = ""
+
     # S3 public URL (browser-accessible, defaults to localhost MinIO)
     S3_PUBLIC_URL: str | None = "http://localhost:9000"
 
@@ -32,27 +39,10 @@ class Settings(BaseSettings):
     RAZORPAY_KEY_SECRET: str = ""
     RENDER_PRICE_PAISE: int = 9900
 
-    # OTP
-    OTP_EXPIRE_SECONDS: int = 300
-    OTP_MOCK: bool = True  # True: always "123456", no SMS sent. False: real random code sent via MSG91 SMS.
-    OTP_RATE_LIMIT_MAX: int = 3
-    OTP_RATE_LIMIT_WINDOW: int = 600
-    # Comma-separated phone numbers (E.164, e.g. "+919999999999,+918888888888")
-    # that may ALSO log in with "123456" even when OTP_MOCK is False and a
-    # real code was sent — a controlled bypass for known test/owner accounts
-    # so real-OTP mode can be enabled without locking them out.
-    OTP_BYPASS_NUMBERS: str = ""
-
-    # MSG91 (WhatsApp notifications + SMS OTP) — replaced Twilio: MSG91
+    # MSG91 (WhatsApp order/admin notifications) — replaced Twilio: MSG91
     # handles Indian DLT registration directly and is materially cheaper for
     # India-only traffic, which is all this app sends.
     MSG91_AUTH_KEY: str = ""
-    # SMS (Flow API — DLT-compliant templated SMS, see sms_service.py).
-    # flow_id maps to the DLT-approved template on the MSG91 dashboard; the
-    # template's variable placeholder must be named VAR1 (single-variable:
-    # the OTP code). sender_id is the 6-char DLT-approved sender ID.
-    MSG91_SMS_FLOW_ID: str = ""
-    MSG91_SMS_SENDER_ID: str = ""
     # WhatsApp (Business API — see whatsapp_service.py). integrated_number is
     # the WhatsApp-enabled number registered to this MSG91 account. Template
     # must be pre-approved with a single body variable (body_1).

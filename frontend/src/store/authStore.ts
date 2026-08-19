@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import type { User } from "@/types";
-import { getMe, loginWithEmail, sendOTP as sendOTPApi, verifyOTP as verifyOTPApi } from "@/api/auth";
+import { getMe, googleAuth } from "@/api/auth";
 
 interface AuthState {
   user: User | null;
@@ -8,11 +8,9 @@ interface AuthState {
   loading: boolean;
   showAuthModal: boolean;
   authModalCallback: (() => void) | null;
-  adminLogin: (email: string, password: string) => Promise<void>;
-  sendOTP: (phone: string) => Promise<void>;
-  verifyOTP: (
-    phone: string,
-    otp: string,
+  loginWithGoogle: (
+    code: string,
+    redirectUri: string,
     acceptedTerms: boolean
   ) => Promise<{ is_new_user: boolean }>;
   logout: () => void;
@@ -28,25 +26,8 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   showAuthModal: false,
   authModalCallback: null,
 
-  adminLogin: async (email, password) => {
-    const { access_token } = await loginWithEmail(email, password);
-    localStorage.setItem("token", access_token);
-    set({ token: access_token });
-    const user = await getMe();
-    if (!user.is_admin) {
-      localStorage.removeItem("token");
-      set({ user: null, token: null });
-      throw new Error("Not an admin account");
-    }
-    set({ user });
-  },
-
-  sendOTP: async (phone) => {
-    await sendOTPApi(phone);
-  },
-
-  verifyOTP: async (phone, otp, acceptedTerms) => {
-    const { access_token, is_new_user } = await verifyOTPApi(phone, otp, acceptedTerms);
+  loginWithGoogle: async (code, redirectUri, acceptedTerms) => {
+    const { access_token, is_new_user } = await googleAuth(code, redirectUri, acceptedTerms);
     localStorage.setItem("token", access_token);
     set({ token: access_token });
     const user = await getMe();

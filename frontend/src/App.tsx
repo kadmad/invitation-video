@@ -12,6 +12,7 @@ import RenderStatusPage from "@/pages/RenderStatusPage";
 import MyOrdersPage from "@/pages/MyOrdersPage";
 import InvoicePage from "@/pages/InvoicePage";
 import MyCustomizationsPage from "@/pages/MyCustomizationsPage";
+import LoginCallbackPage from "@/pages/LoginCallbackPage";
 import TermsPage from "@/pages/legal/TermsPage";
 import PrivacyPage from "@/pages/legal/PrivacyPage";
 import RefundPage from "@/pages/legal/RefundPage";
@@ -24,7 +25,6 @@ import AdminTemplateEditorPage from "@/pages/admin/AdminTemplateEditorPage";
 import AdminFontsPage from "@/pages/admin/AdminFontsPage";
 import AdminRendersAwaitingPage from "@/pages/admin/AdminRendersAwaitingPage";
 import AdminAnalyticsPage from "@/pages/admin/AdminAnalyticsPage";
-import AdminLoginPage from "@/pages/admin/AdminLoginPage";
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { token, loading } = useAuthStore();
@@ -51,6 +51,7 @@ export default function App() {
         <Route path="/terms" element={<TermsPage />} />
         <Route path="/privacy" element={<PrivacyPage />} />
         <Route path="/refund" element={<RefundPage />} />
+        <Route path="/login-callback" element={<LoginCallbackPage />} />
 
         {/* Protected routes */}
         <Route
@@ -93,8 +94,6 @@ export default function App() {
             </ProtectedRoute>
           }
         />
-
-        <Route path="/admin/login" element={<AdminLoginPage />} />
 
         {/* Admin routes */}
         <Route path="/admin" element={<ProtectedRoute><AdminRoute><AdminLayout /></AdminRoute></ProtectedRoute>}>

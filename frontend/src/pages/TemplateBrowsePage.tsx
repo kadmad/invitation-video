@@ -234,7 +234,7 @@ function TemplateCard({
         <h3 className="font-semibold text-slate-900">{t.name}</h3>
         <div className="flex items-center gap-2 mt-1">
           <span className="text-xs text-slate-400">
-            {t.duration_frames / t.fps}s &middot; {t.width}x{t.height}
+            {parseFloat((t.duration_frames / t.fps).toFixed(2))}s &middot; {t.width}x{t.height}
           </span>
           {category && (
             <span className="bg-brand-50 text-brand-600 rounded-full px-2 py-0.5 text-xs font-medium">

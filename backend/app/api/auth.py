@@ -1,7 +1,6 @@
-import re
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -9,93 +8,40 @@ from app.config import settings
 from app.dependencies import get_current_user, get_db
 from app.models.user import User
 from app.schemas.auth import (
-    LoginRequest,
-    RegisterRequest,
-    SendOTPRequest,
-    SendOTPResponse,
-    TokenResponse,
+    GoogleAuthRequest,
+    GoogleAuthResponse,
     UserResponse,
-    VerifyOTPRequest,
-    VerifyOTPResponse,
 )
-from app.services.otp_service import generate_otp, verify_otp
-from app.utils.security import create_access_token, hash_password, verify_password
+from app.services import google_oauth_service
+from app.utils.security import create_access_token
 
 router = APIRouter()
 
-PHONE_REGEX = re.compile(r"^\+?\d{10,15}$")
 
-
-def normalize_phone(phone: str) -> str:
-    digits = re.sub(r"[^\d]", "", phone)
-    if len(digits) == 10:
-        return "+91" + digits
-    if len(digits) == 12 and digits.startswith("91"):
-        return "+" + digits
-    return "+" + digits
-
-
-@router.post("/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
-async def register(body: RegisterRequest, db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(User).where(User.email == body.email))
-    if result.scalar_one_or_none():
-        raise HTTPException(status_code=400, detail="Email already registered")
-
-    user = User(
-        email=body.email,
-        hashed_password=hash_password(body.password),
-        full_name=body.full_name,
-    )
-    db.add(user)
-    await db.commit()
-    await db.refresh(user)
-    return user
-
-
-@router.post("/login", response_model=TokenResponse)
-async def login(body: LoginRequest, db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(User).where(User.email == body.email))
-    user = result.scalar_one_or_none()
-    if not user or not user.hashed_password or not verify_password(body.password, user.hashed_password):
-        raise HTTPException(status_code=401, detail="Invalid credentials")
-    if not user.is_active:
-        raise HTTPException(status_code=403, detail="Account disabled")
-
-    token = create_access_token(str(user.id))
-    return TokenResponse(access_token=token)
-
-
-@router.post("/send-otp", response_model=SendOTPResponse)
-async def send_otp(body: SendOTPRequest):
-    phone = normalize_phone(body.phone_number)
-    raw_digits = re.sub(r"[^\d]", "", phone)
-    if len(raw_digits) < 10 or len(raw_digits) > 15:
-        raise HTTPException(status_code=400, detail="Invalid phone number")
-
+@router.post("/google", response_model=GoogleAuthResponse)
+async def google_auth(body: GoogleAuthRequest, db: AsyncSession = Depends(get_db)):
     try:
-        await generate_otp(phone)
+        claims = await google_oauth_service.exchange_code_for_claims(body.code, body.redirect_uri)
     except ValueError as e:
-        raise HTTPException(status_code=429, detail=str(e))
-    except RuntimeError as e:
-        raise HTTPException(status_code=502, detail=str(e))
+        raise HTTPException(status_code=401, detail=str(e))
 
-    return SendOTPResponse(
-        message="OTP sent successfully",
-        expires_in=settings.OTP_EXPIRE_SECONDS,
-    )
+    google_id = claims["sub"]
+    email = claims.get("email")
+    email_verified = claims.get("email_verified", False)
+    first_name = claims.get("given_name") or None
+    last_name = claims.get("family_name") or None
+    avatar_url = claims.get("picture")
+    full_name = claims.get("name") or " ".join(filter(None, [first_name, last_name])) or "Google User"
 
-
-@router.post("/verify-otp", response_model=VerifyOTPResponse)
-async def verify_otp_endpoint(body: VerifyOTPRequest, db: AsyncSession = Depends(get_db)):
-    phone = normalize_phone(body.phone_number)
-    valid = await verify_otp(phone, body.otp)
-    if not valid:
-        raise HTTPException(status_code=401, detail="Invalid or expired OTP")
-
-    # Find or create user
-    result = await db.execute(select(User).where(User.phone_number == phone))
+    result = await db.execute(select(User).where(User.google_id == google_id))
     user = result.scalar_one_or_none()
     is_new_user = False
+
+    if not user and email and email_verified:
+        # Link to an existing account (e.g. phone/OTP signup) that used the
+        # same, Google-verified email address.
+        result = await db.execute(select(User).where(User.email == email))
+        user = result.scalar_one_or_none()
 
     if not user:
         if not body.accepted_terms:
@@ -104,32 +50,41 @@ async def verify_otp_endpoint(body: VerifyOTPRequest, db: AsyncSession = Depends
                 detail="You must accept the Terms & Conditions and Privacy Policy to create an account",
             )
         user = User(
-            phone_number=phone,
-            full_name="User",
+            google_id=google_id,
+            email=email,
+            full_name=full_name,
+            first_name=first_name,
+            last_name=last_name,
+            avatar_url=avatar_url,
             terms_accepted_at=datetime.now(timezone.utc),
             terms_version=settings.TERMS_VERSION,
         )
         db.add(user)
-        await db.commit()
-        await db.refresh(user)
         is_new_user = True
-    elif body.accepted_terms and (
-        user.terms_accepted_at is None or user.terms_version != settings.TERMS_VERSION
-    ):
-        # Existing user re-consenting (first time, or to an updated terms version)
-        user.terms_accepted_at = datetime.now(timezone.utc)
-        user.terms_version = settings.TERMS_VERSION
-        await db.commit()
-        await db.refresh(user)
+    else:
+        user.google_id = google_id
+        if email:
+            user.email = email
+        if first_name:
+            user.first_name = first_name
+        if last_name:
+            user.last_name = last_name
+        if avatar_url:
+            user.avatar_url = avatar_url
+        if body.accepted_terms and (
+            user.terms_accepted_at is None or user.terms_version != settings.TERMS_VERSION
+        ):
+            user.terms_accepted_at = datetime.now(timezone.utc)
+            user.terms_version = settings.TERMS_VERSION
+
+    await db.commit()
+    await db.refresh(user)
 
     if not user.is_active:
         raise HTTPException(status_code=403, detail="Account disabled")
 
     token = create_access_token(str(user.id))
-    return VerifyOTPResponse(
-        access_token=token,
-        is_new_user=is_new_user,
-    )
+    return GoogleAuthResponse(access_token=token, is_new_user=is_new_user)
 
 
 @router.get("/me", response_model=UserResponse)
