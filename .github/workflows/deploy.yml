@@ -84,12 +84,18 @@ jobs:
             docker compose -f docker-compose.prod.yml --env-file .env up -d
 
             # The Caddyfile is a read-only bind mount, so `up -d` does not
-            # restart Caddy when only its contents changed — the old config
-            # stays live in memory and new routes (e.g. /sitemap.xml) 404.
-            # Reload gracefully; fall back to a restart if the reload fails.
+            # restart Caddy when only its contents change — the old config
+            # stays live in memory and new routes (e.g. /sitemap.xml) never
+            # take effect. Recreating the container is the only reliable way
+            # to guarantee it re-reads the file from disk.
+            echo "--- deployed Caddyfile ---"
+            cat ./ops/Caddyfile
+            echo "--- recreating caddy ---"
+            docker compose -f docker-compose.prod.yml --env-file .env up -d --force-recreate caddy
+            sleep 3
+            echo "--- caddy routing check (expect uvicorn for sitemap) ---"
             docker compose -f docker-compose.prod.yml --env-file .env exec -T caddy \
-              caddy reload --config /etc/caddy/Caddyfile --adapter caddyfile \
-              || docker compose -f docker-compose.prod.yml --env-file .env restart caddy
+              wget -q -S -O /dev/null http://frontend:80/ 2>&1 | head -3 || true
 
             # Reclaim disk. Deliberately conservative: `until=168h` keeps the
             # last 7 days of images so a rollback to a recent build is still
