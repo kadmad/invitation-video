@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { NavLink, Outlet, useLocation } from "react-router-dom";
 import PageTransition from "@/components/common/PageTransition";
+import { useAuthStore } from "@/store/authStore";
 
 const navItems = [
   {
@@ -71,6 +72,7 @@ const breadcrumbMap: Record<string, string> = {
 };
 
 export default function AdminLayout() {
+  const { user, logout } = useAuthStore();
   const [collapsed, setCollapsed] = useState(() => {
     return localStorage.getItem("admin-sidebar-collapsed") === "true";
   });
@@ -156,6 +158,28 @@ export default function AdminLayout() {
             </span>
           )}
         </NavLink>
+
+        {/* Logout lives here because the customer Navbar — which used to
+            provide it — no longer renders above the admin console. */}
+        <button
+          onClick={() => { setMobileOpen(false); logout(); }}
+          className="group relative flex items-center gap-2 text-sm text-ink-muted hover:text-red-400 transition mt-3 w-full text-left"
+          title={collapsed ? "Log out" : undefined}
+        >
+          <svg className="w-4 h-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15M18 15l3-3m0 0l-3-3m3 3H9" />
+          </svg>
+          {!collapsed && (
+            <span className="truncate">
+              Log out{user?.first_name ? ` (${user.first_name})` : ""}
+            </span>
+          )}
+          {collapsed && (
+            <span className="absolute left-full ml-2 px-2 py-1 rounded-md bg-slate-800 text-white text-xs whitespace-nowrap opacity-0 pointer-events-none group-hover:opacity-100 transition-opacity z-50 shadow-lg">
+              Log out
+            </span>
+          )}
+        </button>
       </div>
     </>
   );
