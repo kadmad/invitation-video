@@ -106,7 +106,13 @@ export default function WatermarkPlacementOverlay({
             onChange(
               Math.max(0, Math.min(1, drag.left / containerWidth)),
               Math.max(0, Math.min(1, drag.top / containerHeight)),
-              Math.max(0.05, Math.min(0.3, newWidth / containerWidth)),
+              // Clamp to the same [0.05, 1] range TextBlockOverlay uses. A
+              // tighter 0.3 cap used to live here as a "keep it small" guard,
+              // but Moveable resizes the on-screen box freely — so the box
+              // grew past 30% while the saved value silently clamped, and the
+              // mark snapped back on reload. Whatever the admin sizes is what
+              // gets stored.
+              Math.max(0.05, Math.min(1, newWidth / containerWidth)),
               rotation
             );
           }}
