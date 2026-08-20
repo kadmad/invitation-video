@@ -39,6 +39,7 @@ class Template(UUIDMixin, TimestampMixin, Base):
     watermark_position_y: Mapped[float | None] = mapped_column(Float, nullable=True, default=0.88)
     watermark_width: Mapped[float | None] = mapped_column(Float, nullable=True, default=0.22)
     watermark_rotation: Mapped[float | None] = mapped_column(Float, nullable=True, default=0.0)
+    watermark_opacity: Mapped[float | None] = mapped_column(Float, nullable=True, default=0.85)
     preview_key: Mapped[str | None] = mapped_column(String(500), nullable=True)
     preview_status: Mapped[str | None] = mapped_column(String(50), nullable=True)
     pdf_snapshot_timestamps: Mapped[list | None] = mapped_column(JSONB, nullable=True)

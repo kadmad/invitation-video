@@ -17,6 +17,7 @@ export default function WatermarkPreviewPopup({ template, onClose }: Props) {
   const posY = template.watermark_position_y ?? 0.88;
   const width = template.watermark_width ?? 0.22;
   const rotation = template.watermark_rotation ?? 0;
+  const opacity = template.watermark_opacity ?? 0.85;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
@@ -54,7 +55,7 @@ export default function WatermarkPreviewPopup({ template, onClose }: Props) {
               top: `${posY * 100}%`,
               width: `${width * 100}%`,
               height: "auto",
-              opacity: 0.85,
+              opacity,
               filter: "drop-shadow(0 1px 3px rgba(0,0,0,0.45))",
               transform: rotation ? `rotate(${rotation}deg)` : undefined,
             }}

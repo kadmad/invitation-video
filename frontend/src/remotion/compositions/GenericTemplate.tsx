@@ -34,6 +34,7 @@ interface GenericTemplateProps {
   watermarkPositionY?: number;
   watermarkWidth?: number;
   watermarkRotation?: number;
+  watermarkOpacity?: number;
 }
 
 export default function GenericTemplate({
@@ -62,6 +63,7 @@ export default function GenericTemplate({
   watermarkPositionY,
   watermarkWidth,
   watermarkRotation,
+  watermarkOpacity,
 }: GenericTemplateProps) {
   // Use new text_blocks path if available, otherwise fall back to legacy fields
   const useBlocks = textBlocks && textBlocks.length > 0;
@@ -180,6 +182,7 @@ export default function GenericTemplate({
           positionY={watermarkPositionY ?? 0.88}
           width={watermarkWidth ?? 0.22}
           rotation={watermarkRotation ?? 0}
+          opacity={watermarkOpacity ?? 0.85}
           videoWidth={width}
           videoHeight={height}
         />

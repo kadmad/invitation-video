@@ -5,6 +5,7 @@ interface WatermarkOverlayProps {
   positionY: number;
   width: number;
   rotation?: number;
+  opacity?: number;
   videoWidth: number;
   videoHeight: number;
 }
@@ -19,6 +20,7 @@ export default function WatermarkOverlay({
   positionY,
   width,
   rotation,
+  opacity,
   videoWidth,
   videoHeight,
 }: WatermarkOverlayProps) {
@@ -33,7 +35,7 @@ export default function WatermarkOverlay({
         top: positionY * videoHeight,
         width: w,
         height: "auto",
-        opacity: 0.85,
+        opacity: opacity ?? 0.85,
         // Natural logo colors + drop-shadow (not a blend-mode trick) so the
         // mark reads clearly against any background — this is a visible
         // brand attribution the customer traded a discount for, not the

@@ -38,4 +38,5 @@ export const DUMMY_TEMPLATES: Template[] = [
   watermark_position_y: null,
   watermark_width: null,
   watermark_rotation: null,
+  watermark_opacity: null,
 }));

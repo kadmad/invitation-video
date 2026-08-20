@@ -338,6 +338,7 @@ def render_video_task(self, job_id: str):
                     "watermarkPositionY": template.watermark_position_y,
                     "watermarkWidth": template.watermark_width,
                     "watermarkRotation": template.watermark_rotation,
+                    "watermarkOpacity": template.watermark_opacity,
                 }
 
                 renderer_url = os.environ.get("RENDERER_URL", "http://renderer:3100")
@@ -416,6 +417,7 @@ def render_video_task(self, job_id: str):
                         watermark_position_y=template.watermark_position_y,
                         watermark_width=template.watermark_width,
                         watermark_rotation=template.watermark_rotation,
+                        watermark_opacity=template.watermark_opacity,
                     )
                     ffmpeg.render()
 

@@ -83,6 +83,7 @@ class TemplateListResponse(BaseModel):
     watermark_position_y: float | None = None
     watermark_width: float | None = None
     watermark_rotation: float | None = None
+    watermark_opacity: float | None = None
     created_at: datetime
 
     model_config = {"from_attributes": True}

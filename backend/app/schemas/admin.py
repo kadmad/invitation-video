@@ -64,6 +64,7 @@ class AdminTemplateUpdate(BaseModel):
     watermark_position_y: float | None = None
     watermark_width: float | None = None
     watermark_rotation: float | None = None
+    watermark_opacity: float | None = None
     pdf_snapshot_timestamps: list[float] | None = None
     render_preview: bool = False  # explicit flag — only queue preview render when True
 
@@ -322,6 +323,7 @@ class AdminTemplateListResponse(BaseModel):
     watermark_position_y: float | None = None
     watermark_width: float | None = None
     watermark_rotation: float | None = None
+    watermark_opacity: float | None = None
     preview_key: str | None = None
     preview_status: str | None = None
     created_at: datetime

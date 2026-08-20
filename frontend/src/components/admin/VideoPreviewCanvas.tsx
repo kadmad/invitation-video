@@ -18,6 +18,7 @@ interface VideoPreviewCanvasProps {
   watermarkY?: number;
   watermarkWidth?: number;
   watermarkRotation?: number;
+  watermarkOpacity?: number;
   onWatermarkChange?: (x: number, y: number, width: number, rotation: number) => void;
 }
 
@@ -28,6 +29,7 @@ export default function VideoPreviewCanvas({
   watermarkY,
   watermarkWidth,
   watermarkRotation,
+  watermarkOpacity,
   onWatermarkChange,
 }: VideoPreviewCanvasProps) {
   const { id: templateId } = useParams<{ id: string }>();
@@ -456,12 +458,18 @@ export default function VideoPreviewCanvas({
                 />
               ))}
 
-          {watermarkEditing && containerSize.width > 0 && onWatermarkChange && (
+          {/* Always drawn so the configured mark is visible on load — the
+              toggle only controls whether it's draggable. Previously it only
+              rendered while editing, so after a refresh admins saw nothing
+              and assumed their saved placement had been lost. */}
+          {containerSize.width > 0 && onWatermarkChange && (
             <WatermarkPlacementOverlay
               x={watermarkX ?? 0.39}
               y={watermarkY ?? 0.88}
               width={watermarkWidth ?? 0.22}
               rotation={watermarkRotation ?? 0}
+              opacity={watermarkOpacity ?? 0.85}
+              editable={!!watermarkEditing}
               containerWidth={containerSize.width}
               containerHeight={containerSize.height}
               onChange={onWatermarkChange}

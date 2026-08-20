@@ -6,9 +6,12 @@ interface Props {
   y: number;
   width: number;
   rotation: number;
+  opacity: number;
   containerWidth: number;
   containerHeight: number;
   onChange: (x: number, y: number, width: number, rotation: number) => void;
+  /** When false the mark is drawn for reference but not interactive. */
+  editable?: boolean;
 }
 
 /** Draggable/resizable placement box for the paid-render watermark, shown
@@ -21,9 +24,11 @@ export default function WatermarkPlacementOverlay({
   y,
   width,
   rotation,
+  opacity,
   containerWidth,
   containerHeight,
   onChange,
+  editable = true,
 }: Props) {
   const targetRef = useRef<HTMLDivElement>(null);
   const [mounted, setMounted] = useState(false);
@@ -45,7 +50,7 @@ export default function WatermarkPlacementOverlay({
           left: boxLeft,
           top: boxTop,
           width: boxWidth,
-          pointerEvents: "auto",
+          pointerEvents: editable ? "auto" : "none",
           transform: rotation ? `rotate(${rotation}deg)` : undefined,
         }}
       >
@@ -56,21 +61,23 @@ export default function WatermarkPlacementOverlay({
           style={{
             width: "100%",
             height: "auto",
-            opacity: 0.85,
+            opacity,
             filter: "drop-shadow(0 1px 3px rgba(0,0,0,0.45))",
             userSelect: "none",
           }}
         />
-        <div className="absolute inset-0 border-2 border-dashed border-amber-400/70 pointer-events-none rounded-sm" />
-        <div
-          className="absolute bottom-full left-0 mb-1 px-1.5 py-0.5 rounded text-[10px] whitespace-nowrap pointer-events-none"
-          style={{ color: "#fbbf24", background: "rgba(0,0,0,0.65)" }}
-        >
-          Watermark placement
-        </div>
+        {editable && <div className="absolute inset-0 border-2 border-dashed border-amber-400/70 pointer-events-none rounded-sm" />}
+        {editable && (
+          <div
+            className="absolute bottom-full left-0 mb-1 px-1.5 py-0.5 rounded text-[10px] whitespace-nowrap pointer-events-none"
+            style={{ color: "#fbbf24", background: "rgba(0,0,0,0.65)" }}
+          >
+            Watermark placement
+          </div>
+        )}
       </div>
 
-      {mounted && targetRef.current && (
+      {editable && mounted && targetRef.current && (
         <Moveable
           target={targetRef}
           draggable

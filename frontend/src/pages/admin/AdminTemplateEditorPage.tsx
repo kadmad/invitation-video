@@ -60,6 +60,7 @@ export default function AdminTemplateEditorPage() {
   const [watermarkY, setWatermarkY] = useState(0.88);
   const [watermarkWidth, setWatermarkWidth] = useState(0.22);
   const [watermarkRotation, setWatermarkRotation] = useState(0);
+  const [watermarkOpacity, setWatermarkOpacity] = useState(0.85);
   const [editingWatermark, setEditingWatermark] = useState(false);
   const [publishError, setPublishError] = useState<string | null>(null);
   const [draftRecovered, setDraftRecovered] = useState(false);
@@ -132,6 +133,7 @@ export default function AdminTemplateEditorPage() {
         setWatermarkY(tmpl.watermark_position_y ?? 0.88);
         setWatermarkWidth(tmpl.watermark_width ?? 0.22);
         setWatermarkRotation(tmpl.watermark_rotation ?? 0);
+        setWatermarkOpacity(tmpl.watermark_opacity ?? 0.85);
         setPdfSnapshotTimestamps(tmpl.pdf_snapshot_timestamps ?? []);
         setCategories(cats);
 
@@ -260,6 +262,7 @@ export default function AdminTemplateEditorPage() {
         watermark_position_y: watermarkY,
         watermark_width: watermarkWidth,
         watermark_rotation: watermarkRotation,
+        watermark_opacity: watermarkOpacity,
         pdf_snapshot_timestamps: pdfSnapshotTimestamps.length > 0 ? pdfSnapshotTimestamps : null,
         render_preview: renderPreview,
       } as any);
@@ -459,9 +462,26 @@ export default function AdminTemplateEditorPage() {
           Watermark
         </button>
         {editingWatermark && (
-          <span className="text-[10px] text-amber-600 flex-shrink-0">
-            One small watermark only — place it in a corner
-          </span>
+          <>
+            <label className="flex items-center gap-1.5 flex-shrink-0" title="Watermark opacity on the rendered video">
+              <span className="text-[10px] text-ink-muted">Opacity</span>
+              <input
+                type="range"
+                min={0.1}
+                max={1}
+                step={0.05}
+                value={watermarkOpacity}
+                onChange={(e) => setWatermarkOpacity(parseFloat(e.target.value))}
+                className="w-20 accent-amber-500 cursor-pointer"
+              />
+              <span className="text-[10px] text-ink-muted tabular-nums w-7">
+                {Math.round(watermarkOpacity * 100)}%
+              </span>
+            </label>
+            <span className="text-[10px] text-amber-600 flex-shrink-0">
+              One small watermark only — place it in a corner
+            </span>
+          </>
         )}
 
         {/* Render notes */}
@@ -648,6 +668,7 @@ export default function AdminTemplateEditorPage() {
             watermarkY={watermarkY}
             watermarkWidth={watermarkWidth}
             watermarkRotation={watermarkRotation}
+            watermarkOpacity={watermarkOpacity}
             onWatermarkChange={(x, y, w, r) => {
               setWatermarkX(x);
               setWatermarkY(y);

@@ -28,6 +28,7 @@ class FFmpegRenderer:
         watermark_position_y: float | None = None,
         watermark_width: float | None = None,
         watermark_rotation: float | None = None,
+        watermark_opacity: float | None = None,
     ):
         self.source_path = source_path
         self.output_path = output_path
@@ -46,6 +47,7 @@ class FFmpegRenderer:
         self.watermark_position_y = watermark_position_y if watermark_position_y is not None else 0.88
         self.watermark_width = watermark_width if watermark_width is not None else 0.22
         self.watermark_rotation = watermark_rotation or 0.0
+        self.watermark_opacity = watermark_opacity if watermark_opacity is not None else 0.85
 
     @staticmethod
     def _escape_drawtext(text: str) -> str:
@@ -189,7 +191,7 @@ class FFmpegRenderer:
             if filter_str:
                 parts.append(f"[0:v]{filter_str}[txt]")
                 video_label = "txt"
-            wm_filters = f"scale={logo_w}:-1,format=rgba,colorchannelmixer=aa=0.85"
+            wm_filters = f"scale={logo_w}:-1,format=rgba,colorchannelmixer=aa={self.watermark_opacity}"
             if self.watermark_rotation:
                 angle = math.radians(self.watermark_rotation)
                 wm_filters += f",rotate={angle}:c=none:ow=rotw({angle}):oh=roth({angle})"

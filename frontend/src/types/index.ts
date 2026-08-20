@@ -160,6 +160,7 @@ export interface Template {
   watermark_position_y: number | null;
   watermark_width: number | null;
   watermark_rotation: number | null;
+  watermark_opacity: number | null;
   pdf_snapshot_timestamps?: number[];
 }
 
