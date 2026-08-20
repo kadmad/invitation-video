@@ -1,9 +1,20 @@
 /** @type {import('tailwindcss').Config} */
 export default {
+  darkMode: "class",
   content: ["./index.html", "./src/**/*.{js,ts,jsx,tsx}"],
   theme: {
     extend: {
       colors: {
+        // Semantic theme tokens — CSS variables defined in src/index.css
+        // (:root for light, .dark for dark). Use these instead of raw
+        // bg-white/text-slate-*/border-slate-* so components respond to
+        // the theme toggle automatically.
+        page: 'rgb(var(--c-page) / <alpha-value>)',
+        surface: 'rgb(var(--c-surface) / <alpha-value>)',
+        'surface-alt': 'rgb(var(--c-surface-alt) / <alpha-value>)',
+        ink: 'rgb(var(--c-ink) / <alpha-value>)',
+        'ink-muted': 'rgb(var(--c-ink-muted) / <alpha-value>)',
+        edge: 'rgb(var(--c-edge) / <alpha-value>)',
         primary: {
           50: '#eef2fe',
           100: '#dfe7fd',
@@ -78,6 +89,14 @@ export default {
           '0%': { backgroundPosition: '-200% 0' },
           '100%': { backgroundPosition: '200% 0' },
         },
+        twinkle: {
+          '0%, 100%': { opacity: '0.15', transform: 'scale(0.8)' },
+          '50%': { opacity: '1', transform: 'scale(1)' },
+        },
+        sliceIn: {
+          '0%': { transform: 'scaleX(0)' },
+          '100%': { transform: 'scaleX(1)' },
+        },
       },
       animation: {
         'fade-in': 'fadeIn 0.3s ease-out',
@@ -87,6 +106,9 @@ export default {
         'fade-out': 'fadeOut 0.2s ease-out forwards',
         'scale-out': 'scaleOut 0.2s ease-out forwards',
         'shimmer': 'shimmer 1.5s ease-in-out infinite',
+        'shimmer-slow': 'shimmer 3.5s linear infinite',
+        'twinkle': 'twinkle 2.4s ease-in-out infinite',
+        'slice-in': 'sliceIn 280ms ease-out forwards',
       },
     },
   },

@@ -102,7 +102,7 @@ export default function AdminLayout() {
             setCollapsed(!collapsed);
             setMobileOpen(false);
           }}
-          className="text-slate-400 hover:text-white p-1.5 rounded-lg hover:bg-slate-800 transition"
+          className="text-ink-muted hover:text-white p-1.5 rounded-lg hover:bg-slate-800 transition"
         >
           <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
             {collapsed ? (
@@ -126,7 +126,7 @@ export default function AdminLayout() {
               } ${
                 isActive
                   ? "bg-gradient-to-r from-primary-500/20 to-transparent border-l-3 border-primary-400 text-white"
-                  : "text-slate-400 hover:text-white hover:bg-slate-800/60"
+                  : "text-ink-muted hover:text-white hover:bg-slate-800/60"
               }`
             }
           >
@@ -144,7 +144,7 @@ export default function AdminLayout() {
         <NavLink
           to="/"
           onClick={() => setMobileOpen(false)}
-          className="group relative flex items-center gap-2 text-sm text-slate-400 hover:text-white transition"
+          className="group relative flex items-center gap-2 text-sm text-ink-muted hover:text-white transition"
         >
           <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M9 15L3 9m0 0l6-6M3 9h12a6 6 0 010 12h-3" />
@@ -198,10 +198,20 @@ export default function AdminLayout() {
         {sidebarContent}
       </aside>
 
-      {/* Main content */}
-      <main className="flex-1 bg-slate-50 p-6 overflow-auto">
+      {/* Main content.
+          The admin console is deliberately desktop-first — the template editor
+          (canvas + timeline + block panel) has no meaningful phone layout. On
+          narrow screens the content keeps a desktop min-width and scrolls
+          horizontally rather than collapsing into an unusable squeeze, and a
+          banner explains why. Customer-facing pages stay fully responsive. */}
+      <main className="flex-1 bg-surface-alt p-4 sm:p-6 overflow-auto">
+        <div className="lg:hidden mb-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+          The admin console is designed for desktop — some tools need a wider
+          screen. Scroll sideways, or switch to a laptop for the full layout.
+        </div>
+        <div className="min-w-[64rem] lg:min-w-0">
         {/* Breadcrumb */}
-        <nav className="flex items-center gap-1.5 text-sm text-slate-400 mb-4">
+        <nav className="flex items-center gap-1.5 text-sm text-ink-muted mb-4">
           {breadcrumbs.map((crumb, i) => (
             <span key={crumb.path} className="flex items-center gap-1.5">
               {i > 0 && (
@@ -209,13 +219,14 @@ export default function AdminLayout() {
                   <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
                 </svg>
               )}
-              <span className={crumb.isLast ? "text-slate-700 font-medium" : ""}>
+              <span className={crumb.isLast ? "text-ink font-medium" : ""}>
                 {crumb.label}
               </span>
             </span>
           ))}
         </nav>
         <PageTransition><Outlet /></PageTransition>
+        </div>
       </main>
     </div>
   );

@@ -86,18 +86,18 @@ export default function MobileNavDrawer({ open, onClose }: Props) {
 
       {/* Drawer */}
       <div
-        className={`fixed top-0 right-0 h-full w-72 max-w-[80vw] bg-white z-50 md:hidden shadow-2xl transition-transform duration-200 ease-out flex flex-col ${
+        className={`fixed top-0 right-0 h-full w-72 max-w-[80vw] bg-surface z-50 md:hidden shadow-2xl transition-transform duration-200 ease-out flex flex-col ${
           open ? "translate-x-0" : "translate-x-full"
         }`}
         role="dialog"
         aria-modal="true"
       >
-        <div className="flex items-center justify-between py-3 px-5 border-b border-slate-100 flex-shrink-0">
+        <div className="flex items-center justify-between py-3 px-5 border-b border-edge flex-shrink-0">
           <img src="/logo.png" alt="Bring My Matter" className="h-16 w-auto" />
           <button
             onClick={onClose}
             aria-label="Close menu"
-            className="text-slate-400 hover:text-slate-600 p-1"
+            className="text-ink-muted hover:text-ink-muted p-1"
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -106,7 +106,7 @@ export default function MobileNavDrawer({ open, onClose }: Props) {
         </div>
 
         {user && (
-          <div className="flex items-center gap-3 px-5 py-4 border-b border-slate-100 flex-shrink-0">
+          <div className="flex items-center gap-3 px-5 py-4 border-b border-edge flex-shrink-0">
             {user.avatar_url ? (
               <img
                 src={user.avatar_url}
@@ -120,11 +120,11 @@ export default function MobileNavDrawer({ open, onClose }: Props) {
               </div>
             )}
             <div className="min-w-0">
-              <p className="text-sm font-semibold text-slate-800 truncate">
+              <p className="text-sm font-semibold text-ink truncate">
                 {user.first_name ? `${user.first_name} ${user.last_name || ""}`.trim() : user.full_name || "User"}
               </p>
               {(user.email || user.phone_number) && (
-                <p className="text-xs text-slate-400 truncate">{user.email || user.phone_number}</p>
+                <p className="text-xs text-ink-muted truncate">{user.email || user.phone_number}</p>
               )}
             </div>
           </div>
@@ -139,7 +139,7 @@ export default function MobileNavDrawer({ open, onClose }: Props) {
               onClick={onClose}
               className={({ isActive }) =>
                 `flex items-center gap-3 px-5 py-3 text-sm font-medium transition-colors ${
-                  isActive ? "text-brand-600 bg-brand-50" : "text-slate-600 hover:bg-slate-50"
+                  isActive ? "text-brand-600 bg-brand-50" : "text-ink-muted hover:bg-surface-alt"
                 }`
               }
             >
@@ -150,7 +150,7 @@ export default function MobileNavDrawer({ open, onClose }: Props) {
         </nav>
 
         {user && (
-          <div className="border-t border-slate-100 p-3 flex-shrink-0">
+          <div className="border-t border-edge p-3 flex-shrink-0">
             <button
               onClick={() => {
                 onClose();

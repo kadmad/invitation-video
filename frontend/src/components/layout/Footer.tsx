@@ -19,22 +19,22 @@ export default function Footer() {
   const productLinks = user ? [...publicProductLinks, ...authedProductLinks] : publicProductLinks;
 
   return (
-    <footer className="border-t border-slate-100 bg-white mt-12">
+    <footer className="border-t border-edge bg-surface mt-12">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
         <div className="grid gap-8 sm:grid-cols-3">
           <div>
             <Link to="/" className="inline-block">
               <img src="/logo.png" alt={SITE_NAME} className="h-28 sm:h-40 w-auto" />
             </Link>
-            <p className="text-sm text-slate-500 mt-2 max-w-xs">{SITE_TAGLINE}</p>
+            <p className="text-sm text-ink-muted mt-2 max-w-xs">{SITE_TAGLINE}</p>
           </div>
 
           <div>
-            <h2 className="text-sm font-semibold text-slate-900 mb-3">Product</h2>
+            <h2 className="text-sm font-semibold text-ink mb-3">Product</h2>
             <ul className="space-y-2 text-sm">
               {productLinks.map((l) => (
                 <li key={l.to}>
-                  <Link to={l.to} className="text-slate-500 hover:text-brand-500 transition-colors">
+                  <Link to={l.to} className="text-ink-muted hover:text-brand-500 transition-colors">
                     {l.label}
                   </Link>
                 </li>
@@ -43,11 +43,11 @@ export default function Footer() {
           </div>
 
           <div>
-            <h2 className="text-sm font-semibold text-slate-900 mb-3">Legal</h2>
+            <h2 className="text-sm font-semibold text-ink mb-3">Legal</h2>
             <ul className="space-y-2 text-sm">
               {legalLinks.map((l) => (
                 <li key={l.to}>
-                  <Link to={l.to} className="text-slate-500 hover:text-brand-500 transition-colors">
+                  <Link to={l.to} className="text-ink-muted hover:text-brand-500 transition-colors">
                     {l.label}
                   </Link>
                 </li>
@@ -55,7 +55,7 @@ export default function Footer() {
               <li>
                 <a
                   href={`mailto:${SUPPORT_EMAIL}`}
-                  className="text-slate-500 hover:text-brand-500 transition-colors"
+                  className="text-ink-muted hover:text-brand-500 transition-colors"
                 >
                   Contact support
                 </a>
@@ -64,7 +64,7 @@ export default function Footer() {
           </div>
         </div>
 
-        <div className="border-t border-slate-100 mt-8 pt-6 flex flex-col sm:flex-row gap-2 sm:items-center sm:justify-between text-xs text-slate-400">
+        <div className="border-t border-edge mt-8 pt-6 flex flex-col sm:flex-row gap-2 sm:items-center sm:justify-between text-xs text-ink-muted">
           <p>
             © {new Date().getFullYear()} {SITE_NAME}. All rights reserved.
           </p>

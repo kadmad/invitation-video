@@ -2,13 +2,31 @@
 @tailwind components;
 @tailwind utilities;
 
+:root {
+  --c-page: 250 251 252;       /* bg-[#FAFBFC] page background */
+  --c-surface: 255 255 255;    /* bg-white — cards/panels */
+  --c-surface-alt: 248 250 252; /* bg-slate-50 — subtle alt surfaces */
+  --c-ink: 15 23 42;           /* text-slate-900 — primary text */
+  --c-ink-muted: 100 116 139;  /* text-slate-500 — secondary text */
+  --c-edge: 226 232 240;       /* border-slate-200 */
+}
+
+.dark {
+  --c-page: 10 13 20;
+  --c-surface: 19 23 35;
+  --c-surface-alt: 26 31 46;
+  --c-ink: 229 232 240;
+  --c-ink-muted: 148 157 179;
+  --c-edge: 40 47 66;
+}
+
 @layer base {
   body {
-    @apply bg-[#FAFBFC] text-slate-900 font-sans antialiased;
+    @apply bg-page text-ink font-sans antialiased transition-colors duration-200;
   }
 
   input, select, textarea {
-    @apply ring-1 ring-slate-200 focus:ring-2 focus:ring-primary-500 focus:outline-none transition-shadow;
+    @apply ring-1 ring-edge focus:ring-2 focus:ring-primary-500 focus:outline-none transition-shadow;
   }
 }
 
@@ -21,9 +39,9 @@
   }
 
   .btn-secondary {
-    @apply ring-1 ring-slate-200 text-slate-700 font-semibold rounded-xl bg-white
-           hover:bg-slate-50 hover:ring-slate-300
-           active:bg-slate-100
+    @apply ring-1 ring-edge text-ink font-semibold rounded-xl bg-surface
+           hover:bg-surface-alt hover:ring-slate-300 dark:hover:ring-slate-600
+           active:bg-surface-alt
            transition-all duration-200 px-5 py-2.5;
   }
 
@@ -35,7 +53,7 @@
   }
 
   .btn-brand-outline {
-    @apply ring-1 ring-[#2A2420] text-[#2A2420] font-semibold rounded-xl bg-white
+    @apply ring-1 ring-[#2A2420] text-[#2A2420] font-semibold rounded-xl bg-surface
            hover:bg-[#2A2420] hover:text-[#F6EFE1]
            transition-all duration-200 px-5 py-2.5;
   }
@@ -48,7 +66,7 @@
   }
 
   .card {
-    @apply bg-white rounded-2xl shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all duration-200;
+    @apply bg-surface rounded-2xl shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all duration-200;
   }
 
   .accordion-content {
@@ -70,15 +88,16 @@
   }
 
   .skeleton {
-    @apply bg-gradient-to-r from-slate-200 via-slate-100 to-slate-200 rounded;
+    @apply bg-gradient-to-r from-slate-200 via-slate-100 to-slate-200
+           dark:from-slate-700 dark:via-slate-800 dark:to-slate-700 rounded;
     background-size: 200% 100%;
     animation: shimmer 1.5s ease-in-out infinite;
   }
 
   .input-field {
-    @apply w-full rounded-xl ring-1 ring-slate-200 px-3.5 py-2.5 text-sm bg-white
+    @apply w-full rounded-xl ring-1 ring-edge px-3.5 py-2.5 text-sm bg-surface text-ink
            focus:ring-2 focus:ring-primary-500 focus:outline-none
-           placeholder:text-slate-400 transition-shadow duration-200;
+           placeholder:text-ink-muted transition-shadow duration-200;
   }
 }
 
@@ -195,6 +214,32 @@
 .anim-elastic-in { animation: anim-elastic-in 0.7s ease-out both; }
 .anim-split-reveal { animation: anim-split-reveal 0.5s ease-out both; }
 .anim-flip-in { animation: anim-flip-in 0.5s ease-out both; }
+
+/* Editor form panel scrollbar — deliberately always visible (not the macOS
+   overlay default that only appears mid-scroll), so it's obvious the panel
+   scrolls and there are more fields below. Light-theme counterpart to the
+   dark .timeline-scroll rules below. */
+.editor-scroll::-webkit-scrollbar {
+  width: 10px;
+}
+.editor-scroll::-webkit-scrollbar-track {
+  background: rgb(var(--c-surface-alt));
+  border-radius: 5px;
+}
+.editor-scroll::-webkit-scrollbar-thumb {
+  background: rgb(var(--c-edge));
+  border-radius: 5px;
+  border: 2px solid rgb(var(--c-surface-alt));
+}
+.editor-scroll::-webkit-scrollbar-thumb:hover {
+  background: rgb(var(--c-ink-muted) / 0.55);
+}
+.editor-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: rgb(var(--c-edge)) rgb(var(--c-surface-alt));
+  /* Reserve the gutter so content doesn't shift when the bar appears. */
+  scrollbar-gutter: stable;
+}
 
 /* Timeline scrollbar — always visible, thin */
 .timeline-scroll::-webkit-scrollbar {
