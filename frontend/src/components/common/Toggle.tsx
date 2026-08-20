@@ -23,7 +23,7 @@ export default function Toggle({ checked, onChange, disabled, size = "md" }: Tog
       } ${checked ? "bg-primary-500" : "bg-slate-300"}`}
     >
       <span
-        className={`inline-block ${sizes.thumb} rounded-full bg-white shadow-sm transition-transform duration-200 ${
+        className={`inline-block ${sizes.thumb} rounded-full bg-surface shadow-sm transition-transform duration-200 ${
           checked ? sizes.on : sizes.off
         }`}
       />

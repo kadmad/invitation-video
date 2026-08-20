@@ -75,7 +75,7 @@ export default function AdminFontsPage() {
   return (
     <div>
       <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-bold text-slate-900">Fonts</h1>
+        <h1 className="text-2xl font-bold text-ink">Fonts</h1>
         <button onClick={() => setShowUpload(true)} className="btn-primary text-sm">
           Upload Font
         </button>
@@ -86,10 +86,10 @@ export default function AdminFontsPage() {
           onSubmit={handleUpload}
           className="card p-6 mb-6 space-y-4 animate-slide-up"
         >
-          <h2 className="font-semibold text-lg text-slate-900">Upload Font</h2>
+          <h2 className="font-semibold text-lg text-ink">Upload Font</h2>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Name</label>
+              <label className="block text-sm font-medium text-ink mb-1">Name</label>
               <input
                 type="text"
                 value={form.name}
@@ -100,7 +100,7 @@ export default function AdminFontsPage() {
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Family Name</label>
+              <label className="block text-sm font-medium text-ink mb-1">Family Name</label>
               <input
                 type="text"
                 value={form.family_name}
@@ -111,7 +111,7 @@ export default function AdminFontsPage() {
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Language</label>
+              <label className="block text-sm font-medium text-ink mb-1">Language</label>
               <input
                 type="text"
                 value={form.language}
@@ -121,7 +121,7 @@ export default function AdminFontsPage() {
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Weight</label>
+              <label className="block text-sm font-medium text-ink mb-1">Weight</label>
               <select
                 value={form.weight}
                 onChange={(e) => setForm((f) => ({ ...f, weight: e.target.value }))}
@@ -139,7 +139,7 @@ export default function AdminFontsPage() {
               </select>
             </div>
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Style</label>
+              <label className="block text-sm font-medium text-ink mb-1">Style</label>
               <select
                 value={form.style}
                 onChange={(e) => setForm((f) => ({ ...f, style: e.target.value }))}
@@ -150,7 +150,7 @@ export default function AdminFontsPage() {
               </select>
             </div>
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Font File</label>
+              <label className="block text-sm font-medium text-ink mb-1">Font File</label>
               <input
                 type="file"
                 accept=".ttf,.otf,.woff,.woff2"
@@ -182,7 +182,7 @@ export default function AdminFontsPage() {
       {/* Preview text input */}
       {!loading && fonts.length > 0 && (
         <div className="mb-4">
-          <label className="block text-xs font-medium text-slate-500 mb-1">Preview Text</label>
+          <label className="block text-xs font-medium text-ink-muted mb-1">Preview Text</label>
           <input
             type="text"
             value={previewText}
@@ -197,7 +197,7 @@ export default function AdminFontsPage() {
           {Array.from({ length: 3 }).map((_, i) => (
             <div key={i} className="card p-4 skeleton">
               <div className="h-5 w-40 bg-slate-200 rounded mb-2" />
-              <div className="h-4 w-64 bg-slate-100 rounded" />
+              <div className="h-4 w-64 bg-surface-alt rounded" />
             </div>
           ))}
         </div>
@@ -206,38 +206,38 @@ export default function AdminFontsPage() {
           <svg className="w-12 h-12 text-slate-300 mx-auto mb-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M7.5 8.25h9m-9 3H12m-9.75 1.51c0 1.6 1.123 2.994 2.707 3.227 1.087.16 2.185.283 3.293.369V21l4.076-4.076a1.526 1.526 0 011.037-.443 48.282 48.282 0 005.68-.494c1.584-.233 2.707-1.626 2.707-3.228V6.741c0-1.602-1.123-2.995-2.707-3.228A48.394 48.394 0 0012 3c-2.392 0-4.744.175-7.043.513C3.373 3.746 2.25 5.14 2.25 6.741v6.018z" />
           </svg>
-          <p className="text-slate-500 font-medium">No fonts uploaded yet</p>
-          <p className="text-sm text-slate-400 mt-1">Upload your first font to use in templates</p>
+          <p className="text-ink-muted font-medium">No fonts uploaded yet</p>
+          <p className="text-sm text-ink-muted mt-1">Upload your first font to use in templates</p>
         </div>
       ) : (
         <div className="card overflow-hidden">
           <table className="w-full text-left">
-            <thead className="bg-slate-50 border-b border-slate-200">
+            <thead className="bg-surface-alt border-b border-edge">
               <tr>
-                <th className="px-4 py-3 text-sm font-medium text-slate-600">Name</th>
-                <th className="px-4 py-3 text-sm font-medium text-slate-600">Family</th>
-                <th className="px-4 py-3 text-sm font-medium text-slate-600">Language</th>
-                <th className="px-4 py-3 text-sm font-medium text-slate-600">Weight</th>
-                <th className="px-4 py-3 text-sm font-medium text-slate-600">Style</th>
-                <th className="px-4 py-3 text-sm font-medium text-slate-600">Preview</th>
-                <th className="px-4 py-3 text-sm font-medium text-slate-600">Actions</th>
+                <th className="px-4 py-3 text-sm font-medium text-ink-muted">Name</th>
+                <th className="px-4 py-3 text-sm font-medium text-ink-muted">Family</th>
+                <th className="px-4 py-3 text-sm font-medium text-ink-muted">Language</th>
+                <th className="px-4 py-3 text-sm font-medium text-ink-muted">Weight</th>
+                <th className="px-4 py-3 text-sm font-medium text-ink-muted">Style</th>
+                <th className="px-4 py-3 text-sm font-medium text-ink-muted">Preview</th>
+                <th className="px-4 py-3 text-sm font-medium text-ink-muted">Actions</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-200">
+            <tbody className="divide-y divide-edge">
               {fonts.map((font, i) => (
                 <tr
                   key={font.id}
-                  className={`hover:bg-slate-50 transition ${initialLoad ? "opacity-0 animate-slide-up" : ""}`}
+                  className={`hover:bg-surface-alt transition ${initialLoad ? "opacity-0 animate-slide-up" : ""}`}
                   style={initialLoad ? { animationDelay: `${Math.min(i * 50, 300)}ms`, animationFillMode: "forwards" } : undefined}
                 >
-                  <td className="px-4 py-3 text-sm font-medium text-slate-900">{font.name}</td>
-                  <td className="px-4 py-3 text-sm text-slate-500 font-mono">{font.family_name}</td>
-                  <td className="px-4 py-3 text-sm text-slate-500">
+                  <td className="px-4 py-3 text-sm font-medium text-ink">{font.name}</td>
+                  <td className="px-4 py-3 text-sm text-ink-muted font-mono">{font.family_name}</td>
+                  <td className="px-4 py-3 text-sm text-ink-muted">
                     {font.language || <span className="text-slate-300">-</span>}
                   </td>
-                  <td className="px-4 py-3 text-sm text-slate-500">{font.weight}</td>
-                  <td className="px-4 py-3 text-sm text-slate-500">{font.style}</td>
-                  <td className="px-4 py-3 text-sm text-slate-700 max-w-[200px] truncate" style={{ fontFamily: font.family_name }}>
+                  <td className="px-4 py-3 text-sm text-ink-muted">{font.weight}</td>
+                  <td className="px-4 py-3 text-sm text-ink-muted">{font.style}</td>
+                  <td className="px-4 py-3 text-sm text-ink max-w-[200px] truncate" style={{ fontFamily: font.family_name }} title={previewText}>
                     {previewText}
                   </td>
                   <td className="px-4 py-3">

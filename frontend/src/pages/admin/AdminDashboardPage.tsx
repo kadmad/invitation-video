@@ -8,7 +8,7 @@ function SkeletonCard() {
     <div className="card p-6 animate-pulse">
       <div className="w-12 h-12 rounded-full bg-slate-200 mb-4" />
       <div className="h-8 w-16 bg-slate-200 rounded mb-2" />
-      <div className="h-4 w-20 bg-slate-100 rounded" />
+      <div className="h-4 w-20 bg-surface-alt rounded" />
     </div>
   );
 }
@@ -83,7 +83,7 @@ export default function AdminDashboardPage() {
 
   return (
     <div>
-      <h1 className="text-2xl font-bold text-slate-900 mb-6">Admin Dashboard</h1>
+      <h1 className="text-2xl font-bold text-ink mb-6">Admin Dashboard</h1>
 
       {/* Stat Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
@@ -100,15 +100,15 @@ export default function AdminDashboardPage() {
                 >
                   {card.icon}
                 </div>
-                <p className="text-3xl font-bold text-slate-900">{card.value}</p>
-                <p className="text-sm text-slate-500 mt-1">{card.label}</p>
+                <p className="text-3xl font-bold text-ink">{card.value}</p>
+                <p className="text-sm text-ink-muted mt-1">{card.label}</p>
               </Link>
             ))}
       </div>
 
       {/* Quick Actions */}
       <div className="mb-8">
-        <h2 className="text-lg font-semibold text-slate-900 mb-3">Quick Actions</h2>
+        <h2 className="text-lg font-semibold text-ink mb-3">Quick Actions</h2>
         <div className="flex flex-wrap gap-3">
           <Link to="/admin/templates" className="btn-primary text-sm inline-flex items-center gap-2">
             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -135,30 +135,30 @@ export default function AdminDashboardPage() {
       {!loading && recentTemplates.length > 0 && (
         <div>
           <div className="flex items-center justify-between mb-3">
-            <h2 className="text-lg font-semibold text-slate-900">Recent Templates</h2>
+            <h2 className="text-lg font-semibold text-ink">Recent Templates</h2>
             <Link to="/admin/templates" className="text-sm text-primary-500 hover:text-primary-700 font-medium">
               View all
             </Link>
           </div>
           <div className="card overflow-hidden">
             <table className="w-full text-left">
-              <thead className="bg-slate-50 border-b border-slate-200">
+              <thead className="bg-surface-alt border-b border-edge">
                 <tr>
-                  <th className="px-4 py-3 text-sm font-medium text-slate-600">Name</th>
-                  <th className="px-4 py-3 text-sm font-medium text-slate-600">Slug</th>
-                  <th className="px-4 py-3 text-sm font-medium text-slate-600">Status</th>
-                  <th className="px-4 py-3 text-sm font-medium text-slate-600">Blocks</th>
+                  <th className="px-4 py-3 text-sm font-medium text-ink-muted">Name</th>
+                  <th className="px-4 py-3 text-sm font-medium text-ink-muted">Slug</th>
+                  <th className="px-4 py-3 text-sm font-medium text-ink-muted">Status</th>
+                  <th className="px-4 py-3 text-sm font-medium text-ink-muted">Blocks</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-200">
+              <tbody className="divide-y divide-edge">
                 {recentTemplates.map((t) => (
-                  <tr key={t.id} className="hover:bg-slate-50 transition">
+                  <tr key={t.id} className="hover:bg-surface-alt transition">
                     <td className="px-4 py-3">
                       <Link to={`/admin/templates/${t.id}`} className="text-sm font-medium text-primary-600 hover:text-primary-800">
                         {t.name}
                       </Link>
                     </td>
-                    <td className="px-4 py-3 text-sm text-slate-500">{t.slug}</td>
+                    <td className="px-4 py-3 text-sm text-ink-muted">{t.slug}</td>
                     <td className="px-4 py-3">
                       <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-medium ${
                         t.is_published ? "bg-accent-50 text-accent-700" : "bg-amber-50 text-amber-700"
@@ -166,7 +166,7 @@ export default function AdminDashboardPage() {
                         {t.is_published ? "Published" : "Draft"}
                       </span>
                     </td>
-                    <td className="px-4 py-3 text-sm text-slate-500">
+                    <td className="px-4 py-3 text-sm text-ink-muted">
                       {t.text_blocks?.length ?? 0}
                     </td>
                   </tr>

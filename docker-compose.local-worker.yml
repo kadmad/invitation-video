@@ -16,9 +16,16 @@
 # admin click needed. Run this on multiple machines at once and they
 # load-balance the same queue automatically (Redis pop is atomic). If this
 # worker dies mid-render, the job is safely requeued for whichever worker
-# picks it up next (see celery_app.py). Open http://localhost:5173/admin
+# picks it up next (see celery_app.py). Open http://localhost:5174/admin
 # "Renders Awaiting" to watch progress or upload a video manually as an
 # override.
+#
+# backend/frontend here are on 8001/5174 (not 8000/5173) so this stack can
+# run ALONGSIDE the regular local dev stack (docker-compose.yml) without
+# port collisions — that one is local Postgres/local data, this one is
+# production data over Tailscale. They are two different admin panels;
+# local dev's :5173/admin will never show production render jobs no matter
+# what this stack is doing, because it queries a different database.
 
 services:
   backend:
@@ -27,7 +34,7 @@ services:
       dockerfile: Dockerfile
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
     ports:
-      - "8000:8000"
+      - "8001:8000"
     volumes:
       - ./backend:/app
     env_file:
@@ -44,6 +51,10 @@ services:
       - .env.production-worker
     depends_on:
       - renderer
+    # Comes back automatically whenever Docker (re)starts — including at PC
+    # boot, as long as Docker Desktop itself is set to launch at login and
+    # this container was left running (`up -d`) at least once.
+    restart: unless-stopped
 
   frontend:
     build:
@@ -51,7 +62,7 @@ services:
       dockerfile: Dockerfile
     command: npm run dev -- --host 0.0.0.0
     ports:
-      - "5173:5173"
+      - "5174:5173"
     volumes:
       - ./frontend:/app
       - /app/node_modules
@@ -77,3 +88,4 @@ services:
       resources:
         limits:
           memory: 6g
+    restart: unless-stopped

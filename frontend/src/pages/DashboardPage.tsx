@@ -19,10 +19,10 @@ export default function DashboardPage() {
     <PageTransition>
       {/* Hero greeting */}
       <div className="text-center py-12">
-        <h1 className="text-3xl font-bold text-slate-900 mb-2">
+        <h1 className="text-3xl font-bold text-ink mb-2">
           Welcome back, {user?.first_name || user?.full_name}
         </h1>
-        <p className="text-slate-500 mb-8">
+        <p className="text-ink-muted mb-8">
           Create beautiful video invitations in minutes
         </p>
         <div className="flex justify-center gap-4">
@@ -55,8 +55,8 @@ export default function DashboardPage() {
             </svg>
           </div>
           <div>
-            <p className="text-2xl font-bold text-slate-900">&mdash;</p>
-            <p className="text-sm text-slate-500">Renders</p>
+            <p className="text-2xl font-bold text-ink">&mdash;</p>
+            <p className="text-sm text-ink-muted">Renders</p>
           </div>
         </div>
 
@@ -78,8 +78,8 @@ export default function DashboardPage() {
             </svg>
           </div>
           <div>
-            <p className="text-2xl font-bold text-slate-900">&mdash;</p>
-            <p className="text-sm text-slate-500">Drafts</p>
+            <p className="text-2xl font-bold text-ink">&mdash;</p>
+            <p className="text-sm text-ink-muted">Drafts</p>
           </div>
         </div>
 
@@ -101,20 +101,20 @@ export default function DashboardPage() {
             </svg>
           </div>
           <div>
-            <p className="text-2xl font-bold text-slate-900">&mdash;</p>
-            <p className="text-sm text-slate-500">Templates Available</p>
+            <p className="text-2xl font-bold text-ink">&mdash;</p>
+            <p className="text-sm text-ink-muted">Templates Available</p>
           </div>
         </div>
       </div>
 
       {/* Recent renders section */}
       <div className="mt-12 animate-slide-up">
-        <h2 className="text-xl font-semibold text-slate-900 mb-4">
+        <h2 className="text-xl font-semibold text-ink mb-4">
           Recent Renders
         </h2>
         {recentRenders.length === 0 ? (
           <div className="card p-8 text-center">
-            <p className="text-slate-400">
+            <p className="text-ink-muted">
               No renders yet. Browse templates to create your first video
               invitation.
             </p>
@@ -148,10 +148,10 @@ export default function DashboardPage() {
                   </svg>
                 </div>
                 <div className="min-w-0 flex-1">
-                  <p className="text-sm font-medium text-slate-900 truncate">
+                  <p className="text-sm font-medium text-ink truncate">
                     Render {render.id.slice(0, 8)}
                   </p>
-                  <p className="text-xs text-slate-400">
+                  <p className="text-xs text-ink-muted">
                     {render.status} &middot;{" "}
                     {new Date(render.created_at).toLocaleDateString()}
                   </p>

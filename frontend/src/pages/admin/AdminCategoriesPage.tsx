@@ -130,7 +130,7 @@ export default function AdminCategoriesPage() {
   return (
     <div>
       <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-bold text-slate-900">Categories</h1>
+        <h1 className="text-2xl font-bold text-ink">Categories</h1>
         <button onClick={openAdd} className="btn-primary text-sm">
           Add Category
         </button>
@@ -139,7 +139,7 @@ export default function AdminCategoriesPage() {
       {/* Search */}
       <div className="mb-4">
         <div className="relative max-w-sm">
-          <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+          <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-ink-muted" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
           </svg>
           <input
@@ -157,12 +157,12 @@ export default function AdminCategoriesPage() {
           onSubmit={handleSubmit}
           className="card p-6 mb-6 space-y-4 animate-slide-up"
         >
-          <h2 className="font-semibold text-lg text-slate-900">
+          <h2 className="font-semibold text-lg text-ink">
             {editingId ? "Edit Category" : "New Category"}
           </h2>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Name</label>
+              <label className="block text-sm font-medium text-ink mb-1">Name</label>
               <input
                 type="text"
                 value={form.name}
@@ -179,7 +179,7 @@ export default function AdminCategoriesPage() {
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Slug</label>
+              <label className="block text-sm font-medium text-ink mb-1">Slug</label>
               <input
                 type="text"
                 value={form.slug}
@@ -189,7 +189,7 @@ export default function AdminCategoriesPage() {
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Sort Order</label>
+              <label className="block text-sm font-medium text-ink mb-1">Sort Order</label>
               <input
                 type="number"
                 value={form.sort_order}
@@ -206,7 +206,7 @@ export default function AdminCategoriesPage() {
                 checked={form.is_active}
                 onChange={(e) => setForm((f) => ({ ...f, is_active: e.target.checked }))}
               />
-              <label htmlFor="is_active" className="text-sm text-slate-700">Active</label>
+              <label htmlFor="is_active" className="text-sm text-ink">Active</label>
             </div>
           </div>
           <div className="flex gap-2">
@@ -233,35 +233,35 @@ export default function AdminCategoriesPage() {
           <svg className="w-12 h-12 text-slate-300 mx-auto mb-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M9.568 3H5.25A2.25 2.25 0 003 5.25v4.318c0 .597.237 1.17.659 1.591l9.581 9.581c.699.699 1.78.872 2.607.33a18.095 18.095 0 005.223-5.223c.542-.827.369-1.908-.33-2.607L11.16 3.66A2.25 2.25 0 009.568 3z" />
           </svg>
-          <p className="text-slate-500 font-medium">
+          <p className="text-ink-muted font-medium">
             {search ? "No categories match your search" : "No categories yet"}
           </p>
           {!search && (
-            <p className="text-sm text-slate-400 mt-1">Create your first category to get started</p>
+            <p className="text-sm text-ink-muted mt-1">Create your first category to get started</p>
           )}
         </div>
       ) : (
         <div className="card overflow-hidden">
           <table className="w-full text-left">
-            <thead className="bg-slate-50 border-b border-slate-200">
+            <thead className="bg-surface-alt border-b border-edge">
               <tr>
-                <th className="px-4 py-3 text-sm font-medium text-slate-600">Name</th>
-                <th className="px-4 py-3 text-sm font-medium text-slate-600">Slug</th>
-                <th className="px-4 py-3 text-sm font-medium text-slate-600">Sort Order</th>
-                <th className="px-4 py-3 text-sm font-medium text-slate-600">Active</th>
-                <th className="px-4 py-3 text-sm font-medium text-slate-600">Actions</th>
+                <th className="px-4 py-3 text-sm font-medium text-ink-muted">Name</th>
+                <th className="px-4 py-3 text-sm font-medium text-ink-muted">Slug</th>
+                <th className="px-4 py-3 text-sm font-medium text-ink-muted">Sort Order</th>
+                <th className="px-4 py-3 text-sm font-medium text-ink-muted">Active</th>
+                <th className="px-4 py-3 text-sm font-medium text-ink-muted">Actions</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-200">
+            <tbody className="divide-y divide-edge">
               {filtered.map((cat, i) => (
                 <tr
                   key={cat.id}
-                  className={`hover:bg-slate-50 transition ${initialLoad ? "opacity-0 animate-slide-up" : ""}`}
+                  className={`hover:bg-surface-alt transition ${initialLoad ? "opacity-0 animate-slide-up" : ""}`}
                   style={initialLoad ? { animationDelay: `${Math.min(i * 50, 300)}ms`, animationFillMode: "forwards" } : undefined}
                 >
-                  <td className="px-4 py-3 text-sm font-medium text-slate-900">{cat.name}</td>
-                  <td className="px-4 py-3 text-sm text-slate-500">{cat.slug}</td>
-                  <td className="px-4 py-3 text-sm text-slate-500">{cat.sort_order}</td>
+                  <td className="px-4 py-3 text-sm font-medium text-ink">{cat.name}</td>
+                  <td className="px-4 py-3 text-sm text-ink-muted">{cat.slug}</td>
+                  <td className="px-4 py-3 text-sm text-ink-muted">{cat.sort_order}</td>
                   <td className="px-4 py-3">
                     <Toggle
                       checked={cat.is_active}

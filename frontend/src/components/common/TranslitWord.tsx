@@ -39,7 +39,7 @@ export default function TranslitWord({
         {current} ▾
       </button>
       {open && (
-        <div className="absolute z-20 mt-1 bg-white border rounded-lg shadow-lg p-1 min-w-[80px]">
+        <div className="absolute z-20 mt-1 bg-surface border rounded-lg shadow-lg p-1 min-w-[80px]">
           {word.candidates.map((c, i) => (
             <button
               key={i}
@@ -50,7 +50,7 @@ export default function TranslitWord({
               className={`block w-full text-left px-2 py-1 text-xs rounded ${
                 i === selectedIndex
                   ? "bg-primary-50 text-primary-700 font-bold"
-                  : "hover:bg-slate-50"
+                  : "hover:bg-surface-alt"
               }`}
             >
               {c}

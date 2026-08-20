@@ -104,7 +104,7 @@ function CarouselTemplateCard({
       onContextMenu={(e) => e.preventDefault()}
       draggable={false}
     >
-      <div className="relative aspect-[9/16] bg-slate-100 overflow-hidden">
+      <div className="relative aspect-[9/16] bg-surface-alt overflow-hidden">
         {t.thumbnail_key ? (
           <img
             src={`${BASE_URL}/templates/${t.slug}/thumbnail`}
@@ -155,9 +155,9 @@ function CarouselTemplateCard({
       </div>
 
       <div className="p-3">
-        <h3 className="font-semibold text-slate-900 text-sm truncate">{t.name}</h3>
+        <h3 className="font-semibold text-ink text-sm truncate">{t.name}</h3>
         <div className="flex items-center gap-2 mt-1">
-          <span className="text-xs text-slate-400">{parseFloat((t.duration_frames / t.fps).toFixed(2))}s</span>
+          <span className="text-xs text-ink-muted">{parseFloat((t.duration_frames / t.fps).toFixed(2))}s</span>
           {category && (
             <span className="bg-brand-50 text-brand-600 rounded-full px-2 py-0.5 text-xs font-medium truncate">
               {category.name}

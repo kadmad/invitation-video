@@ -43,18 +43,18 @@ export default function InvoicePage() {
           </button>
         </div>
 
-        <div className="bg-white rounded-2xl border border-slate-200 p-8">
+        <div className="bg-surface rounded-2xl border border-edge p-8">
           {/* Header */}
-          <div className="flex flex-col sm:flex-row justify-between items-start gap-4 mb-8 border-b border-slate-100 pb-6">
+          <div className="flex flex-col sm:flex-row justify-between items-start gap-4 mb-8 border-b border-edge pb-6">
             <div>
-              <h1 className="text-2xl font-bold text-slate-900">Invoice</h1>
-              <p className="text-slate-500 mt-1">Bring My Matter</p>
+              <h1 className="text-2xl font-bold text-ink">Invoice</h1>
+              <p className="text-ink-muted mt-1">Bring My Matter</p>
             </div>
             <div className="text-right">
-              <p className="text-lg font-semibold text-slate-900">
+              <p className="text-lg font-semibold text-ink">
                 {invoice.order_number}
               </p>
-              <p className="text-sm text-slate-500">
+              <p className="text-sm text-ink-muted">
                 {new Date(invoice.date).toLocaleDateString("en-IN", {
                   day: "numeric",
                   month: "long",
@@ -66,32 +66,32 @@ export default function InvoicePage() {
 
           {/* Customer info */}
           <div className="mb-8">
-            <h2 className="text-sm font-medium text-slate-400 mb-2">
+            <h2 className="text-sm font-medium text-ink-muted mb-2">
               Bill To
             </h2>
-            <p className="font-medium text-slate-900">{invoice.user_name}</p>
-            <p className="text-sm text-slate-500">{invoice.user_email}</p>
+            <p className="font-medium text-ink">{invoice.user_name}</p>
+            <p className="text-sm text-ink-muted">{invoice.user_email}</p>
           </div>
 
           {/* Line items */}
           <table className="w-full mb-8">
             <thead>
-              <tr className="border-b border-slate-200">
-                <th className="text-left text-sm font-medium text-slate-500 pb-3">
+              <tr className="border-b border-edge">
+                <th className="text-left text-sm font-medium text-ink-muted pb-3">
                   Description
                 </th>
-                <th className="text-right text-sm font-medium text-slate-500 pb-3">
+                <th className="text-right text-sm font-medium text-ink-muted pb-3">
                   Amount
                 </th>
               </tr>
             </thead>
             <tbody>
-              <tr className="border-b border-slate-100">
+              <tr className="border-b border-edge">
                 <td className="py-4">
-                  <p className="font-medium text-slate-900">
+                  <p className="font-medium text-ink">
                     Video Render — {invoice.template_name}
                   </p>
-                  <div className="text-xs text-slate-400 mt-1">
+                  <div className="text-xs text-ink-muted mt-1">
                     {Object.entries(invoice.field_values).map(([k, v]) => (
                       <span key={k} className="mr-3">
                         {k.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())}: {v}
@@ -99,17 +99,17 @@ export default function InvoicePage() {
                     ))}
                   </div>
                 </td>
-                <td className="py-4 text-right font-medium text-slate-900">
+                <td className="py-4 text-right font-medium text-ink">
                   ₹{(invoice.amount / 100).toFixed(0)}
                 </td>
               </tr>
             </tbody>
             <tfoot>
               <tr>
-                <td className="pt-4 text-right font-semibold text-slate-900">
+                <td className="pt-4 text-right font-semibold text-ink">
                   Total
                 </td>
-                <td className="pt-4 text-right text-lg font-bold text-slate-900">
+                <td className="pt-4 text-right text-lg font-bold text-ink">
                   ₹{(invoice.amount / 100).toFixed(0)}
                 </td>
               </tr>
@@ -117,14 +117,14 @@ export default function InvoicePage() {
           </table>
 
           {/* Payment info */}
-          <div className="bg-slate-50 rounded-xl p-4 text-sm">
+          <div className="bg-surface-alt rounded-xl p-4 text-sm">
             <div className="flex justify-between mb-1">
-              <span className="text-slate-500">Payment Status</span>
+              <span className="text-ink-muted">Payment Status</span>
               <span
                 className={`font-medium ${
                   invoice.status === "paid"
                     ? "text-green-600"
-                    : "text-slate-600"
+                    : "text-ink-muted"
                 }`}
               >
                 {invoice.status.charAt(0).toUpperCase() +
@@ -133,8 +133,8 @@ export default function InvoicePage() {
             </div>
             {invoice.razorpay_payment_id && (
               <div className="flex justify-between">
-                <span className="text-slate-500">Razorpay Payment ID</span>
-                <span className="font-mono text-slate-700">
+                <span className="text-ink-muted">Razorpay Payment ID</span>
+                <span className="font-mono text-ink">
                   {invoice.razorpay_payment_id}
                 </span>
               </div>

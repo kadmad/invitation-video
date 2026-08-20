@@ -47,11 +47,11 @@ function CollapsibleSection({
 }) {
   const [open, setOpen] = useState(defaultOpen);
   return (
-    <div className="border-b border-slate-100 last:border-b-0">
+    <div className="border-b border-edge last:border-b-0">
       <button
         type="button"
         onClick={() => setOpen(!open)}
-        className="flex items-center justify-between w-full py-2 text-xs font-semibold text-slate-500 uppercase tracking-wider hover:text-slate-700 transition"
+        className="flex items-center justify-between w-full py-2 text-xs font-semibold text-ink-muted uppercase tracking-wider hover:text-ink transition"
       >
         {title}
         <svg
@@ -132,7 +132,7 @@ function BlockEditForm({
 
       <CollapsibleSection title="General" defaultOpen={false}>
         <div>
-          <label className="block text-xs text-slate-500 mb-1">Label</label>
+          <label className="block text-xs text-ink-muted mb-1">Label</label>
           <input
             type="text"
             value={block.label}
@@ -148,13 +148,13 @@ function BlockEditForm({
             onChange={(e) => onUpdateField("is_user_uploadable", e.target.checked)}
             className="rounded border-slate-300"
           />
-          <label className="text-xs text-slate-600">User can upload</label>
+          <label className="text-xs text-ink-muted">User can upload</label>
         </div>
       </CollapsibleSection>
 
       <CollapsibleSection title="Images" defaultOpen={false}>
         <div>
-          <label className="block text-xs text-slate-500 mb-1">Placeholder Image</label>
+          <label className="block text-xs text-ink-muted mb-1">Placeholder Image</label>
           <label className="btn-secondary text-xs cursor-pointer inline-block">
             {uploadingPlaceholder ? "Uploading..." : block.placeholder_key ? "Replace" : "Upload"}
             <input
@@ -166,11 +166,11 @@ function BlockEditForm({
             />
           </label>
           {block.placeholder_key && (
-            <span className="text-[10px] text-slate-400 ml-2">Uploaded</span>
+            <span className="text-[10px] text-ink-muted ml-2">Uploaded</span>
           )}
         </div>
         <div>
-          <label className="block text-xs text-slate-500 mb-1">Frame Overlay (PNG)</label>
+          <label className="block text-xs text-ink-muted mb-1">Frame Overlay (PNG)</label>
           <label className="btn-secondary text-xs cursor-pointer inline-block">
             {uploadingFrame ? "Uploading..." : block.frame_image_key ? "Replace" : "Upload"}
             <input
@@ -182,7 +182,7 @@ function BlockEditForm({
             />
           </label>
           {block.frame_image_key && (
-            <span className="text-[10px] text-slate-400 ml-2">Uploaded</span>
+            <span className="text-[10px] text-ink-muted ml-2">Uploaded</span>
           )}
         </div>
       </CollapsibleSection>
@@ -197,7 +197,7 @@ function BlockEditForm({
               className={`px-2 py-1.5 rounded-lg text-xs font-medium transition-all ${
                 block.mask_shape === shape.value
                   ? "bg-primary-500 text-white"
-                  : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                  : "bg-surface-alt text-ink-muted hover:bg-slate-200"
               }`}
             >
               {shape.label}
@@ -205,7 +205,7 @@ function BlockEditForm({
           ))}
         </div>
         <div>
-          <label className="block text-xs text-slate-500 mb-1">
+          <label className="block text-xs text-ink-muted mb-1">
             Feather: {block.mask_feather.toFixed(0)}px
           </label>
           <input
@@ -228,12 +228,12 @@ function BlockEditForm({
             onChange={(e) => onUpdateField("ken_burns_enabled", e.target.checked)}
             className="rounded border-slate-300"
           />
-          <label className="text-xs text-slate-600">Enable Ken Burns</label>
+          <label className="text-xs text-ink-muted">Enable Ken Burns</label>
         </div>
         {block.ken_burns_enabled && (
           <>
             <div>
-              <label className="block text-xs text-slate-500 mb-1">Direction</label>
+              <label className="block text-xs text-ink-muted mb-1">Direction</label>
               <select
                 value={block.ken_burns_direction}
                 onChange={(e) => onUpdateField("ken_burns_direction", e.target.value)}
@@ -245,7 +245,7 @@ function BlockEditForm({
               </select>
             </div>
             <div>
-              <label className="block text-xs text-slate-500 mb-1">
+              <label className="block text-xs text-ink-muted mb-1">
                 Zoom: {block.ken_burns_zoom.toFixed(2)}x
               </label>
               <input
@@ -264,7 +264,7 @@ function BlockEditForm({
 
       <CollapsibleSection title="Display" defaultOpen={false}>
         <div>
-          <label className="block text-xs text-slate-500 mb-1">
+          <label className="block text-xs text-ink-muted mb-1">
             Opacity: {block.opacity.toFixed(2)}
           </label>
           <input
@@ -278,7 +278,7 @@ function BlockEditForm({
           />
         </div>
         <div>
-          <label className="block text-xs text-slate-500 mb-1">Animation</label>
+          <label className="block text-xs text-ink-muted mb-1">Animation</label>
           <select
             value={block.animation_type}
             onChange={(e) => onUpdateField("animation_type", e.target.value)}
@@ -294,7 +294,7 @@ function BlockEditForm({
       <CollapsibleSection title="Timing" defaultOpen={false}>
         <div className="grid grid-cols-2 gap-2">
           <div>
-            <label className="block text-xs text-slate-500 mb-1">Start (s)</label>
+            <label className="block text-xs text-ink-muted mb-1">Start (s)</label>
             <input
               type="number"
               step="0.1"
@@ -305,7 +305,7 @@ function BlockEditForm({
             />
           </div>
           <div>
-            <label className="block text-xs text-slate-500 mb-1">End (s)</label>
+            <label className="block text-xs text-ink-muted mb-1">End (s)</label>
             <input
               type="number"
               step="0.1"
@@ -464,8 +464,8 @@ export default function ImageBlockPanel() {
       {/* Slide navigation */}
       <div className="mb-3">
         <div className="flex items-center justify-between mb-2">
-          <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Image Blocks</h3>
-          <span className="text-[10px] text-slate-400">
+          <h3 className="text-xs font-semibold text-ink-muted uppercase tracking-wider">Image Blocks</h3>
+          <span className="text-[10px] text-ink-muted">
             {blocks.length} block{blocks.length !== 1 ? "s" : ""}
           </span>
         </div>
@@ -475,9 +475,9 @@ export default function ImageBlockPanel() {
             <button
               disabled={safeSlide === 0}
               onClick={() => setCurrentSlide((s) => Math.max(0, s - 1))}
-              className="p-1 rounded-lg hover:bg-slate-100 disabled:opacity-30 transition"
+              className="p-1 rounded-lg hover:bg-surface-alt disabled:opacity-30 transition"
             >
-              <svg className="w-4 h-4 text-slate-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <svg className="w-4 h-4 text-ink-muted" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" />
               </svg>
             </button>
@@ -490,7 +490,7 @@ export default function ImageBlockPanel() {
                   className={`px-2 py-1 rounded-lg text-xs font-medium transition-all ${
                     i === safeSlide
                       ? "bg-amber-500 text-white shadow-sm"
-                      : "bg-slate-100 text-slate-500 hover:bg-slate-200"
+                      : "bg-surface-alt text-ink-muted hover:bg-slate-200"
                   }`}
                 >
                   {s.startSec}-{s.endSec}s
@@ -501,9 +501,9 @@ export default function ImageBlockPanel() {
             <button
               disabled={safeSlide >= slides.length - 1}
               onClick={() => setCurrentSlide((s) => Math.min(slides.length - 1, s + 1))}
-              className="p-1 rounded-lg hover:bg-slate-100 disabled:opacity-30 transition"
+              className="p-1 rounded-lg hover:bg-surface-alt disabled:opacity-30 transition"
             >
-              <svg className="w-4 h-4 text-slate-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <svg className="w-4 h-4 text-ink-muted" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
               </svg>
             </button>
@@ -518,7 +518,7 @@ export default function ImageBlockPanel() {
             <svg className="w-8 h-8 text-slate-300 mx-auto mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.41a2.25 2.25 0 013.182 0l2.909 2.91m-18 3.75h16.5a1.5 1.5 0 001.5-1.5V6a1.5 1.5 0 00-1.5-1.5H3.75A1.5 1.5 0 002.25 6v12a1.5 1.5 0 001.5 1.5zm10.5-11.25h.008v.008h-.008V8.25zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z" />
             </svg>
-            <p className="text-xs text-slate-400">No image blocks yet</p>
+            <p className="text-xs text-ink-muted">No image blocks yet</p>
           </div>
         ) : (
           slideBlocks.map((block) => {
@@ -529,23 +529,23 @@ export default function ImageBlockPanel() {
                 className={`rounded-xl transition-all duration-200 ${
                   isSelected
                     ? "bg-amber-50 ring-1 ring-amber-200"
-                    : "bg-white ring-1 ring-slate-100 hover:ring-slate-200"
+                    : "bg-surface ring-1 ring-slate-100 hover:ring-edge"
                 }`}
               >
                 <div
                   className="flex items-center gap-2 px-3 py-2.5 cursor-pointer select-none min-h-[44px]"
                   onClick={() => toggleImageBlock(block.id)}
                 >
-                  <span className={`truncate flex-1 text-sm ${isSelected ? "text-amber-700 font-medium" : "text-slate-700"}`}>
+                  <span className={`truncate flex-1 text-sm ${isSelected ? "text-amber-700 font-medium" : "text-ink"}`}>
                     {block.label || "Unnamed"}
                   </span>
 
-                  <span className="text-[10px] text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded">
+                  <span className="text-[10px] text-ink-muted bg-surface-alt px-1.5 py-0.5 rounded">
                     {block.mask_shape}
                   </span>
 
                   <svg
-                    className={`w-4 h-4 text-slate-400 transition-transform duration-200 ${isSelected ? "rotate-180" : ""}`}
+                    className={`w-4 h-4 text-ink-muted transition-transform duration-200 ${isSelected ? "rotate-180" : ""}`}
                     fill="none"
                     viewBox="0 0 24 24"
                     stroke="currentColor"
@@ -589,7 +589,7 @@ export default function ImageBlockPanel() {
         <button
           onClick={handleAddBlock}
           disabled={saving}
-          className="w-full flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl border-2 border-dashed border-slate-200 text-slate-500 hover:border-amber-300 hover:text-amber-600 hover:bg-amber-50/50 transition-all duration-200 text-xs font-medium disabled:opacity-50 min-h-[40px]"
+          className="w-full flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl border-2 border-dashed border-edge text-ink-muted hover:border-amber-300 hover:text-amber-600 hover:bg-amber-50/50 transition-all duration-200 text-xs font-medium disabled:opacity-50 min-h-[40px]"
         >
           <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
@@ -598,7 +598,7 @@ export default function ImageBlockPanel() {
         </button>
       </div>
 
-      <div className="pt-3 mt-2 border-t border-slate-100">
+      <div className="pt-3 mt-2 border-t border-edge">
         <button
           onClick={handleAddSlide}
           disabled={saving}

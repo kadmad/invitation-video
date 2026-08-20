@@ -64,7 +64,7 @@ export default function ConfirmModal({
           if (e.target === e.currentTarget) onCancel();
         }}
       />
-      <div className={`relative bg-white rounded-2xl shadow-xl max-w-sm w-full mx-4 p-6 transition-all duration-200 ${visible ? "opacity-100 scale-100" : "opacity-0 scale-95"}`}>
+      <div className={`relative bg-surface rounded-2xl shadow-xl max-w-sm w-full mx-4 p-6 transition-all duration-200 ${visible ? "opacity-100 scale-100" : "opacity-0 scale-95"}`}>
         <div className="flex items-start gap-4">
           <div className={`w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 ${variantStyles.icon}`}>
             <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
@@ -72,8 +72,8 @@ export default function ConfirmModal({
             </svg>
           </div>
           <div className="flex-1">
-            <h3 className="text-lg font-semibold text-slate-900">{title}</h3>
-            <p className="text-sm text-slate-500 mt-1">{message}</p>
+            <h3 className="text-lg font-semibold text-ink">{title}</h3>
+            <p className="text-sm text-ink-muted mt-1">{message}</p>
           </div>
         </div>
         <div className="flex justify-end gap-3 mt-6">

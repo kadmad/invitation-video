@@ -13,12 +13,26 @@ export default function LoginCallbackPage() {
     if (ran.current) return;
     ran.current = true;
 
-    const returnTo = sessionStorage.getItem("google_oauth_return_to") || "/";
-    const storedState = sessionStorage.getItem("google_oauth_state");
-    const acceptedTerms = sessionStorage.getItem("google_oauth_accepted_terms") === "true";
-    sessionStorage.removeItem("google_oauth_return_to");
-    sessionStorage.removeItem("google_oauth_state");
-    sessionStorage.removeItem("google_oauth_accepted_terms");
+    // Some in-app browsers (WhatsApp/Instagram webviews, Safari private
+    // mode) restrict storage access unpredictably on first load and throw
+    // on sessionStorage access — without this guard that crashes the whole
+    // page to a blank screen (no error boundary would even see it, since
+    // this runs synchronously before the promise chain below). Falling
+    // back to "no stored state" just routes into the existing "invalid
+    // sign-in response" error path instead.
+    let returnTo = "/";
+    let storedState: string | null = null;
+    let acceptedTerms = false;
+    try {
+      returnTo = sessionStorage.getItem("google_oauth_return_to") || "/";
+      storedState = sessionStorage.getItem("google_oauth_state");
+      acceptedTerms = sessionStorage.getItem("google_oauth_accepted_terms") === "true";
+      sessionStorage.removeItem("google_oauth_return_to");
+      sessionStorage.removeItem("google_oauth_state");
+      sessionStorage.removeItem("google_oauth_accepted_terms");
+    } catch {
+      /* storage blocked — fall through with the defaults above */
+    }
 
     const errorParam = params.get("error");
     const code = params.get("code");
@@ -51,7 +65,7 @@ export default function LoginCallbackPage() {
           </button>
         </div>
       ) : (
-        <p className="text-slate-500">Signing you in...</p>
+        <p className="text-ink-muted">Signing you in...</p>
       )}
     </div>
   );

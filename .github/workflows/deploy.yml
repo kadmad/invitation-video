@@ -82,4 +82,14 @@ jobs:
             docker compose -f docker-compose.prod.yml --env-file .env pull
             docker compose -f docker-compose.prod.yml --env-file .env run --rm backend alembic upgrade head
             docker compose -f docker-compose.prod.yml --env-file .env up -d
-            docker image prune -f
+
+            # Reclaim disk. Deliberately conservative: `until=168h` keeps the
+            # last 7 days of images so a rollback to a recent build is still
+            # possible without re-pulling, while stopping older builds and
+            # build cache from silently filling the droplet's small disk.
+            echo "--- disk before prune ---"; df -h / | tail -1
+            docker image prune -f                                  # dangling (superseded :latest)
+            docker image prune -af --filter "until=168h"           # unused images older than 7d
+            docker builder prune -f --filter "until=168h"          # stale build cache
+            docker container prune -f --filter "until=168h"        # exited one-off containers
+            echo "--- disk after prune ---"; df -h / | tail -1

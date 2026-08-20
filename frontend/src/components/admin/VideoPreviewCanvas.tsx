@@ -8,13 +8,28 @@ import { listFonts, getFontFileUrl } from "@/api/fonts";
 import { transliterateBatch } from "@/api/transliterate";
 import TextBlockOverlay from "./TextBlockOverlay";
 import ImageBlockOverlay from "./ImageBlockOverlay";
+import WatermarkPlacementOverlay from "./WatermarkPlacementOverlay";
 import type { Font, TextBlock, FormatRange } from "@/types";
 
 interface VideoPreviewCanvasProps {
   playerRef: React.RefObject<PlayerRef | null>;
+  watermarkEditing?: boolean;
+  watermarkX?: number;
+  watermarkY?: number;
+  watermarkWidth?: number;
+  watermarkRotation?: number;
+  onWatermarkChange?: (x: number, y: number, width: number, rotation: number) => void;
 }
 
-export default function VideoPreviewCanvas({ playerRef }: VideoPreviewCanvasProps) {
+export default function VideoPreviewCanvas({
+  playerRef,
+  watermarkEditing,
+  watermarkX,
+  watermarkY,
+  watermarkWidth,
+  watermarkRotation,
+  onWatermarkChange,
+}: VideoPreviewCanvasProps) {
   const { id: templateId } = useParams<{ id: string }>();
   const {
     template,
@@ -440,6 +455,18 @@ export default function VideoPreviewCanvas({ playerRef }: VideoPreviewCanvasProp
                   containerHeight={containerSize.height}
                 />
               ))}
+
+          {watermarkEditing && containerSize.width > 0 && onWatermarkChange && (
+            <WatermarkPlacementOverlay
+              x={watermarkX ?? 0.39}
+              y={watermarkY ?? 0.88}
+              width={watermarkWidth ?? 0.22}
+              rotation={watermarkRotation ?? 0}
+              containerWidth={containerSize.width}
+              containerHeight={containerSize.height}
+              onChange={onWatermarkChange}
+            />
+          )}
         </div>
 
         {/* Overlay: time + upload */}

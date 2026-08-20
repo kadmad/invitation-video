@@ -55,6 +55,7 @@ services:
       mc alias set local http://minio:9000 $${MINIO_ROOT_USER:-minioadmin} $${MINIO_ROOT_PASSWORD:-minioadmin123};
       mc mb local/$${S3_BUCKET_NAME:-invitation-video} --ignore-existing;
       mc anonymous set download local/$${S3_BUCKET_NAME:-invitation-video}/fonts;
+      mc anonymous set download local/$${S3_BUCKET_NAME:-invitation-video}/renders;
       echo CORS configured via MINIO_API_CORS_ALLOW_ORIGIN env var;
       exit 0;
       '
@@ -119,7 +120,12 @@ services:
       context: ./renderer
       dockerfile: Dockerfile
     ports:
-      - "3100:3100"
+      # Host port shifted off the default 3100 — that port is reserved for
+      # docker-compose.local-worker.yml's renderer (wired to production),
+      # which stays on its standard port so it can run alongside this dev
+      # stack without a conflict. Container-internal calls (renderer:3100
+      # over the Docker network) are unaffected either way.
+      - "3101:3100"
     shm_size: "4gb"
     volumes:
       - ./renderer:/app

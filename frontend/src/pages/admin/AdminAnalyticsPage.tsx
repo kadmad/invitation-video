@@ -136,13 +136,13 @@ function StatCard({
 
   return (
     <div className="card p-5">
-      <p className="text-[11px] font-medium text-slate-400 uppercase tracking-wider mb-2">{label}</p>
+      <p className="text-[11px] font-medium text-ink-muted uppercase tracking-wider mb-2">{label}</p>
       <div className="flex items-center flex-wrap gap-1">
-        <p className="text-2xl font-bold text-slate-800">{value}</p>
+        <p className="text-2xl font-bold text-ink">{value}</p>
         {showTrend && <TrendArrow current={current} previous={previous} />}
       </div>
       {showTrend && (
-        <p className="text-[11px] text-slate-400 mt-1.5">
+        <p className="text-[11px] text-ink-muted mt-1.5">
           Prev: {isCurrency ? formatCurrency(previous) : previous}
         </p>
       )}
@@ -214,16 +214,16 @@ export default function AdminAnalyticsPage() {
     <div className="space-y-6">
       {/* Header + filter */}
       <div className="flex items-center justify-between flex-wrap gap-3">
-        <h1 className="text-xl font-bold text-slate-800">Analytics</h1>
-        <div className="flex gap-1 bg-slate-100 rounded-lg p-1 flex-wrap">
+        <h1 className="text-xl font-bold text-ink">Analytics</h1>
+        <div className="flex gap-1 bg-surface-alt rounded-lg p-1 flex-wrap">
           {FILTERS.map((f) => (
             <button
               key={f.value}
               onClick={() => setFilter(f.value)}
               className={`px-2.5 py-1.5 rounded-md text-xs font-medium transition ${
                 filter === f.value
-                  ? "bg-white text-slate-800 shadow-sm"
-                  : "text-slate-500 hover:text-slate-700"
+                  ? "bg-surface text-ink shadow-sm"
+                  : "text-ink-muted hover:text-ink"
               }`}
             >
               {f.label}
@@ -271,7 +271,7 @@ export default function AdminAnalyticsPage() {
         <select
           value={sortBy}
           onChange={(e) => setSortBy(e.target.value as "purchases" | "revenue")}
-          className="input-field text-sm"
+          className="input-field text-sm w-auto min-w-[11rem] flex-shrink-0"
         >
           <option value="purchases">Sort by Purchases</option>
           <option value="revenue">Sort by Revenue</option>
@@ -283,19 +283,19 @@ export default function AdminAnalyticsPage() {
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
-              <tr className="bg-slate-50 text-left">
-                <th className="px-4 py-3 font-medium text-slate-500 text-xs uppercase tracking-wider">Template</th>
-                <th className="px-4 py-3 font-medium text-slate-500 text-xs uppercase tracking-wider">ID</th>
-                <th className="px-4 py-3 font-medium text-slate-500 text-xs uppercase tracking-wider">Created</th>
-                <th className="px-4 py-3 font-medium text-slate-500 text-xs uppercase tracking-wider text-right">Purchases</th>
-                <th className="px-4 py-3 font-medium text-slate-500 text-xs uppercase tracking-wider text-right">Revenue</th>
-                <th className="px-4 py-3 font-medium text-slate-500 text-xs uppercase tracking-wider text-right">All Time</th>
+              <tr className="bg-surface-alt text-left">
+                <th className="px-4 py-3 font-medium text-ink-muted text-xs uppercase tracking-wider">Template</th>
+                <th className="px-4 py-3 font-medium text-ink-muted text-xs uppercase tracking-wider">ID</th>
+                <th className="px-4 py-3 font-medium text-ink-muted text-xs uppercase tracking-wider">Created</th>
+                <th className="px-4 py-3 font-medium text-ink-muted text-xs uppercase tracking-wider text-right">Purchases</th>
+                <th className="px-4 py-3 font-medium text-ink-muted text-xs uppercase tracking-wider text-right">Revenue</th>
+                <th className="px-4 py-3 font-medium text-ink-muted text-xs uppercase tracking-wider text-right">All Time</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
               {filteredTemplates.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="px-4 py-8 text-center text-slate-400">
+                  <td colSpan={6} className="px-4 py-8 text-center text-ink-muted">
                     No templates found
                   </td>
                 </tr>
@@ -303,19 +303,19 @@ export default function AdminAnalyticsPage() {
                 filteredTemplates.map((t) => {
                   const period = getTemplatePeriod(t, filter);
                   return (
-                    <tr key={t.template_id} className="hover:bg-slate-50 transition-colors">
+                    <tr key={t.template_id} className="hover:bg-surface-alt transition-colors">
                       <td className="px-4 py-3">
                         <div>
-                          <p className="font-medium text-slate-800">{t.template_name}</p>
-                          <p className="text-xs text-slate-400">{t.slug}</p>
+                          <p className="font-medium text-ink">{t.template_name}</p>
+                          <p className="text-xs text-ink-muted">{t.slug}</p>
                         </div>
                       </td>
                       <td className="px-4 py-3">
-                        <span className="text-xs font-mono text-slate-400">
+                        <span className="text-xs font-mono text-ink-muted">
                           {t.template_id.slice(0, 8)}...
                         </span>
                       </td>
-                      <td className="px-4 py-3 text-slate-500">
+                      <td className="px-4 py-3 text-ink-muted">
                         {new Date(t.created_at).toLocaleDateString("en-IN", {
                           day: "numeric",
                           month: "short",
@@ -346,7 +346,7 @@ export default function AdminAnalyticsPage() {
                           )}
                         </div>
                       </td>
-                      <td className="px-4 py-3 text-right text-slate-400">
+                      <td className="px-4 py-3 text-right text-ink-muted">
                         <span className="text-xs">
                           {t.total_purchases} / {formatCurrency(t.total_revenue)}
                         </span>

@@ -34,14 +34,14 @@ export default function MyOrdersPage() {
 
   const paymentBadge = (status: string) => {
     const colors: Record<string, string> = {
-      created: "bg-slate-100 text-slate-600",
+      created: "bg-surface-alt text-ink-muted",
       paid: "bg-green-50 text-green-700",
       failed: "bg-red-50 text-red-600",
       refunded: "bg-amber-50 text-amber-700",
     };
     return (
       <span
-        className={`px-2.5 py-1 rounded-full text-xs font-medium ${colors[status] || "bg-slate-100 text-slate-600"}`}
+        className={`px-2.5 py-1 rounded-full text-xs font-medium ${colors[status] || "bg-surface-alt text-ink-muted"}`}
       >
         {status}
       </span>
@@ -54,11 +54,11 @@ export default function MyOrdersPage() {
       processing: "bg-brand-50 text-brand-600",
       completed: "bg-accent-50 text-accent-700",
       failed: "bg-red-50 text-red-600",
-      cancelled: "bg-slate-100 text-slate-500",
+      cancelled: "bg-surface-alt text-ink-muted",
     };
     return (
       <span
-        className={`px-2.5 py-1 rounded-full text-xs font-medium ${colors[status] || "bg-slate-100 text-slate-600"}`}
+        className={`px-2.5 py-1 rounded-full text-xs font-medium ${colors[status] || "bg-surface-alt text-ink-muted"}`}
       >
         {status}
       </span>
@@ -71,7 +71,7 @@ export default function MyOrdersPage() {
     <PageTransition>
     <div>
       <div className="flex items-center mb-6">
-        <h1 className="text-3xl font-bold text-slate-900">My Orders</h1>
+        <h1 className="text-3xl font-bold text-ink">My Orders</h1>
         {orders.length > 0 && (
           <span className="ml-2 bg-brand-100 text-brand-700 rounded-full px-2.5 py-0.5 text-sm font-semibold">
             {orders.length}
@@ -80,7 +80,7 @@ export default function MyOrdersPage() {
       </div>
 
       {orders.length === 0 ? (
-        <div className="text-center py-12 text-slate-500">
+        <div className="text-center py-12 text-ink-muted">
           <p>No orders yet.</p>
           <Link
             to="/templates"
@@ -95,11 +95,11 @@ export default function MyOrdersPage() {
             <div key={order.id} className="card p-5">
               {/* Header row */}
               <div className="flex flex-wrap items-start justify-between gap-2 mb-3">
-                <div>
-                  <p className="font-semibold text-slate-900">
+                <div className="min-w-0">
+                  <p className="font-semibold text-ink break-words">
                     {order.order_number}
                   </p>
-                  <p className="text-sm text-slate-500">
+                  <p className="text-sm text-ink-muted">
                     {new Date(order.created_at).toLocaleDateString("en-IN", {
                       day: "numeric",
                       month: "short",
@@ -115,18 +115,18 @@ export default function MyOrdersPage() {
 
               {/* Details */}
               <div className="mb-3">
-                <p className="text-sm text-slate-700">
-                  <span className="text-slate-400">Template:</span>{" "}
+                <p className="text-sm text-ink break-words">
+                  <span className="text-ink-muted">Template:</span>{" "}
                   {order.template_name}
                 </p>
-                <p className="text-sm text-slate-700">
-                  <span className="text-slate-400">Amount:</span>{" "}
+                <p className="text-sm text-ink">
+                  <span className="text-ink-muted">Amount:</span>{" "}
                   ₹{(order.amount / 100).toFixed(0)}
                 </p>
               </div>
 
               {/* Field values */}
-              <div className="text-xs text-slate-400 mb-4 flex flex-wrap gap-x-3 gap-y-1">
+              <div className="text-xs text-ink-muted mb-4 flex flex-wrap gap-x-3 gap-y-1">
                 {Object.entries(order.field_values).map(([k, v]) => (
                   <span key={k} className="break-all">{k}: {v}</span>
                 ))}
@@ -137,13 +137,13 @@ export default function MyOrdersPage() {
                 (order.render.status === "pending" ||
                   order.render.status === "processing") && (
                   <div className="mb-4">
-                    <div className="bg-slate-100 rounded-full h-2">
+                    <div className="bg-surface-alt rounded-full h-2">
                       <div
                         className="bg-gradient-to-r from-brand-400 to-brand-600 rounded-full h-2 transition-all"
                         style={{ width: `${order.render.progress}%` }}
                       />
                     </div>
-                    <p className="text-xs text-slate-500 mt-1">
+                    <p className="text-xs text-ink-muted mt-1">
                       {order.render.progress}% complete
                     </p>
                   </div>

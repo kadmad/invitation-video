@@ -45,11 +45,11 @@ export default function MyCustomizationsPage() {
   return (
     <PageTransition>
     <div>
-      <h1 className="text-3xl font-bold text-slate-900 mb-2">My Customizations</h1>
-      <p className="text-slate-500 mb-6">Your saved work-in-progress templates</p>
+      <h1 className="text-3xl font-bold text-ink mb-2">My Customizations</h1>
+      <p className="text-ink-muted mb-6">Your saved work-in-progress templates</p>
 
       {drafts.length === 0 ? (
-        <div className="text-center py-12 text-slate-500">
+        <div className="text-center py-12 text-ink-muted">
           <p>No saved customizations yet.</p>
           <Link
             to="/templates"
@@ -67,10 +67,10 @@ export default function MyCustomizationsPage() {
             >
               <div>
                 <div className="flex-1 min-w-0">
-                  <h3 className="font-semibold text-lg text-slate-900">
+                  <h3 className="font-semibold text-lg text-ink break-words">
                     {draft.template_name}
                   </h3>
-                  <p className="text-sm text-slate-400 mt-1">
+                  <p className="text-sm text-ink-muted mt-1">
                     Last edited: {new Date(draft.updated_at).toLocaleDateString("en-IN", {
                       day: "numeric",
                       month: "short",
@@ -85,10 +85,10 @@ export default function MyCustomizationsPage() {
                       .map(([key, value]) => (
                         <span
                           key={key}
-                          className="inline-flex items-center bg-slate-50 border border-slate-100 rounded-full px-3 py-1 text-sm"
+                          className="inline-flex items-center bg-surface-alt border border-edge rounded-full px-3 py-1 text-sm"
                         >
-                          <span className="text-slate-400 mr-1">{humanizeTag(key)}:</span>
-                          <span className="text-slate-800 font-medium break-all">{value}</span>
+                          <span className="text-ink-muted mr-1">{humanizeTag(key)}:</span>
+                          <span className="text-ink font-medium break-all">{value}</span>
                         </span>
                       ))}
                   </div>

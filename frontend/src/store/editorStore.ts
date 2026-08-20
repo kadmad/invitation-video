@@ -37,6 +37,8 @@ interface EditorState {
   blockOverrides: Record<string, string>;
   blockFormatOverrides: Record<string, FormatRange[]>;
   transliteratedBlockOverrides: Record<string, string>;
+  watermarkPreview: boolean;
+  setWatermarkPreview: (enabled: boolean) => void;
   setImageUpload: (blockId: string, url: string) => void;
   clearImageUpload: (blockId: string) => void;
   setTemplate: (template: Template) => void;
@@ -75,6 +77,9 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   blockOverrides: {},
   blockFormatOverrides: {},
   transliteratedBlockOverrides: {},
+  watermarkPreview: false,
+
+  setWatermarkPreview: (enabled) => set({ watermarkPreview: enabled }),
 
   setTemplate: (template) =>
     set((state) => {
@@ -90,7 +95,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
       tags.forEach((tag) => {
         fieldValues[tag] = "";
       });
-      return { template, fieldValues, transliteratedValues: {}, textColorOverrides: {} };
+      return { template, fieldValues, transliteratedValues: {}, textColorOverrides: {}, watermarkPreview: false };
     }),
 
   setFont: (font, url) => set({ font, fontUrl: url }),
@@ -180,6 +185,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
       blockOverrides: {},
       blockFormatOverrides: {},
       transliteratedBlockOverrides: {},
+      watermarkPreview: false,
       prefill: state.prefill, // preserve
     })),
 }));

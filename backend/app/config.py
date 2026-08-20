@@ -5,6 +5,21 @@ class Settings(BaseSettings):
     # Database
     DATABASE_URL: str = "postgresql+asyncpg://invitation:invitation_secret@postgres:5432/invitation_video"
 
+    # Optional: production Postgres/Redis/R2 (over Tailscale) — lets local
+    # dev's own admin "Renders Awaiting" page fully act on production's
+    # manual-render queue (view, claim, cancel, upload) without this whole
+    # app switching databases. All unset by default; local dev behaves
+    # exactly as before when empty.
+    PROD_DATABASE_URL: str = ""
+    PROD_REDIS_URL: str = ""
+    PROD_S3_ENDPOINT_URL: str = ""
+    PROD_S3_ACCESS_KEY: str = ""
+    PROD_S3_SECRET_KEY: str = ""
+    PROD_S3_BUCKET_NAME: str = ""
+    PROD_S3_REGION: str = "auto"
+    PROD_S3_PUBLIC_URL: str = ""
+    PROD_CDN_BASE_URL: str = ""
+
     # Redis
     REDIS_URL: str = "redis://redis:6379/0"
 

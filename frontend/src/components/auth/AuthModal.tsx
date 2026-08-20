@@ -22,9 +22,15 @@ export default function AuthModal() {
       return;
     }
     const state = crypto.randomUUID();
-    sessionStorage.setItem("google_oauth_state", state);
-    sessionStorage.setItem("google_oauth_return_to", window.location.pathname + window.location.search);
-    sessionStorage.setItem("google_oauth_accepted_terms", "true");
+    try {
+      sessionStorage.setItem("google_oauth_state", state);
+      sessionStorage.setItem("google_oauth_return_to", window.location.pathname + window.location.search);
+      sessionStorage.setItem("google_oauth_accepted_terms", "true");
+    } catch {
+      // Storage blocked (some in-app browsers/private mode) — still let the
+      // redirect through rather than silently dead-ending the click; the
+      // callback page's own guard handles the missing state gracefully.
+    }
     const redirectUri = `${window.location.origin}/login-callback`;
     const params = new URLSearchParams({
       client_id: import.meta.env.VITE_GOOGLE_CLIENT_ID,
@@ -49,24 +55,24 @@ export default function AuthModal() {
       />
 
       {/* Modal */}
-      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 sm:p-8 animate-fade-in">
+      <div className="relative bg-surface rounded-2xl shadow-2xl w-full max-w-md p-6 sm:p-8 animate-fade-in">
         {/* Close button */}
         <button
           onClick={closeAuthModal}
-          className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 transition-colors"
+          className="absolute top-4 right-4 text-ink-muted hover:text-ink-muted transition-colors"
         >
           <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
           </svg>
         </button>
 
-        <h2 className="text-xl font-bold text-slate-800 mb-1">Login / Sign Up</h2>
-        <p className="text-sm text-slate-500 mb-6">Continue with your Google account</p>
+        <h2 className="text-xl font-bold text-ink mb-1">Login / Sign Up</h2>
+        <p className="text-sm text-ink-muted mb-6">Continue with your Google account</p>
 
         <button
           type="button"
           onClick={handleGoogleLogin}
-          className="w-full flex items-center justify-center gap-2.5 border border-slate-200 rounded-xl py-3 text-sm font-medium text-slate-700 hover:bg-slate-50 transition-colors mb-4"
+          className="w-full flex items-center justify-center gap-2.5 border border-edge rounded-xl py-3 text-sm font-medium text-ink hover:bg-surface-alt transition-colors mb-4"
         >
           <svg className="w-5 h-5" viewBox="0 0 48 48">
             <path fill="#FFC107" d="M43.611 20.083H42V20H24v8h11.303c-1.649 4.657-6.08 8-11.303 8-6.627 0-12-5.373-12-12s5.373-12 12-12c3.059 0 5.842 1.154 7.961 3.039l5.657-5.657C34.046 6.053 29.268 4 24 4 12.955 4 4 12.955 4 24s8.955 20 20 20 20-8.955 20-20c0-1.341-.138-2.65-.389-3.917z" />
@@ -87,7 +93,7 @@ export default function AuthModal() {
             }}
             className="mt-0.5 w-4 h-4 shrink-0 rounded accent-brand-500 cursor-pointer"
           />
-          <span className="text-xs text-slate-500 leading-relaxed">
+          <span className="text-xs text-ink-muted leading-relaxed">
             I agree to the{" "}
             <Link
               to="/terms"

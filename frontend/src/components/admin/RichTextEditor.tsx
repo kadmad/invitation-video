@@ -573,10 +573,10 @@ export default function RichTextEditor({
 
   return (
     <div className="relative">
-      {showLabel && <label className="block text-xs text-slate-500 mb-1">Content</label>}
+      {showLabel && <label className="block text-xs text-ink-muted mb-1">Content</label>}
 
       {/* ── Persistent Word-like Toolbar ── */}
-      <div className="flex items-center gap-0.5 px-2 py-1.5 bg-slate-50 border border-slate-200 rounded-t-lg border-b-0 flex-wrap">
+      <div className="flex items-center gap-0.5 px-2 py-1.5 bg-surface-alt border border-edge rounded-t-lg border-b-0 flex-wrap">
         {/* Bold */}
         <button
           type="button"
@@ -587,7 +587,7 @@ export default function RichTextEditor({
             activeFormats.bold
               ? "bg-primary-100 text-primary-700 ring-1 ring-primary-300"
               : hasSelection
-                ? "text-slate-700 hover:bg-slate-200"
+                ? "text-ink hover:bg-slate-200"
                 : "text-slate-300 cursor-not-allowed"
           }`}
           title="Bold (select text first)"
@@ -605,7 +605,7 @@ export default function RichTextEditor({
             activeFormats.italic
               ? "bg-primary-100 text-primary-700 ring-1 ring-primary-300"
               : hasSelection
-                ? "text-slate-700 hover:bg-slate-200"
+                ? "text-ink hover:bg-slate-200"
                 : "text-slate-300 cursor-not-allowed"
           }`}
           title="Italic (select text first)"
@@ -624,7 +624,7 @@ export default function RichTextEditor({
             activeFormats.superscript
               ? "bg-primary-100 text-primary-700 ring-1 ring-primary-300"
               : hasSelection
-                ? "text-slate-700 hover:bg-slate-200"
+                ? "text-ink hover:bg-slate-200"
                 : "text-slate-300 cursor-not-allowed"
           }`}
           title="Superscript (select text first)"
@@ -642,7 +642,7 @@ export default function RichTextEditor({
             onClick={() => { if (hasSelection) setShowColorPicker(!showColorPicker); }}
             disabled={!hasSelection}
             className={`w-7 h-7 flex items-center justify-center rounded text-xs transition ${
-              hasSelection ? "text-slate-700 hover:bg-slate-200" : "text-slate-300 cursor-not-allowed"
+              hasSelection ? "text-ink hover:bg-slate-200" : "text-slate-300 cursor-not-allowed"
             }`}
             title="Text color (select text first)"
           >
@@ -656,7 +656,7 @@ export default function RichTextEditor({
           </button>
 
           {showColorPicker && (
-            <div className="absolute top-full left-0 mt-1 bg-white rounded-lg shadow-xl border border-slate-200 p-2 z-50 w-[210px]">
+            <div className="absolute top-full left-0 mt-1 bg-surface rounded-lg shadow-xl border border-edge p-2 z-50 w-[210px]">
               <div className="grid grid-cols-6 gap-1 mb-2">
                 {PRESET_COLORS.map((c) => (
                   <button
@@ -665,19 +665,19 @@ export default function RichTextEditor({
                     onMouseDown={(e) => e.preventDefault()}
                     onClick={() => handleColorApply(c)}
                     className={`w-7 h-7 rounded-md border-2 transition hover:scale-110 ${
-                      activeFormats.color === c ? "border-primary-500 ring-2 ring-primary-200" : "border-slate-200"
+                      activeFormats.color === c ? "border-primary-500 ring-2 ring-primary-200" : "border-edge"
                     }`}
                     style={{ backgroundColor: c }}
                     title={c}
                   />
                 ))}
               </div>
-              <div className="flex items-center gap-1.5 pt-1.5 border-t border-slate-100">
+              <div className="flex items-center gap-1.5 pt-1.5 border-t border-edge">
                 <input
                   type="color"
                   value={customColor}
                   onChange={(e) => setCustomColor(e.target.value)}
-                  className="w-8 h-8 rounded cursor-pointer border border-slate-200 p-0"
+                  className="w-8 h-8 rounded cursor-pointer border border-edge p-0"
                 />
                 <button
                   type="button"
@@ -699,7 +699,7 @@ export default function RichTextEditor({
           onClick={handleClearFormat}
           disabled={!hasSelection}
           className={`w-7 h-7 flex items-center justify-center rounded text-xs transition ${
-            hasSelection ? "text-slate-700 hover:bg-slate-200" : "text-slate-300 cursor-not-allowed"
+            hasSelection ? "text-ink hover:bg-slate-200" : "text-slate-300 cursor-not-allowed"
           }`}
           title="Clear formatting (select text first)"
         >
@@ -718,7 +718,7 @@ export default function RichTextEditor({
             onClick={() => { if (hasSelection) setShowStrokePicker(!showStrokePicker); }}
             disabled={!hasSelection}
             className={`w-7 h-7 flex items-center justify-center rounded text-xs transition ${
-              hasSelection ? "text-slate-700 hover:bg-slate-200" : "text-slate-300 cursor-not-allowed"
+              hasSelection ? "text-ink hover:bg-slate-200" : "text-slate-300 cursor-not-allowed"
             }`}
             title="Text stroke color (select text first)"
           >
@@ -732,7 +732,7 @@ export default function RichTextEditor({
           </button>
 
           {showStrokePicker && (
-            <div className="absolute top-full left-0 mt-1 bg-white rounded-lg shadow-xl border border-slate-200 p-2 z-50 w-[210px]">
+            <div className="absolute top-full left-0 mt-1 bg-surface rounded-lg shadow-xl border border-edge p-2 z-50 w-[210px]">
               <div className="grid grid-cols-6 gap-1 mb-2">
                 {PRESET_COLORS.map((c) => (
                   <button
@@ -745,19 +745,19 @@ export default function RichTextEditor({
                       setShowStrokePicker(false);
                     }}
                     className={`w-7 h-7 rounded-md border-2 transition hover:scale-110 ${
-                      activeFormats.stroke_color === c ? "border-primary-500 ring-2 ring-primary-200" : "border-slate-200"
+                      activeFormats.stroke_color === c ? "border-primary-500 ring-2 ring-primary-200" : "border-edge"
                     }`}
                     style={{ backgroundColor: c }}
                     title={c}
                   />
                 ))}
               </div>
-              <div className="flex items-center gap-1.5 pt-1.5 border-t border-slate-100">
+              <div className="flex items-center gap-1.5 pt-1.5 border-t border-edge">
                 <input
                   type="color"
                   value={strokeColor}
                   onChange={(e) => setStrokeColor(e.target.value)}
-                  className="w-8 h-8 rounded cursor-pointer border border-slate-200 p-0"
+                  className="w-8 h-8 rounded cursor-pointer border border-edge p-0"
                 />
                 <button
                   type="button"
@@ -781,7 +781,7 @@ export default function RichTextEditor({
                   }
                   setShowStrokePicker(false);
                 }}
-                className="w-full text-[10px] text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-md py-1 mt-1.5 transition border-t border-slate-100 pt-1.5"
+                className="w-full text-[10px] text-ink-muted hover:text-red-500 hover:bg-red-50 rounded-md py-1 mt-1.5 transition border-t border-edge pt-1.5"
               >
                 Remove Stroke
               </button>
@@ -810,7 +810,7 @@ export default function RichTextEditor({
             }}
             className="w-16 accent-primary-500 cursor-pointer"
           />
-          <span className="text-[9px] tabular-nums w-5 text-slate-500">{strokeWidth}</span>
+          <span className="text-[9px] tabular-nums w-5 text-ink-muted">{strokeWidth}</span>
         </div>
 
         <div className="w-px h-5 bg-slate-300 mx-1" />
@@ -836,14 +836,14 @@ export default function RichTextEditor({
             </button>
 
             {showTagMenu && (
-              <div className="absolute top-full left-0 mt-1 bg-white rounded-lg shadow-xl border border-slate-200 py-1 z-50 min-w-[140px]">
+              <div className="absolute top-full left-0 mt-1 bg-surface rounded-lg shadow-xl border border-edge py-1 z-50 min-w-[140px]">
                 {tagKeys.map((key) => (
                   <button
                     key={key}
                     type="button"
                     onMouseDown={(e) => e.preventDefault()}
                     onClick={() => handleInsertTag(key)}
-                    className="w-full text-left px-3 py-1.5 text-xs hover:bg-purple-50 text-slate-700 flex items-center gap-2 transition"
+                    className="w-full text-left px-3 py-1.5 text-xs hover:bg-purple-50 text-ink flex items-center gap-2 transition"
                   >
                     <span className="bg-purple-100 text-purple-700 rounded px-1.5 py-0.5 font-mono text-[10px]">
                       {`{${key}}`}
@@ -857,7 +857,7 @@ export default function RichTextEditor({
 
         {/* Selection indicator */}
         {hasSelection && (
-          <span className="ml-auto text-[10px] text-slate-400 font-mono">
+          <span className="ml-auto text-[10px] text-ink-muted font-mono">
             {selection!.end - selection!.start} chars
           </span>
         )}
@@ -885,12 +885,12 @@ export default function RichTextEditor({
             }
           }, 200);
         }}
-        className="border border-slate-200 rounded-b-lg px-3 py-2.5 text-sm w-full min-h-[4rem] whitespace-pre-wrap outline-none cursor-text focus:ring-2 focus:ring-primary-200 focus:border-primary-300 transition bg-white"
+        className="border border-edge rounded-b-lg px-3 py-2.5 text-sm w-full min-h-[4rem] whitespace-pre-wrap outline-none cursor-text focus:ring-2 focus:ring-primary-200 focus:border-primary-300 transition bg-surface"
         spellCheck={false}
       />
 
       {!hasSelection && (
-        <p className="text-[10px] text-slate-400 mt-1">Select text to apply formatting</p>
+        <p className="text-[10px] text-ink-muted mt-1">Select text to apply formatting</p>
       )}
     </div>
   );

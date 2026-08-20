@@ -66,7 +66,7 @@ function FontOption({
         isHighlighted ? "bg-primary-100 text-primary-700" : isSelected ? "bg-primary-50 text-primary-700" : "hover:bg-primary-50"
       }`}
     >
-      <span className="text-sm text-slate-700 flex-shrink-0 w-36 truncate">
+      <span className="text-sm text-ink flex-shrink-0 w-36 truncate">
         {font.name}
       </span>
       <span
@@ -249,9 +249,9 @@ export default function FontPicker({ fonts, selectedId, onSelect, compact, fallb
   return (
     <div ref={containerRef} className={`relative ${compact ? "" : "mb-6"}`}>
       {!compact && (
-        <label className="block text-sm font-medium text-slate-700 mb-2">
+        <label className="block text-sm font-medium text-ink mb-2">
           Select Font{" "}
-          <span className="text-slate-400 text-xs">(regional fonts auto-transliterate)</span>
+          <span className="text-ink-muted text-xs">(regional fonts auto-transliterate)</span>
         </label>
       )}
 
@@ -259,13 +259,13 @@ export default function FontPicker({ fonts, selectedId, onSelect, compact, fallb
       <button
         type="button"
         onClick={() => setOpen(!open)}
-        className={`input-field w-full bg-white text-left flex items-center justify-between transition ${compact ? "text-xs py-1.5 px-2.5" : "text-sm"}`}
+        className={`input-field w-full bg-surface text-left flex items-center justify-between transition ${compact ? "text-xs py-1.5 px-2.5" : "text-sm"}`}
       >
         {selected ? (
           <span className="flex items-center gap-2 min-w-0">
-            <span className="text-slate-700 flex-shrink-0 truncate">{selected.name}</span>
+            <span className="text-ink flex-shrink-0 truncate">{selected.name}</span>
             <span
-              className={`truncate text-slate-500 ${compact ? "text-sm" : "text-lg"}`}
+              className={`truncate text-ink-muted ${compact ? "text-sm" : "text-lg"}`}
               style={{
                 fontFamily: loaded.has(selected.id)
                   ? `"${selectedFaceName}", sans-serif`
@@ -278,9 +278,9 @@ export default function FontPicker({ fonts, selectedId, onSelect, compact, fallb
           </span>
         ) : fallbackFont ? (
           <span className="flex items-center gap-2 min-w-0">
-            <span className="text-slate-500 flex-shrink-0 truncate">{fallbackFont.name}</span>
+            <span className="text-ink-muted flex-shrink-0 truncate">{fallbackFont.name}</span>
             <span
-              className={`truncate text-slate-400 italic ${compact ? "text-sm" : "text-lg"}`}
+              className={`truncate text-ink-muted italic ${compact ? "text-sm" : "text-lg"}`}
               style={{
                 fontFamily: loaded.has(fallbackFont.id)
                   ? `"${fallbackFaceName}", sans-serif`
@@ -293,10 +293,10 @@ export default function FontPicker({ fonts, selectedId, onSelect, compact, fallb
             <span className="text-[9px] text-slate-300 flex-shrink-0">default</span>
           </span>
         ) : (
-          <span className="text-slate-400">{compact ? "None" : "Default (template font)"}</span>
+          <span className="text-ink-muted">{compact ? "None" : "Default (template font)"}</span>
         )}
         <svg
-          className={`w-4 h-4 text-slate-400 flex-shrink-0 transition-transform ${open ? "rotate-180" : ""}`}
+          className={`w-4 h-4 text-ink-muted flex-shrink-0 transition-transform ${open ? "rotate-180" : ""}`}
           fill="none"
           stroke="currentColor"
           viewBox="0 0 24 24"
@@ -308,14 +308,14 @@ export default function FontPicker({ fonts, selectedId, onSelect, compact, fallb
       {/* Dropdown */}
       {open && (
         <div
-          className={`absolute z-50 mt-1 bg-white border border-slate-100 rounded-2xl shadow-xl max-h-96 flex flex-col ${compact ? "w-80 right-0" : "w-full"}`}
+          className={`absolute z-50 mt-1 bg-surface border border-edge rounded-2xl shadow-xl max-h-96 flex flex-col ${compact ? "w-80 right-0" : "w-full"}`}
           onKeyDown={handleKeyDown}
         >
           {/* Search */}
-          <div className="p-2 border-b border-slate-100">
+          <div className="p-2 border-b border-edge">
             <div className="relative">
               <svg
-                className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400"
+                className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-ink-muted"
                 fill="none"
                 stroke="currentColor"
                 viewBox="0 0 24 24"
@@ -328,7 +328,7 @@ export default function FontPicker({ fonts, selectedId, onSelect, compact, fallb
                 placeholder="Search fonts... (arrows to preview)"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                className="w-full rounded-xl pl-8 pr-3 py-1.5 text-sm ring-1 ring-slate-200 focus:outline-none focus:ring-2 focus:ring-primary-400"
+                className="w-full rounded-xl pl-8 pr-3 py-1.5 text-sm ring-1 ring-edge focus:outline-none focus:ring-2 focus:ring-primary-400"
                 autoFocus
               />
             </div>
@@ -348,7 +348,7 @@ export default function FontPicker({ fonts, selectedId, onSelect, compact, fallb
               className={`px-3 py-2 cursor-pointer text-sm ${
                 highlightIdx === 0
                   ? "bg-primary-100 text-primary-700"
-                  : !selectedId ? "bg-primary-50 text-primary-700" : "text-slate-600 hover:bg-slate-50"
+                  : !selectedId ? "bg-primary-50 text-primary-700" : "text-ink-muted hover:bg-surface-alt"
               }`}
             >
               Default (template font)
@@ -357,7 +357,7 @@ export default function FontPicker({ fonts, selectedId, onSelect, compact, fallb
             {grouped.map(({ lang, label, fonts: langFonts }) => {
               return (
                 <div key={lang}>
-                  <div className="px-3 py-1.5 bg-slate-50 text-xs font-semibold text-slate-500 uppercase tracking-wider sticky top-0">
+                  <div className="px-3 py-1.5 bg-surface-alt text-xs font-semibold text-ink-muted uppercase tracking-wider sticky top-0">
                     {label}
                   </div>
                   {langFonts.map((f) => {

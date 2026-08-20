@@ -361,7 +361,11 @@ export default function PreviewPlayer() {
       blockOverrides: effectiveBlockOverrides,
       blockFormatOverrides: effectiveBlockFormatOverrides,
     }),
-    [previewBlocks, effectiveValues, fontFamilies, videoUrl, textColorOverrides, font, placeholderTags, template?.default_font_id, template?.width, template?.height, template?.default_text_color, effectiveBlockOverrides, effectiveBlockFormatOverrides]
+    [
+      previewBlocks, effectiveValues, fontFamilies, videoUrl, textColorOverrides, font, placeholderTags,
+      template?.default_font_id, template?.width, template?.height, template?.default_text_color,
+      effectiveBlockOverrides, effectiveBlockFormatOverrides,
+    ]
   );
 
   // Tag values ready: either no transliteration needed, or transliterated values exist
@@ -410,7 +414,7 @@ export default function PreviewPlayer() {
 
   return (
     <div className="card p-2.5 sm:p-3 lg:p-4 lg:sticky lg:top-20">
-      <p className="hidden lg:block text-sm font-medium text-slate-500 mb-3">Live Preview</p>
+      <p className="hidden lg:block text-sm font-medium text-ink-muted mb-3">Live Preview</p>
       <div
         className="relative mx-auto w-40 sm:w-52 lg:w-[390px]"
         style={{ aspectRatio: `${template.width} / ${template.height}` }}

@@ -85,11 +85,11 @@ function CollapsibleSection({
 }) {
   const [open, setOpen] = useState(defaultOpen);
   return (
-    <div className="border-b border-slate-100 last:border-b-0">
+    <div className="border-b border-edge last:border-b-0">
       <button
         type="button"
         onClick={() => setOpen(!open)}
-        className="flex items-center justify-between w-full py-2 text-xs font-semibold text-slate-500 uppercase tracking-wider hover:text-slate-700 transition"
+        className="flex items-center justify-between w-full py-2 text-xs font-semibold text-ink-muted uppercase tracking-wider hover:text-ink transition"
       >
         {title}
         <svg
@@ -115,7 +115,7 @@ function CollapsibleSection({
 function ChevronIcon({ open }: { open: boolean }) {
   return (
     <svg
-      className={`w-4 h-4 text-slate-400 transition-transform duration-200 ${open ? "rotate-180" : ""}`}
+      className={`w-4 h-4 text-ink-muted transition-transform duration-200 ${open ? "rotate-180" : ""}`}
       fill="none"
       viewBox="0 0 24 24"
       stroke="currentColor"
@@ -213,7 +213,7 @@ function AnimationPickerItem({
       className={`relative flex flex-col items-center gap-1 px-1.5 py-2 rounded-lg text-[10px] font-medium transition border ${
         selected
           ? "border-primary-400 bg-primary-50 text-primary-700"
-          : "border-slate-150 bg-white text-slate-500 hover:border-slate-300 hover:bg-slate-50"
+          : "border-slate-150 bg-surface text-ink-muted hover:border-slate-300 hover:bg-surface-alt"
       }`}
     >
       <span
@@ -543,7 +543,7 @@ function BlockEditForm({
                 {unique.map((tag) => (
                   <div key={tag}>
                     <div className="flex items-center gap-2">
-                      <span className="text-xs text-slate-400 font-mono shrink-0 w-20 truncate" title={tag}>{`{${tag}}`}</span>
+                      <span className="text-xs text-ink-muted font-mono shrink-0 w-20 truncate" title={tag}>{`{${tag}}`}</span>
                       <input
                         type="text"
                         value={block.tag_config?.[tag]?.placeholder ?? ""}
@@ -555,7 +555,7 @@ function BlockEditForm({
                             [tag]: { ...cfg, placeholder: e.target.value },
                           });
                         }}
-                        className="input-field text-xs flex-1 text-slate-500"
+                        className="input-field text-xs flex-1 text-ink-muted"
                         placeholder={`Default for ${tag}`}
                       />
                     </div>
@@ -582,7 +582,7 @@ function BlockEditForm({
 
       <CollapsibleSection title="Styling" defaultOpen={true}>
         <div>
-          <label className="block text-xs text-slate-500 mb-1">
+          <label className="block text-xs text-ink-muted mb-1">
             Font Size Ratio: {(block.font_size_ratio ?? 0.04).toFixed(3)}
           </label>
           <input
@@ -596,7 +596,7 @@ function BlockEditForm({
           />
         </div>
         <div>
-          <label className="block text-xs text-slate-500 mb-1">
+          <label className="block text-xs text-ink-muted mb-1">
             Max Width: {(block.max_width ?? 0.8).toFixed(2)}
           </label>
           <input
@@ -610,16 +610,16 @@ function BlockEditForm({
           />
         </div>
         <div>
-          <label className="block text-xs text-slate-500 mb-1">Text Color</label>
+          <label className="block text-xs text-ink-muted mb-1">Text Color</label>
           <input
             type="color"
             value={block.text_color || "#ffffff"}
             onChange={(e) => onUpdateField("text_color", e.target.value)}
-            className="w-full h-8 rounded-xl border border-slate-200 cursor-pointer"
+            className="w-full h-8 rounded-xl border border-edge cursor-pointer"
           />
         </div>
         <div>
-          <label className="block text-xs text-slate-500 mb-1">Text Align</label>
+          <label className="block text-xs text-ink-muted mb-1">Text Align</label>
           <select
             value={block.text_align || "center"}
             onChange={(e) => onUpdateField("text_align", e.target.value)}
@@ -633,7 +633,7 @@ function BlockEditForm({
           </select>
         </div>
         <div>
-          <label className="block text-xs text-slate-500 mb-1">
+          <label className="block text-xs text-ink-muted mb-1">
             Letter Spacing: {(block.letter_spacing ?? 0).toFixed(2)}em
           </label>
           <input
@@ -647,7 +647,7 @@ function BlockEditForm({
           />
         </div>
         <div>
-          <label className="block text-xs text-slate-500 mb-1">Font Weight</label>
+          <label className="block text-xs text-ink-muted mb-1">Font Weight</label>
           <select
             value={block.font_weight || ""}
             onChange={(e) => onUpdateField("font_weight", e.target.value || null)}
@@ -667,7 +667,7 @@ function BlockEditForm({
 
       <CollapsibleSection title="Entry Animation" defaultOpen={false}>
         <div>
-          <label className="block text-xs text-slate-500 mb-1.5">Effect</label>
+          <label className="block text-xs text-ink-muted mb-1.5">Effect</label>
           <div className="grid grid-cols-3 gap-1.5">
             {ANIMATION_TYPES.map((a) => (
               <AnimationPickerItem
@@ -683,19 +683,19 @@ function BlockEditForm({
         </div>
         {["type_blur_reveal", "pop_reveal", "wave_in"].includes(block.animation_type) && (
           <div className="flex items-center gap-2">
-            <label className="text-xs text-slate-500">Direction</label>
-            <div className="flex rounded-lg border border-slate-200 overflow-hidden">
+            <label className="text-xs text-ink-muted">Direction</label>
+            <div className="flex rounded-lg border border-edge overflow-hidden">
               <button
                 onClick={() => { onUpdateField("anim_in_direction", "ltr"); onPreviewAnimation(); }}
                 className={`px-2.5 py-1 text-xs font-medium transition ${
-                  (block.anim_in_direction ?? "ltr") === "ltr" ? "bg-primary-500 text-white" : "bg-white text-slate-500 hover:bg-slate-50"
+                  (block.anim_in_direction ?? "ltr") === "ltr" ? "bg-primary-500 text-white" : "bg-surface text-ink-muted hover:bg-surface-alt"
                 }`}
                 title="Left to Right"
               >A → Z</button>
               <button
                 onClick={() => { onUpdateField("anim_in_direction", "rtl"); onPreviewAnimation(); }}
                 className={`px-2.5 py-1 text-xs font-medium transition ${
-                  (block.anim_in_direction ?? "ltr") === "rtl" ? "bg-primary-500 text-white" : "bg-white text-slate-500 hover:bg-slate-50"
+                  (block.anim_in_direction ?? "ltr") === "rtl" ? "bg-primary-500 text-white" : "bg-surface text-ink-muted hover:bg-surface-alt"
                 }`}
                 title="Right to Left"
               >Z → A</button>
@@ -703,7 +703,7 @@ function BlockEditForm({
           </div>
         )}
         <div>
-          <label className="block text-xs text-slate-500 mb-1">
+          <label className="block text-xs text-ink-muted mb-1">
             Duration: {(block.anim_in_duration ?? 1.0).toFixed(1)}s
           </label>
           <input
@@ -720,7 +720,7 @@ function BlockEditForm({
 
       <CollapsibleSection title="Exit Animation" defaultOpen={false}>
         <div>
-          <label className="block text-xs text-slate-500 mb-1.5">Effect</label>
+          <label className="block text-xs text-ink-muted mb-1.5">Effect</label>
           <div className="grid grid-cols-3 gap-1.5">
             {ANIMATION_OUT_TYPES.map((a) => (
               <AnimationPickerItem
@@ -736,19 +736,19 @@ function BlockEditForm({
         </div>
         {["type_blur_out", "pop_out", "wave_out"].includes(block.animation_out ?? "none") && (
           <div className="flex items-center gap-2">
-            <label className="text-xs text-slate-500">Direction</label>
-            <div className="flex rounded-lg border border-slate-200 overflow-hidden">
+            <label className="text-xs text-ink-muted">Direction</label>
+            <div className="flex rounded-lg border border-edge overflow-hidden">
               <button
                 onClick={() => { onUpdateField("anim_out_direction", "ltr"); onPreviewAnimation(); }}
                 className={`px-2.5 py-1 text-xs font-medium transition ${
-                  (block.anim_out_direction ?? "ltr") === "ltr" ? "bg-primary-500 text-white" : "bg-white text-slate-500 hover:bg-slate-50"
+                  (block.anim_out_direction ?? "ltr") === "ltr" ? "bg-primary-500 text-white" : "bg-surface text-ink-muted hover:bg-surface-alt"
                 }`}
                 title="Left to Right (first char exits first)"
               >A → Z</button>
               <button
                 onClick={() => { onUpdateField("anim_out_direction", "rtl"); onPreviewAnimation(); }}
                 className={`px-2.5 py-1 text-xs font-medium transition ${
-                  (block.anim_out_direction ?? "ltr") === "rtl" ? "bg-primary-500 text-white" : "bg-white text-slate-500 hover:bg-slate-50"
+                  (block.anim_out_direction ?? "ltr") === "rtl" ? "bg-primary-500 text-white" : "bg-surface text-ink-muted hover:bg-surface-alt"
                 }`}
                 title="Right to Left (last char exits first)"
               >Z → A</button>
@@ -756,7 +756,7 @@ function BlockEditForm({
           </div>
         )}
         <div>
-          <label className="block text-xs text-slate-500 mb-1">
+          <label className="block text-xs text-ink-muted mb-1">
             Duration: {(block.anim_out_duration ?? 1.0).toFixed(1)}s
           </label>
           <input
@@ -774,7 +774,7 @@ function BlockEditForm({
       <CollapsibleSection title="Timing" defaultOpen={false}>
         <div className="grid grid-cols-2 gap-2">
           <div>
-            <label className="block text-xs text-slate-500 mb-1">Start (s)</label>
+            <label className="block text-xs text-ink-muted mb-1">Start (s)</label>
             <input
               type="number"
               step="0.1"
@@ -785,7 +785,7 @@ function BlockEditForm({
             />
           </div>
           <div>
-            <label className="block text-xs text-slate-500 mb-1">End (s)</label>
+            <label className="block text-xs text-ink-muted mb-1">End (s)</label>
             <input
               type="number"
               step="0.1"
@@ -801,7 +801,7 @@ function BlockEditForm({
       <CollapsibleSection title="Advanced" defaultOpen={false}>
         <div>
           <div className="flex items-center justify-between mb-2">
-            <label className="text-xs text-slate-500">Tag Config</label>
+            <label className="text-xs text-ink-muted">Tag Config</label>
             <button
               type="button"
               onClick={addTag}
@@ -811,11 +811,11 @@ function BlockEditForm({
             </button>
           </div>
           {tagKeys.length === 0 ? (
-            <p className="text-xs text-slate-400">No tags configured</p>
+            <p className="text-xs text-ink-muted">No tags configured</p>
           ) : (
             <div className="space-y-2">
               {tagKeys.map((key) => (
-                <div key={key} className="bg-slate-50 rounded-lg p-2 space-y-1.5">
+                <div key={key} className="bg-surface-alt rounded-lg p-2 space-y-1.5">
                   <div className="flex items-center gap-2">
                     <input
                       type="text"
@@ -845,7 +845,7 @@ function BlockEditForm({
                     type="text"
                     value={block.tag_config?.[key]?.placeholder ?? ""}
                     onChange={(e) => updateTag(key, key, { placeholder: e.target.value })}
-                    className="input-field text-xs w-full text-slate-400"
+                    className="input-field text-xs w-full text-ink-muted"
                     placeholder="Placeholder text (e.g. Rahul & Priya)"
                   />
                 </div>
@@ -1064,10 +1064,10 @@ export default function TextBlockPanel() {
       {/* Header */}
       <div className="flex items-center justify-between mb-3">
         <div>
-          <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
+          <h3 className="text-xs font-semibold text-ink-muted uppercase tracking-wider">
             Text Blocks
           </h3>
-          <p className="text-[10px] text-slate-400 mt-0.5">
+          <p className="text-[10px] text-ink-muted mt-0.5">
             {showAllBlocks
               ? `${allBlocks.length} total`
               : `${visibleBlocks.length} visible at ${currentTime.toFixed(1)}s`}
@@ -1083,7 +1083,7 @@ export default function TextBlockPanel() {
             className={`p-1.5 rounded-lg transition ${
               showAllBlocks
                 ? "text-primary-500 bg-primary-50"
-                : "text-slate-400 hover:text-slate-600 hover:bg-slate-100"
+                : "text-ink-muted hover:text-ink-muted hover:bg-surface-alt"
             }`}
             title={showAllBlocks ? "Showing all blocks" : "Showing blocks at current time"}
           >
@@ -1102,7 +1102,7 @@ export default function TextBlockPanel() {
           {displayedBlocks.length > 0 && (
             <button
               onClick={() => setDeleteAllTarget(true)}
-              className="p-1.5 rounded-lg text-slate-400 hover:text-red-500 hover:bg-red-50 transition"
+              className="p-1.5 rounded-lg text-ink-muted hover:text-red-500 hover:bg-red-50 transition"
               title={`Delete ${showAllBlocks ? "all" : "visible"} blocks (${displayedBlocks.length})`}
             >
               <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -1120,7 +1120,7 @@ export default function TextBlockPanel() {
             <svg className="w-8 h-8 text-slate-300 mx-auto mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25H12" />
             </svg>
-            <p className="text-xs text-slate-400 mb-1">
+            <p className="text-xs text-ink-muted mb-1">
               {allBlocks.length === 0
                 ? "No text blocks yet"
                 : "No blocks at this frame"
@@ -1142,7 +1142,7 @@ export default function TextBlockPanel() {
                 className={`rounded-xl transition-all duration-200 ${
                   isSelected
                     ? "bg-primary-50 ring-1 ring-primary-200"
-                    : "bg-white ring-1 ring-slate-100 hover:ring-slate-200"
+                    : "bg-surface ring-1 ring-slate-100 hover:ring-edge"
                 }`}
               >
                 {/* Block header row */}
@@ -1151,12 +1151,12 @@ export default function TextBlockPanel() {
                   onClick={(e) => handleBlockClick(block.id, e.shiftKey)}
                 >
                   {/* Time badge */}
-                  <span className="flex-shrink-0 text-[9px] font-mono bg-slate-100 text-slate-500 rounded px-1.5 py-0.5">
+                  <span className="flex-shrink-0 text-[9px] font-mono bg-surface-alt text-ink-muted rounded px-1.5 py-0.5">
                     {block.start_time.toFixed(1)}–{block.end_time.toFixed(1)}s
                   </span>
 
                   {/* Block label */}
-                  <span className={`truncate flex-1 text-sm ${isSelected ? "text-primary-700 font-medium" : "text-slate-700"}`}>
+                  <span className={`truncate flex-1 text-sm ${isSelected ? "text-primary-700 font-medium" : "text-ink"}`}>
                     {block.content.replace(/\{(\w+)\}/g, (_, t) => t) || "Empty block"}
                   </span>
 
@@ -1178,7 +1178,7 @@ export default function TextBlockPanel() {
                       e.stopPropagation();
                       handleCloneBlock(block);
                     }}
-                    className="text-slate-400 hover:text-primary-600 p-1 flex items-center justify-center flex-shrink-0"
+                    className="text-ink-muted hover:text-primary-600 p-1 flex items-center justify-center flex-shrink-0"
                     title="Clone block"
                   >
                     <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
@@ -1228,7 +1228,7 @@ export default function TextBlockPanel() {
         <button
           onClick={handleAddBlock}
           disabled={saving}
-          className="w-full flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl border-2 border-dashed border-slate-200 text-slate-500 hover:border-primary-300 hover:text-primary-600 hover:bg-primary-50/50 transition-all duration-200 text-xs font-medium disabled:opacity-50"
+          className="w-full flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl border-2 border-dashed border-edge text-ink-muted hover:border-primary-300 hover:text-primary-600 hover:bg-primary-50/50 transition-all duration-200 text-xs font-medium disabled:opacity-50"
         >
           <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
@@ -1239,9 +1239,9 @@ export default function TextBlockPanel() {
 
       {/* All blocks overview — collapsed list of off-screen blocks (hidden when eye toggle shows all) */}
       {!showAllBlocks && offscreenCount > 0 && (
-        <div className="pt-2 mt-2 border-t border-slate-100">
+        <div className="pt-2 mt-2 border-t border-edge">
           <details className="group">
-            <summary className="text-[10px] text-slate-400 cursor-pointer hover:text-slate-600 select-none list-none flex items-center gap-1">
+            <summary className="text-[10px] text-ink-muted cursor-pointer hover:text-ink-muted select-none list-none flex items-center gap-1">
               <svg className="w-3 h-3 transition-transform group-open:rotate-90" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
               </svg>
@@ -1253,7 +1253,7 @@ export default function TextBlockPanel() {
                 .map((b) => (
                   <div
                     key={b.id}
-                    className="flex items-center gap-2 px-2 py-1 rounded text-[10px] text-slate-400 hover:bg-slate-50 cursor-default"
+                    className="flex items-center gap-2 px-2 py-1 rounded text-[10px] text-ink-muted hover:bg-surface-alt cursor-default"
                   >
                     <span className="font-mono">{b.start_time.toFixed(1)}–{b.end_time.toFixed(1)}s</span>
                     <span className="truncate">{b.content.replace(/\{(\w+)\}/g, (_, t) => t)}</span>
