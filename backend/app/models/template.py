@@ -1,6 +1,6 @@
 import uuid
 
-from sqlalchemy import Boolean, ForeignKey, Integer, String
+from sqlalchemy import Boolean, Float, ForeignKey, Integer, String
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -29,7 +29,16 @@ class Template(UUIDMixin, TimestampMixin, Base):
         UUID(as_uuid=True), ForeignKey("fonts.id"), nullable=True
     )
     render_notes: Mapped[str | None] = mapped_column(String(1000), nullable=True)
-    price: Mapped[int] = mapped_column(Integer, default=9900)
+    # Admin-authored meta description for this template's /editor/{slug} page.
+    # Left null falls back to a generated string (see frontend EditorPage), so
+    # pages are never blank — but hand-written copy ranks better.
+    seo_description: Mapped[str | None] = mapped_column(String(300), nullable=True)
+    price: Mapped[int | None] = mapped_column(Integer, nullable=True, default=None)
+    discount_amount_paise: Mapped[int | None] = mapped_column(Integer, nullable=True, default=None)
+    watermark_position_x: Mapped[float | None] = mapped_column(Float, nullable=True, default=0.39)
+    watermark_position_y: Mapped[float | None] = mapped_column(Float, nullable=True, default=0.88)
+    watermark_width: Mapped[float | None] = mapped_column(Float, nullable=True, default=0.22)
+    watermark_rotation: Mapped[float | None] = mapped_column(Float, nullable=True, default=0.0)
     preview_key: Mapped[str | None] = mapped_column(String(500), nullable=True)
     preview_status: Mapped[str | None] = mapped_column(String(50), nullable=True)
     pdf_snapshot_timestamps: Mapped[list | None] = mapped_column(JSONB, nullable=True)

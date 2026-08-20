@@ -1065,13 +1065,17 @@ function AnimatedTextBlock({
   // of always collapsing to 0, and every other animation just holds at it.
   s.letterSpacing += (block.letter_spacing ?? 0) * fontSize;
 
+  // Admin-set static rotation (degrees) — additive on top of any animation's
+  // own rotate effect, same pattern as letterSpacing above.
+  s.rotate += block.rotation ?? 0;
+
   // For per-char entry/exit: wrapper handles non-per-char anim, chars handle per-char anim
   const hasNonPerCharExit = animationOut !== "none" && !isPerCharOut && frame >= outStartFrame;
   const wrapperOpacity = (isPerChar || isPerCharOut) ? (hasNonPerCharExit ? s.opacity : 1) : s.opacity;
   const wrapperTransform = (isPerChar || isPerCharOut)
     ? (hasNonPerCharExit
       ? `translate(${s.translateX}px, ${s.translateY}px) scale(${s.scale}) rotate(${s.rotate}deg)`
-      : undefined)
+      : `rotate(${block.rotation ?? 0}deg)`)
     : `translate(${s.translateX}px, ${s.translateY}px) scale(${s.scale}) rotate(${s.rotate}deg)`;
 
   const extraPad = needsExtraPadding ? fontSize * 0.25 : 0;

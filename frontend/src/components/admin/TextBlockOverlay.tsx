@@ -87,6 +87,7 @@ export default function TextBlockOverlay({
             position_y: updated.position_y,
             max_width: updated.max_width,
             font_size_ratio: updated.font_size_ratio,
+            rotation: updated.rotation,
           });
         } catch (err) {
           console.error("Failed to save block position", err);
@@ -167,6 +168,7 @@ export default function TextBlockOverlay({
           top: boxTop,
           width: boxWidth,
           pointerEvents: "auto",
+          transform: block.rotation ? `rotate(${block.rotation}deg)` : undefined,
         }}
         className={selected ? "" : "group/block cursor-pointer"}
       >
@@ -270,8 +272,10 @@ export default function TextBlockOverlay({
           target={targetRef}
           draggable
           resizable
+          rotatable
           throttleDrag={0}
           throttleResize={0}
+          throttleRotate={0}
           keepRatio={false}
           renderDirections={["nw", "n", "ne", "w", "e", "sw", "s", "se"]}
           bounds={{
@@ -347,6 +351,17 @@ export default function TextBlockOverlay({
             });
           }}
           onResizeEnd={() => {
+            endTemporalGesture();
+            persist();
+          }}
+          onRotateStart={() => {
+            beginTemporalGesture();
+          }}
+          onRotate={({ target, rotate }) => {
+            target.style.transform = `rotate(${rotate}deg)`;
+            updateBlock(block.id, { rotation: rotate });
+          }}
+          onRotateEnd={() => {
             endTemporalGesture();
             persist();
           }}

@@ -1,6 +1,6 @@
 import uuid
 
-from sqlalchemy import ForeignKey, Integer, Sequence, String
+from sqlalchemy import Boolean, ForeignKey, Integer, Sequence, String
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -43,6 +43,7 @@ class Payment(UUIDMixin, TimestampMixin, Base):
     block_overrides: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     block_format_overrides: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     location_url: Mapped[str | None] = mapped_column(String(1000), nullable=True)
+    is_watermarked: Mapped[bool] = mapped_column(Boolean, default=False)
 
     user = relationship("User")
     render_job = relationship("RenderJob")

@@ -44,6 +44,7 @@ export default function ImageBlockOverlay({
         position_y: updated.position_y,
         width: updated.width,
         height: updated.height,
+        rotation: updated.rotation,
       });
     } catch (err) {
       console.error("Failed to save image block position", err);
@@ -66,6 +67,7 @@ export default function ImageBlockOverlay({
           width: boxWidth,
           height: boxHeight,
           pointerEvents: "auto",
+          transform: block.rotation ? `rotate(${block.rotation}deg)` : undefined,
         }}
         className={selected ? "" : "group/block cursor-pointer"}
       >
@@ -103,8 +105,10 @@ export default function ImageBlockOverlay({
           target={targetRef}
           draggable
           resizable
+          rotatable
           throttleDrag={0}
           throttleResize={0}
+          throttleRotate={0}
           keepRatio={false}
           renderDirections={["nw", "n", "ne", "w", "e", "sw", "s", "se"]}
           bounds={{
@@ -144,6 +148,17 @@ export default function ImageBlockOverlay({
             });
           }}
           onResizeEnd={() => {
+            endTemporalGesture();
+            persist();
+          }}
+          onRotateStart={() => {
+            beginTemporalGesture();
+          }}
+          onRotate={({ target, rotate }) => {
+            target.style.transform = `rotate(${rotate}deg)`;
+            updateStore(block.id, { rotation: rotate });
+          }}
+          onRotateEnd={() => {
             endTemporalGesture();
             persist();
           }}

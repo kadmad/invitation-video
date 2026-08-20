@@ -8,7 +8,8 @@ export async function createOrder(
   textColorOverride?: Record<string, string>,
   blockOverrides?: Record<string, string>,
   blockFormatOverrides?: Record<string, any[]>,
-  locationUrl?: string
+  locationUrl?: string,
+  isWatermarked?: boolean
 ) {
   const body: Record<string, unknown> = {
     template_id: templateId,
@@ -19,6 +20,7 @@ export async function createOrder(
   if (blockOverrides) body.block_overrides = blockOverrides;
   if (blockFormatOverrides) body.block_format_overrides = blockFormatOverrides;
   if (locationUrl) body.location_url = locationUrl;
+  if (isWatermarked) body.is_watermarked = true;
   const { data } = await client.post<PaymentOrder>("/payments/create-order", body);
   return data;
 }

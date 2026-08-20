@@ -46,6 +46,10 @@ async def create_order(
 
     # Use per-template price, fallback to global default
     amount = template.price or settings.RENDER_PRICE_PAISE
+    if body.is_watermarked:
+        if not template.discount_amount_paise:
+            raise HTTPException(status_code=400, detail="Watermark discount not available for this template")
+        amount = max(amount - template.discount_amount_paise, 0)
     rz_order = payment_service.create_order(amount)
 
     # Save payment record with render params
@@ -62,6 +66,7 @@ async def create_order(
         block_overrides=body.block_overrides,
         block_format_overrides=body.block_format_overrides,
         location_url=body.location_url,
+        is_watermarked=body.is_watermarked,
     )
     db.add(payment)
     await db.commit()
@@ -125,6 +130,7 @@ async def verify_payment(
         status="pending",
         pdf_status="queued" if has_pdf else None,
         render_method="server" if settings.SERVER_RENDERING else "manual",
+        is_watermarked=payment.is_watermarked,
     )
     db.add(job)
     await db.flush()

@@ -1,6 +1,6 @@
 import uuid
 
-from sqlalchemy import ForeignKey, Integer, String, Text
+from sqlalchemy import Boolean, ForeignKey, Integer, String, Text
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -38,6 +38,7 @@ class RenderJob(UUIDMixin, TimestampMixin, Base):
     # result. Editable by the owning user only while manual + still "pending" —
     # locked the moment an admin claims it (status -> "processing").
     render_method: Mapped[str] = mapped_column(String(10), default="server")
+    is_watermarked: Mapped[bool] = mapped_column(Boolean, default=False)
 
     user = relationship("User", back_populates="render_jobs")
     template = relationship("Template", back_populates="render_jobs")

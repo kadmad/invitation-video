@@ -120,7 +120,7 @@ export default function AnimatedImageBlock({
         width: w,
         height: h,
         opacity,
-        transform: `scale(${scale})`,
+        transform: `scale(${scale}) rotate(${block.rotation ?? 0}deg)`,
         overflow: "hidden",
       }}
     >

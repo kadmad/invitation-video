@@ -333,6 +333,11 @@ def render_video_task(self, job_id: str):
                     "textColorOverrides": text_color_overrides,
                     "blockOverrides": block_overrides if block_overrides else None,
                     "blockFormatOverrides": block_format_overrides,
+                    "watermarkEnabled": job.is_watermarked,
+                    "watermarkPositionX": template.watermark_position_x,
+                    "watermarkPositionY": template.watermark_position_y,
+                    "watermarkWidth": template.watermark_width,
+                    "watermarkRotation": template.watermark_rotation,
                 }
 
                 renderer_url = os.environ.get("RENDERER_URL", "http://renderer:3100")
@@ -406,6 +411,11 @@ def render_video_task(self, job_id: str):
                         default_text_color=template.default_text_color,
                         fallback_font_path=fallback_font_path,
                         block_overrides=block_overrides if block_overrides else None,
+                        watermark_enabled=job.is_watermarked,
+                        watermark_position_x=template.watermark_position_x,
+                        watermark_position_y=template.watermark_position_y,
+                        watermark_width=template.watermark_width,
+                        watermark_rotation=template.watermark_rotation,
                     )
                     ffmpeg.render()
 

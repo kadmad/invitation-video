@@ -20,6 +20,7 @@ class TextBlock(UUIDMixin, Base):
     position_x: Mapped[float] = mapped_column(Float, default=0.5)
     position_y: Mapped[float] = mapped_column(Float, default=0.5)
     max_width: Mapped[float] = mapped_column(Float, default=0.8)
+    rotation: Mapped[float | None] = mapped_column(Float, nullable=True, default=0.0)
 
     # Font (per-block)
     font_id: Mapped[uuid.UUID | None] = mapped_column(

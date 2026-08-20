@@ -13,6 +13,7 @@ class CreateOrderRequest(BaseModel):
     block_format_overrides: dict | None = None
     location_url: str | None = None
     skip_render: bool = False
+    is_watermarked: bool = False
 
 
 class CreateOrderResponse(BaseModel):

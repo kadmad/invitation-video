@@ -1,7 +1,11 @@
+import math
+import os
 import re
 import subprocess
 
 from app.models.text_block import TextBlock
+
+LOGO_PATH = os.path.join(os.path.dirname(__file__), "..", "assets", "logo.png")
 
 
 class FFmpegRenderer:
@@ -19,6 +23,11 @@ class FFmpegRenderer:
         default_text_color: str | None = None,
         fallback_font_path: str | None = None,
         block_overrides: dict[str, str] | None = None,
+        watermark_enabled: bool = False,
+        watermark_position_x: float | None = None,
+        watermark_position_y: float | None = None,
+        watermark_width: float | None = None,
+        watermark_rotation: float | None = None,
     ):
         self.source_path = source_path
         self.output_path = output_path
@@ -32,6 +41,11 @@ class FFmpegRenderer:
         self.default_text_color = default_text_color or "#FFFFFF"
         self.fallback_font_path = fallback_font_path  # Template default — used when block has no font
         self.block_overrides = block_overrides
+        self.watermark_enabled = watermark_enabled
+        self.watermark_position_x = watermark_position_x if watermark_position_x is not None else 0.39
+        self.watermark_position_y = watermark_position_y if watermark_position_y is not None else 0.88
+        self.watermark_width = watermark_width if watermark_width is not None else 0.22
+        self.watermark_rotation = watermark_rotation or 0.0
 
     @staticmethod
     def _escape_drawtext(text: str) -> str:
@@ -164,7 +178,26 @@ class FFmpegRenderer:
             "-i", self.source_path,
         ]
 
-        if filter_str:
+        if self.watermark_enabled and os.path.exists(LOGO_PATH):
+            cmd.extend(["-i", LOGO_PATH])
+            logo_w = max(int(self.watermark_width * self.width), 1)
+            overlay_x = int(self.watermark_position_x * self.width)
+            overlay_y = int(self.watermark_position_y * self.height)
+
+            video_label = "0:v"
+            parts = []
+            if filter_str:
+                parts.append(f"[0:v]{filter_str}[txt]")
+                video_label = "txt"
+            wm_filters = f"scale={logo_w}:-1,format=rgba,colorchannelmixer=aa=0.85"
+            if self.watermark_rotation:
+                angle = math.radians(self.watermark_rotation)
+                wm_filters += f",rotate={angle}:c=none:ow=rotw({angle}):oh=roth({angle})"
+            parts.append(f"[1:v]{wm_filters}[wm]")
+            parts.append(f"[{video_label}][wm]overlay={overlay_x}:{overlay_y}[outv]")
+
+            cmd.extend(["-filter_complex", ";".join(parts), "-map", "[outv]", "-map", "0:a?"])
+        elif filter_str:
             cmd.extend(["-vf", filter_str])
 
         cmd.extend([

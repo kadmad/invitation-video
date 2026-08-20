@@ -21,6 +21,7 @@ class ImageBlock(UUIDMixin, Base):
     position_y: Mapped[float] = mapped_column(Float, default=0.5)
     width: Mapped[float] = mapped_column(Float, default=0.3)
     height: Mapped[float] = mapped_column(Float, default=0.3)
+    rotation: Mapped[float | None] = mapped_column(Float, nullable=True, default=0.0)
 
     # Shape mask
     mask_shape: Mapped[str] = mapped_column(String(20), default="none")

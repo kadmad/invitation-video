@@ -3,6 +3,7 @@ import { AbsoluteFill, OffthreadVideo, delayRender, continueRender } from "remot
 import AnimatedText from "../components/AnimatedText";
 import AnimatedTextBlock from "../components/AnimatedTextBlock";
 import AnimatedImageBlock from "../components/AnimatedImageBlock";
+import WatermarkOverlay from "../components/WatermarkOverlay";
 import type { TemplateField, TextBlock, ImageBlock, FormatRange } from "@/types";
 
 interface GenericTemplateProps {
@@ -28,6 +29,11 @@ interface GenericTemplateProps {
   fields?: TemplateField[];
   fieldValues?: Record<string, string>;
   fontFamily?: string;
+  watermarkEnabled?: boolean;
+  watermarkPositionX?: number;
+  watermarkPositionY?: number;
+  watermarkWidth?: number;
+  watermarkRotation?: number;
 }
 
 export default function GenericTemplate({
@@ -51,6 +57,11 @@ export default function GenericTemplate({
   fields,
   fieldValues,
   fontFamily,
+  watermarkEnabled,
+  watermarkPositionX,
+  watermarkPositionY,
+  watermarkWidth,
+  watermarkRotation,
 }: GenericTemplateProps) {
   // Use new text_blocks path if available, otherwise fall back to legacy fields
   const useBlocks = textBlocks && textBlocks.length > 0;
@@ -162,6 +173,17 @@ export default function GenericTemplate({
               videoHeight={height}
             />
           ))}
+
+      {watermarkEnabled && (
+        <WatermarkOverlay
+          positionX={watermarkPositionX ?? 0.39}
+          positionY={watermarkPositionY ?? 0.88}
+          width={watermarkWidth ?? 0.22}
+          rotation={watermarkRotation ?? 0}
+          videoWidth={width}
+          videoHeight={height}
+        />
+      )}
     </AbsoluteFill>
   );
 }
