@@ -76,6 +76,13 @@ class TemplateListResponse(BaseModel):
     price: int
     discount_amount_paise: int | None = None
     seo_description: str | None = None
+    # Where the brand watermark sits on a discounted render. Needed by the
+    # customer-side opt-in preview so it shows the admin's actual placement
+    # instead of falling back to the component's hardcoded defaults.
+    watermark_position_x: float | None = None
+    watermark_position_y: float | None = None
+    watermark_width: float | None = None
+    watermark_rotation: float | None = None
     created_at: datetime
 
     model_config = {"from_attributes": True}
