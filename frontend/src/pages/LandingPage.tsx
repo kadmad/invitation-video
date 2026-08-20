@@ -8,6 +8,7 @@ import { getTemplateVideoSrc } from "@/lib/templateVideo";
 import { DUMMY_TEMPLATES } from "@/lib/dummyTemplates";
 import PageTransition from "@/components/common/PageTransition";
 import Reveal from "@/components/common/Reveal";
+import Sparkles from "@/components/common/Sparkles";
 import TemplateCarousel from "@/components/common/TemplateCarousel";
 import type { Template } from "@/types";
 
@@ -26,10 +27,14 @@ function PhoneMockup({
   template,
   className = "",
   tilt = 0,
+  priority = false,
 }: {
   template: Template;
   className?: string;
   tilt?: number;
+  /** Set on the single above-the-fold hero mockup so its image loads eagerly
+   *  at high priority — it's the LCP element. */
+  priority?: boolean;
 }) {
   const [videoSrc, setVideoSrc] = useState<string | null>(null);
   const [videoReady, setVideoReady] = useState(false);
@@ -78,11 +83,15 @@ function PhoneMockup({
       {template.thumbnail_key ? (
         <img
           src={thumbUrl(template.slug)}
-          alt={`${template.name} invitation preview`}
+          alt={`${template.name} — Indian wedding invitation video template preview`}
           className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-300 ${
             videoReady ? "opacity-0" : "opacity-100"
           }`}
-          loading="lazy"
+          /* Above-the-fold hero art is the LCP element — lazy-loading it
+             deferred the largest paint. The first mockup loads eagerly at
+             high priority; the rest stay lazy. */
+          loading={priority ? "eager" : "lazy"}
+          {...(priority ? { fetchpriority: "high" } : {})}
         />
       ) : (
         <div
@@ -140,6 +149,32 @@ const steps = [
   },
 ];
 
+/** Landing-page FAQ. Kept beside the JSX that renders it so the visible copy
+ *  and the FAQPage structured data can never drift apart — Google penalises
+ *  schema that doesn't match on-page text. */
+const FAQS = [
+  {
+    q: "How long does it take to make a video invitation?",
+    a: "Most people finish in under five minutes. Pick a template, type in your names, date and venue, and the preview updates instantly. Rendering the final HD video usually takes a few minutes more.",
+  },
+  {
+    q: "Can I create invitations in Hindi or Gujarati?",
+    a: "Yes. Type in English and it transliterates into Hindi or Gujarati automatically, or type directly in the script you want. Every template supports English, Hindi and Gujarati fonts.",
+  },
+  {
+    q: "What occasions do the templates cover?",
+    a: "Weddings and engagements, plus birthdays, housewarmings, baby showers and other celebrations. New designs are added regularly.",
+  },
+  {
+    q: "What do I get after paying?",
+    a: "An HD MP4 video invitation you can share on WhatsApp or Instagram, and where the template supports it, a matching PDF card for printing.",
+  },
+  {
+    q: "Do I need any design skills?",
+    a: "None. Every template is designed and animated already — you only fill in your details. Nothing to drag, align or export.",
+  },
+];
+
 export default function LandingPage() {
   const [templates, setTemplates] = useState<Template[]>([]);
 
@@ -148,21 +183,33 @@ export default function LandingPage() {
   }, []);
 
   useSeo({
-    title: `${SITE_NAME} — Wedding Invitation Video Maker, Designed & Delivered in Minutes`,
+    title: `${SITE_NAME} — Video Invitation Maker, Designed & Delivered in Minutes`,
     description: SITE_DESCRIPTION,
     path: "/",
     jsonLd: {
       "@context": "https://schema.org",
-      "@type": "WebSite",
-      name: SITE_NAME,
-      url: SITE_URL,
-      description: SITE_DESCRIPTION,
-      publisher: { "@type": "Organization", name: SITE_NAME, url: SITE_URL },
-      potentialAction: {
-        "@type": "SearchAction",
-        target: `${SITE_URL}/templates?search={search_term_string}`,
-        "query-input": "required name=search_term_string",
-      },
+      "@graph": [
+        {
+          "@type": "FAQPage",
+          mainEntity: FAQS.map((f) => ({
+            "@type": "Question",
+            name: f.q,
+            acceptedAnswer: { "@type": "Answer", text: f.a },
+          })),
+        },
+        {
+          "@type": "WebSite",
+          name: SITE_NAME,
+          url: SITE_URL,
+          description: SITE_DESCRIPTION,
+          publisher: { "@type": "Organization", name: SITE_NAME, url: SITE_URL },
+          potentialAction: {
+            "@type": "SearchAction",
+            target: `${SITE_URL}/templates?search={search_term_string}`,
+            "query-input": "required name=search_term_string",
+          },
+        },
+      ],
     },
   });
 
@@ -174,12 +221,13 @@ export default function LandingPage() {
       <div className="space-y-16 sm:space-y-24 pb-8">
         {/* ── Hero ── */}
         <section className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-[#F6EFE1] via-[#F1E4CC] to-[#E9D6B0] px-6 py-14 sm:px-12 sm:py-20">
-          <div className="grid lg:grid-cols-2 gap-12 items-center">
+          <Sparkles />
+          <div className="relative grid lg:grid-cols-2 gap-12 items-center">
             <div>
               <h1 className="text-3xl sm:text-4xl lg:text-5xl font-extrabold leading-tight text-[#2A2420]">
                 Your Perfect{" "}
-                <span className="bg-gradient-to-r from-[#B98D4C] to-[#8B6F47] bg-clip-text text-transparent">
-                  Wedding Invite.
+                <span className="bg-gradient-to-r from-[#B98D4C] via-[#F3D9A0] to-[#8B6F47] bg-clip-text text-transparent bg-[length:200%_100%] motion-reduce:animate-none animate-shimmer-slow">
+                  Digital Video Invitation.
                 </span>{" "}
                 Designed, Animated, and Delivered in Minutes.
               </h1>
@@ -204,7 +252,7 @@ export default function LandingPage() {
             {heroTemplates.length > 0 && (
               <div className="hidden lg:flex justify-center items-center gap-4 min-h-[22rem]">
                 {heroTemplates[1] && <PhoneMockup template={heroTemplates[1]} tilt={-8} className="mt-8" />}
-                {heroTemplates[0] && <PhoneMockup template={heroTemplates[0]} className="z-10 scale-110" />}
+                {heroTemplates[0] && <PhoneMockup template={heroTemplates[0]} className="z-10 scale-110" priority />}
                 {heroTemplates[2] && <PhoneMockup template={heroTemplates[2]} tilt={8} className="mt-8" />}
               </div>
             )}
@@ -214,10 +262,10 @@ export default function LandingPage() {
         {/* ── Steps ── */}
         <section>
           <Reveal>
-            <h2 className="text-2xl sm:text-3xl font-bold text-center text-slate-900">
+            <h2 className="text-2xl sm:text-3xl font-bold text-center text-ink">
               Effortless Creation, Preset Elegance
             </h2>
-            <p className="text-center text-slate-500 mt-2 max-w-2xl mx-auto">
+            <p className="text-center text-ink-muted mt-2 max-w-2xl mx-auto">
               Three simple steps between you and a beautiful invitation your guests will remember.
             </p>
           </Reveal>
@@ -228,8 +276,8 @@ export default function LandingPage() {
                   <div className="mx-auto w-16 h-16 rounded-2xl bg-[#F6EFE1] text-[#B98D4C] flex items-center justify-center mb-4">
                     {s.icon}
                   </div>
-                  <h3 className="font-semibold text-slate-800">{s.title}</h3>
-                  <p className="text-sm text-slate-500 mt-2 max-w-xs mx-auto">{s.desc}</p>
+                  <h3 className="font-semibold text-ink">{s.title}</h3>
+                  <p className="text-sm text-ink-muted mt-2 max-w-xs mx-auto">{s.desc}</p>
                 </div>
               </Reveal>
             ))}
@@ -255,7 +303,7 @@ export default function LandingPage() {
                   </p>
                   <Link
                     to="/templates"
-                    className="mt-6 inline-flex items-center gap-2 rounded-full bg-[#F6EFE1] text-[#2A2420] px-6 py-3 text-sm font-semibold hover:bg-white transition-colors"
+                    className="mt-6 inline-flex items-center gap-2 rounded-full bg-[#F6EFE1] text-[#2A2420] px-6 py-3 text-sm font-semibold hover:bg-surface transition-colors"
                   >
                     Try a Template
                   </Link>
@@ -269,10 +317,10 @@ export default function LandingPage() {
         {showcaseTemplates.length > 0 && (
           <section>
             <Reveal>
-              <h2 className="text-2xl sm:text-3xl font-bold text-center text-slate-900">
+              <h2 className="text-2xl sm:text-3xl font-bold text-center text-ink">
                 Handpicked Invitation Templates
               </h2>
-              <p className="text-center text-slate-500 mt-2 max-w-2xl mx-auto">
+              <p className="text-center text-ink-muted mt-2 max-w-2xl mx-auto">
                 Each one fully animated, ready to personalize with your own names, dates and venue.
               </p>
             </Reveal>
@@ -286,7 +334,7 @@ export default function LandingPage() {
               {showcaseTemplates.map((t) => (
                 <Link key={t.id} to={`/editor/${t.slug}`} className="group flex flex-col items-center">
                   <PhoneMockup template={t} className="transition-transform group-hover:-translate-y-1" />
-                  <span className="mt-3 text-sm font-medium text-slate-700 group-hover:text-[#B98D4C] transition-colors">
+                  <span className="mt-3 text-sm font-medium text-ink group-hover:text-[#B98D4C] transition-colors">
                     {t.name}
                   </span>
                 </Link>
@@ -302,6 +350,38 @@ export default function LandingPage() {
             </div>
           </section>
         )}
+
+        {/* ── FAQ ──
+            Visible copy is driven by the same FAQS array as the FAQPage
+            JSON-LD above, so the structured data always matches what a user
+            actually sees on the page. */}
+        <Reveal>
+          <section className="rounded-3xl bg-surface px-6 py-12 sm:px-12">
+            <h2 className="text-2xl sm:text-3xl font-bold text-ink text-center">
+              Frequently asked questions
+            </h2>
+            <div className="mt-8 max-w-3xl mx-auto divide-y divide-edge">
+              {FAQS.map((faq) => (
+                <details key={faq.q} className="group py-4">
+                  <summary className="flex cursor-pointer items-center justify-between gap-4 text-left font-medium text-ink list-none">
+                    <h3 className="text-base font-medium">{faq.q}</h3>
+                    <svg
+                      className="w-5 h-5 shrink-0 text-ink-muted transition-transform group-open:rotate-180"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth={2}
+                      viewBox="0 0 24 24"
+                      aria-hidden="true"
+                    >
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+                    </svg>
+                  </summary>
+                  <p className="mt-3 text-sm sm:text-base text-ink-muted leading-relaxed">{faq.a}</p>
+                </details>
+              ))}
+            </div>
+          </section>
+        </Reveal>
 
         {/* ── Final CTA ── */}
         <Reveal>

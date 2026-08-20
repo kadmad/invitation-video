@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.config import settings
+from app.database import prod_async_session
 from app.dependencies import get_admin_user, get_db
 from app.models.category import Category
 from app.models.font import Font
@@ -45,9 +46,10 @@ from app.schemas.admin import (
     PeriodData,
 )
 from app.schemas.font import FontResponse
-from app.services.storage_service import storage_service
+from app.services.storage_service import storage_service, prod_storage_service
 from app.services import whatsapp_service
 from app.workers.celery_app import celery_app
+from app.workers.prod_celery import prod_celery_app
 from app.workers.tasks import render_video_task
 
 router = APIRouter()
@@ -324,6 +326,13 @@ async def update_template(
     update_data = body.model_dump(exclude_unset=True, exclude={"render_preview"})
     for key, value in update_data.items():
         setattr(template, key, value)
+    if template.is_published:
+        if not template.price:
+            raise HTTPException(status_code=400, detail="Price must be set before publishing")
+        if not template.discount_amount_paise:
+            raise HTTPException(status_code=400, detail="Watermark discount must be set before publishing")
+        if template.discount_amount_paise >= template.price:
+            raise HTTPException(status_code=400, detail="Discount must be less than price")
     if should_render:
         template.preview_status = "processing"
     await db.commit()
@@ -792,9 +801,12 @@ def _order_number(n: int | None, fallback_id) -> str:
     return f"INV-{n:06d}" if n else str(fallback_id)
 
 
-def _awaiting_render_response(job: RenderJob, order_no, usr: User, tmpl: Template) -> AwaitingRenderResponse:
+def _awaiting_render_response(
+    job: RenderJob, order_no, usr: User, tmpl: Template, source: str = "local"
+) -> AwaitingRenderResponse:
     return AwaitingRenderResponse(
         id=job.id,
+        source=source,
         order_number=_order_number(order_no, job.id),
         status=job.status,
         progress=job.progress,
@@ -819,18 +831,66 @@ def _awaiting_render_response(job: RenderJob, order_no, usr: User, tmpl: Templat
     )
 
 
-async def _get_manual_job(db: AsyncSession, render_id: uuid.UUID):
-    result = await db.execute(
+async def _find_manual_job(session: AsyncSession, render_id: uuid.UUID):
+    """Returns the (job, order_no, user, template) row, or None if this
+    session's database has no such manual job — used to try local first,
+    then fall back to production, rather than raising on a local miss."""
+    result = await session.execute(
         select(RenderJob, Payment.order_number, User, Template)
         .join(Payment, Payment.render_job_id == RenderJob.id)
         .join(User, User.id == RenderJob.user_id)
         .join(Template, Template.id == RenderJob.template_id)
         .where(RenderJob.id == render_id, RenderJob.render_method == "manual")
     )
-    row = result.first()
-    if not row:
-        raise HTTPException(status_code=404, detail="Manual render job not found")
-    return row
+    return result.first()
+
+
+async def _claim_in(session: AsyncSession, job: RenderJob, dispatch) -> None:
+    """Shared claim/restart logic — `dispatch(job_id)` enqueues the render
+    task on whichever broker matches `session`'s database, and returns the
+    dispatched task's id."""
+    if job.status not in ("pending", "processing", "failed", "cancelled"):
+        raise HTTPException(status_code=400, detail=f"Render is already {job.status}")
+    already_in_flight = bool(job.celery_task_id) and job.status not in ("failed", "cancelled")
+    if not already_in_flight:
+        job.status = "processing"
+        job.error_message = None
+        job.progress = 0
+        task_id = dispatch(str(job.id))
+        job.celery_task_id = task_id
+        await session.commit()
+    await session.refresh(job)
+
+
+async def _cancel_in(session: AsyncSession, job: RenderJob, celery_client) -> None:
+    if job.status not in ("pending", "processing"):
+        raise HTTPException(status_code=400, detail=f"Render is already {job.status}, nothing to cancel")
+    if job.celery_task_id:
+        celery_client.control.revoke(job.celery_task_id, terminate=True, signal="SIGTERM")
+    job.status = "cancelled"
+    await session.commit()
+    await session.refresh(job)
+
+
+async def _complete_in(session: AsyncSession, job: RenderJob, usr: User, storage, video_data: bytes, pdf_data: bytes | None) -> None:
+    if job.status == "completed":
+        raise HTTPException(status_code=400, detail="Render already completed")
+    output_key = f"renders/{job.user_id}/{job.id}/output.mp4"
+    storage.upload(output_key, video_data, content_type="video/mp4")
+    job.output_key = output_key
+    job.status = "completed"
+    job.progress = 100
+    if pdf_data:
+        pdf_key = f"renders/{job.user_id}/{job.id}/invitation.pdf"
+        storage.upload(pdf_key, pdf_data, content_type="application/pdf")
+        job.pdf_key = pdf_key
+        job.pdf_status = "completed"
+    await session.commit()
+    if usr.phone_number:
+        try:
+            whatsapp_service.send_render_ready(usr.phone_number, usr.full_name or "Customer", str(job.id))
+        except Exception:
+            pass
 
 
 @router.get("/renders/awaiting", response_model=AwaitingRendersListResponse)
@@ -853,6 +913,36 @@ async def list_awaiting_renders(
     rows = result.all()
 
     renders = [_awaiting_render_response(job, order_no, usr, tmpl) for job, order_no, usr, tmpl in rows]
+
+    # Also fold in production's manual-render queue when PROD_DATABASE_URL is
+    # configured — read-only (see database.py), and these rows aren't
+    # actionable from here: claim/cancel look the job up in the LOCAL db by
+    # id, so a production-sourced id just won't be found there. The frontend
+    # marks these `source: "production"` and disables the action buttons.
+    if prod_async_session is not None:
+        try:
+            async with prod_async_session() as prod_db:
+                prod_result = await prod_db.execute(
+                    select(RenderJob, Payment.order_number, User, Template)
+                    .join(Payment, Payment.render_job_id == RenderJob.id)
+                    .join(User, User.id == RenderJob.user_id)
+                    .join(Template, Template.id == RenderJob.template_id)
+                    .where(
+                        RenderJob.render_method == "manual",
+                        RenderJob.status.in_(["pending", "processing", "failed", "cancelled"]),
+                    )
+                    .order_by(RenderJob.created_at.asc())
+                )
+                renders += [
+                    _awaiting_render_response(job, order_no, usr, tmpl, source="production")
+                    for job, order_no, usr, tmpl in prod_result.all()
+                ]
+        except Exception as e:
+            # Tailscale down, prod DB unreachable, etc. — local queue still
+            # renders fine, just without the production rows this time.
+            print(f"[admin] could not reach production DB for awaiting-renders: {e}")
+
+    renders.sort(key=lambda r: r.created_at)
 
     # Typical turnaround = median (created_at -> updated_at) over past
     # completed manual jobs, shown to reassure the waiting user it's usually
@@ -889,23 +979,26 @@ async def claim_render(
     second concurrent render of the same job. It only actually (re)dispatches
     when there's no task in flight — i.e. a manual retry after a failed or
     cancelled render, or a legacy job from before auto-dispatch existed. This
-    doubles as the "Restart" action for a failed/cancelled job."""
-    job, order_no, usr, tmpl = await _get_manual_job(db, render_id)
+    doubles as the "Restart" action for a failed/cancelled job.
 
-    if job.status not in ("pending", "processing", "failed", "cancelled"):
-        raise HTTPException(status_code=400, detail=f"Render is already {job.status}")
+    Tries the local database first; if the id isn't found there, falls back
+    to production (see PROD_DATABASE_URL/PROD_REDIS_URL) — dispatch goes to
+    whichever broker actually has a worker that can see this job's row."""
+    row = await _find_manual_job(db, render_id)
+    if row:
+        job, order_no, usr, tmpl = row
+        await _claim_in(db, job, lambda jid: render_video_task.delay(jid).id)
+        return _awaiting_render_response(job, order_no, usr, tmpl)
 
-    already_in_flight = bool(job.celery_task_id) and job.status not in ("failed", "cancelled")
-    if not already_in_flight:
-        job.status = "processing"
-        job.error_message = None
-        job.progress = 0
-        task = render_video_task.delay(str(job.id))
-        job.celery_task_id = task.id
-        await db.commit()
-    await db.refresh(job)
-
-    return _awaiting_render_response(job, order_no, usr, tmpl)
+    if prod_async_session is None or prod_celery_app is None:
+        raise HTTPException(status_code=404, detail="Manual render job not found")
+    async with prod_async_session() as prod_db:
+        row = await _find_manual_job(prod_db, render_id)
+        if not row:
+            raise HTTPException(status_code=404, detail="Manual render job not found")
+        job, order_no, usr, tmpl = row
+        await _claim_in(prod_db, job, lambda jid: prod_celery_app.send_task("render_video", args=[jid]).id)
+        return _awaiting_render_response(job, order_no, usr, tmpl, source="production")
 
 
 @router.post("/renders/{render_id}/cancel", response_model=AwaitingRenderResponse)
@@ -921,20 +1014,25 @@ async def cancel_render(
     deliberately not the same path as a crashed worker: an explicit revoke
     is not requeued, unlike task_reject_on_worker_lost in celery_app.py.
     Restart it later via /claim, which treats "cancelled" the same as
-    "failed" — no task in flight, safe to dispatch fresh."""
-    job, order_no, usr, tmpl = await _get_manual_job(db, render_id)
+    "failed" — no task in flight, safe to dispatch fresh.
 
-    if job.status not in ("pending", "processing"):
-        raise HTTPException(status_code=400, detail=f"Render is already {job.status}, nothing to cancel")
+    Same local-then-production fallback as /claim — the revoke goes out on
+    whichever broker actually has a worker running this task."""
+    row = await _find_manual_job(db, render_id)
+    if row:
+        job, order_no, usr, tmpl = row
+        await _cancel_in(db, job, celery_app)
+        return _awaiting_render_response(job, order_no, usr, tmpl)
 
-    if job.celery_task_id:
-        celery_app.control.revoke(job.celery_task_id, terminate=True, signal="SIGTERM")
-
-    job.status = "cancelled"
-    await db.commit()
-    await db.refresh(job)
-
-    return _awaiting_render_response(job, order_no, usr, tmpl)
+    if prod_async_session is None or prod_celery_app is None:
+        raise HTTPException(status_code=404, detail="Manual render job not found")
+    async with prod_async_session() as prod_db:
+        row = await _find_manual_job(prod_db, render_id)
+        if not row:
+            raise HTTPException(status_code=404, detail="Manual render job not found")
+        job, order_no, usr, tmpl = row
+        await _cancel_in(prod_db, job, prod_celery_app)
+        return _awaiting_render_response(job, order_no, usr, tmpl, source="production")
 
 
 @router.post("/renders/{render_id}/complete")
@@ -947,43 +1045,38 @@ async def complete_manual_render(
 ):
     """Admin uploads the video (required) they rendered locally, and the PDF
     (optional — only meaningful if the template has PDF snapshots configured)
-    — marks the job completed and notifies the customer on WhatsApp."""
+    — marks the job completed and notifies the customer on WhatsApp.
+
+    Same local-then-production fallback as claim/cancel — a production job's
+    file goes to production's own R2 bucket (prod_storage_service), never
+    local MinIO."""
+    video_data = await video.read()
+    if not video_data:
+        raise HTTPException(status_code=400, detail="Video file is empty")
+    pdf_data = await pdf.read() if pdf is not None else None
+
     result = await db.execute(
         select(RenderJob, User).join(User, User.id == RenderJob.user_id).where(
             RenderJob.id == render_id, RenderJob.render_method == "manual"
         )
     )
     row = result.first()
-    if not row:
+    if row:
+        job, usr = row
+        await _complete_in(db, job, usr, storage_service, video_data, pdf_data)
+        return {"status": "completed"}
+
+    if prod_async_session is None or prod_storage_service is None:
         raise HTTPException(status_code=404, detail="Manual render job not found")
-    job, usr = row
-
-    if job.status == "completed":
-        raise HTTPException(status_code=400, detail="Render already completed")
-
-    video_data = await video.read()
-    if not video_data:
-        raise HTTPException(status_code=400, detail="Video file is empty")
-    output_key = f"renders/{job.user_id}/{job.id}/output.mp4"
-    storage_service.upload(output_key, video_data, content_type="video/mp4")
-    job.output_key = output_key
-    job.status = "completed"
-    job.progress = 100
-
-    if pdf is not None:
-        pdf_data = await pdf.read()
-        if pdf_data:
-            pdf_key = f"renders/{job.user_id}/{job.id}/invitation.pdf"
-            storage_service.upload(pdf_key, pdf_data, content_type="application/pdf")
-            job.pdf_key = pdf_key
-            job.pdf_status = "completed"
-
-    await db.commit()
-
-    if usr.phone_number:
-        try:
-            whatsapp_service.send_render_ready(usr.phone_number, usr.full_name or "Customer", str(job.id))
-        except Exception:
-            pass
-
-    return {"status": "completed"}
+    async with prod_async_session() as prod_db:
+        result = await prod_db.execute(
+            select(RenderJob, User).join(User, User.id == RenderJob.user_id).where(
+                RenderJob.id == render_id, RenderJob.render_method == "manual"
+            )
+        )
+        row = result.first()
+        if not row:
+            raise HTTPException(status_code=404, detail="Manual render job not found")
+        job, usr = row
+        await _complete_in(prod_db, job, usr, prod_storage_service, video_data, pdf_data)
+        return {"status": "completed"}

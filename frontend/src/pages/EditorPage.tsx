@@ -1,6 +1,9 @@
 import { useEffect, useMemo, useState, useRef, useCallback } from "react";
 import { useParams, useNavigate, useSearchParams } from "react-router-dom";
 import { getTemplate } from "@/api/templates";
+import { API_URL } from "@/api/client";
+import { useSeo } from "@/lib/seo";
+import { SITE_NAME, SITE_URL, SITE_DESCRIPTION } from "@/lib/site";
 import { listFonts, getFontFileUrl } from "@/api/fonts";
 import { createOrder, verifyPayment, adminRender } from "@/api/payments";
 import { getRender, updateRender } from "@/api/renders";
@@ -13,7 +16,7 @@ import { useEditorStore, extractTags } from "@/store/editorStore";
 import { useAuthStore } from "@/store/authStore";
 import type { Font, TextBlock, ImageBlock, RenderJob } from "@/types";
 import PreviewPlayer from "@/components/editor/PreviewPlayer";
-import FontPicker from "@/components/editor/FontPicker";
+import WatermarkPreviewPopup from "@/components/editor/WatermarkPreviewPopup";
 import PageTransition from "@/components/common/PageTransition";
 import RichTextEditor from "@/components/admin/RichTextEditor";
 
@@ -66,8 +69,6 @@ export default function EditorPage() {
     setFieldValues,
     setTransliteratedValues,
     setTextColorOverride,
-    clearTextColorOverride,
-    clearFont,
     consumePrefill,
     imageUploads,
     setImageUpload,
@@ -79,6 +80,8 @@ export default function EditorPage() {
     setBlockFormatOverrides,
     setBlockFormatOverride,
     setTransliteratedBlockOverrides,
+    watermarkPreview: watermarkOptIn,
+    setWatermarkPreview: setWatermarkOptIn,
     reset,
   } = useEditorStore();
   const { token, user: authUser, openAuthModal } = useAuthStore();
@@ -94,6 +97,7 @@ export default function EditorPage() {
   const labelTranslitTimer = useRef<ReturnType<typeof setTimeout>>();
   const [linkCopied, setLinkCopied] = useState(false);
   const [actuallyRender, setActuallyRender] = useState(false);
+  const [showWatermarkPreview, setShowWatermarkPreview] = useState(false);
   const [locationUrl, setLocationUrl] = useState("");
   const [editingRender, setEditingRender] = useState<RenderJob | null>(null);
   const [editRenderError, setEditRenderError] = useState("");
@@ -547,14 +551,6 @@ export default function EditorPage() {
     return () => clearTimeout(labelTranslitTimer.current);
   }, [effectiveLanguage, template]);
 
-  const handleFontChange = (fontId: string) => {
-    const selected = fonts.find((f) => f.id === fontId);
-    if (selected) {
-      const url = getFontFileUrl(fontId);
-      setFont(selected, url);
-    }
-  };
-
   // Effective values: transliterated if available, otherwise raw
   const effectiveValues = useMemo(() => {
     if (Object.keys(transliteratedValues).length === 0) return fieldValues;
@@ -597,6 +593,31 @@ export default function EditorPage() {
       return;
     }
     setShowConfirmPopup(true);
+  };
+
+  // Shared price label (with slash-out animation on watermark opt-in) for
+  // both the main-page render button and the confirm popup's proceed
+  // button, so the customer sees the same price feedback wherever they look.
+  const renderPriceLabel = (actionLabel: string) => {
+    const fullPaise = template?.price ?? 9900;
+    const discountPaise = template?.discount_amount_paise ?? 0;
+    const finalPaise = watermarkOptIn ? Math.max(fullPaise - discountPaise, 0) : fullPaise;
+    return (
+      <span className="inline-flex items-center gap-2">
+        <span>{actionLabel} —</span>
+        <span className="relative inline-flex items-center gap-1.5">
+          {watermarkOptIn && discountPaise > 0 && (
+            <span key="struck" className="relative text-white/60 text-sm">
+              ₹{(fullPaise / 100).toFixed(0)}
+              <span className="absolute left-0 top-1/2 w-full h-[1.5px] bg-white/70 origin-left animate-slice-in" />
+            </span>
+          )}
+          <span key={finalPaise} className="inline-block animate-slide-up">
+            ₹{(finalPaise / 100).toFixed(0)}
+          </span>
+        </span>
+      </span>
+    );
   };
 
   // Editing an already-paid manual-render order: no payment, just PATCH the
@@ -688,7 +709,8 @@ export default function EditorPage() {
         colorOverride,
         advancedBlockOverrides,
         advancedBlockFormatOverrides,
-        locationUrl || undefined
+        locationUrl || undefined,
+        watermarkOptIn
       );
 
       const options = {
@@ -775,17 +797,63 @@ export default function EditorPage() {
 
   const hasLocationTag = useMemo(() => tags.includes("location") || tags.includes("Location"), [tags]);
 
-  const [showCustomize, setShowCustomize] = useState(false);
 
-  if (!template) return <div className="text-center py-12 text-slate-500">Loading...</div>;
+  // Per-template SEO. These /editor/{slug} URLs are what the sitemap submits
+  // as the indexable page for each template, so they need their own title,
+  // description, canonical and share image — without this they inherit
+  // whatever the previously-viewed route left in <head> and self-canonicalise
+  // to the homepage. `?preview=1` shares are noindexed: same template, no
+  // unique content, and they'd compete with the canonical URL.
+  const seoName = template?.name ?? "";
+  const seoTitle = seoName ? `${seoName} — Invitation Video Template` : "Invitation Video Template";
+  const seoDescription = template?.seo_description
+    || (seoName
+      ? `Personalise the ${seoName} video invitation online — add your names, date and venue in English, Hindi or Gujarati, then download an HD video and PDF card in minutes.`
+      : SITE_DESCRIPTION);
+  const seoImage = template?.thumbnail_key && template?.slug
+    ? `${API_URL}/templates/${template.slug}/thumbnail`
+    : undefined;
+
+  useSeo({
+    title: seoTitle,
+    description: seoDescription,
+    path: `/editor/${slug ?? ""}`,
+    noIndex: isPreviewOnly,
+    image: seoImage,
+    imageAlt: seoName ? `${seoName} invitation video template preview` : undefined,
+    jsonLd: template
+      ? {
+          "@context": "https://schema.org",
+          "@type": "Product",
+          name: seoTitle,
+          description: seoDescription,
+          ...(seoImage ? { image: seoImage } : {}),
+          brand: { "@type": "Brand", name: SITE_NAME },
+          category: "Video Invitation Template",
+          ...(template.price
+            ? {
+                offers: {
+                  "@type": "Offer",
+                  price: (template.price / 100).toFixed(2),
+                  priceCurrency: "INR",
+                  availability: "https://schema.org/InStock",
+                  url: `${SITE_URL}/editor/${template.slug}`,
+                },
+              }
+            : {}),
+        }
+      : undefined,
+  });
+
+  if (!template) return <div className="text-center py-12 text-ink-muted">Loading...</div>;
 
   // Preview-only mode: show just the video player
   if (isPreviewOnly) {
     return (
       <PageTransition>
         <div className="flex flex-col items-center py-4">
-          <h1 className="text-xl font-bold text-slate-800 mb-1">{template.name}</h1>
-          <p className="text-sm text-slate-400 mb-4">Preview</p>
+          <h1 className="text-xl font-bold text-ink mb-1">{template.name}</h1>
+          <p className="text-sm text-ink-muted mb-4">Preview</p>
           <PreviewPlayer />
           <button
             onClick={() => navigate(`/editor/${slug}`)}
@@ -807,8 +875,13 @@ export default function EditorPage() {
     <PageTransition>
     <div className="flex flex-col lg:flex-row gap-4 lg:gap-8">
       {/* Form Panel -- scrolls under the pinned preview on mobile, left column on desktop */}
-      <div className="w-full lg:w-[420px] lg:flex-shrink-0 lg:overflow-y-auto lg:max-h-[calc(100vh-5rem)] order-2 lg:order-1">
-        <h1 className="text-lg font-bold text-slate-800 mb-3">{template.name}</h1>
+      {/* Form panel. On desktop this is a flex column: the fields scroll in
+          their own region while the render/pay action stays pinned to the
+          bottom, so the primary CTA is never scrolled out of reach. On mobile
+          the page scrolls normally (the preview is pinned instead). */}
+      <div className="w-full lg:w-[420px] lg:flex-shrink-0 lg:flex lg:flex-col lg:sticky lg:top-20 lg:h-[calc(100vh-6rem)] order-2 lg:order-1">
+        <div className="editor-scroll lg:flex-1 lg:min-h-0 lg:overflow-y-auto lg:pr-2">
+        <h1 className="text-lg font-bold text-ink mb-3">{template.name}</h1>
 
         {/* Express / Advanced mode toggle */}
         <div style={{ display: "flex", gap: 0, marginBottom: 16 }}>
@@ -862,7 +935,7 @@ export default function EditorPage() {
                     const regionalLabel = transliteratedLabels[`label:${tag}`];
                     return (
                       <div key={tag}>
-                        <label className="block text-xs font-medium text-slate-600 mb-0.5">
+                        <label className="block text-xs font-medium text-ink-muted mb-0.5">
                           {regionalLabel || label}
                         </label>
                         <textarea
@@ -900,7 +973,7 @@ export default function EditorPage() {
                 const regionalBlockLabel = transliteratedLabels[`block:${idx}`];
                 return (
                   <div key={block.id} onClick={() => seekTo(block.start_time ?? 0)} onFocus={() => seekTo(block.start_time ?? 0)}>
-                    <label className="block text-xs font-medium text-slate-600 mb-0.5">
+                    <label className="block text-xs font-medium text-ink-muted mb-0.5">
                       {regionalBlockLabel || `Block ${idx + 1}`}
                     </label>
                     <RichTextEditor
@@ -933,7 +1006,7 @@ export default function EditorPage() {
           {/* Image uploads */}
           {uploadableImageBlocks.map((block) => (
             <div key={block.id}>
-              <label className="block text-xs font-medium text-slate-600 mb-0.5">
+              <label className="block text-xs font-medium text-ink-muted mb-0.5">
                 {block.label}
               </label>
               {imageUploads[block.id] ? (
@@ -943,7 +1016,7 @@ export default function EditorPage() {
                     alt={block.label}
                     className="w-full h-24 object-cover rounded-lg"
                   />
-                  <label className="absolute bottom-1.5 right-1.5 btn-brand-outline text-[10px] cursor-pointer bg-white/90 backdrop-blur-sm px-2 py-0.5">
+                  <label className="absolute bottom-1.5 right-1.5 btn-brand-outline text-[10px] cursor-pointer bg-surface/90 backdrop-blur-sm px-2 py-0.5">
                     Replace
                     <input
                       type="file"
@@ -963,11 +1036,11 @@ export default function EditorPage() {
                   </label>
                 </div>
               ) : (
-                <label className="flex flex-col items-center justify-center w-full h-20 border-2 border-dashed border-slate-200 rounded-lg cursor-pointer hover:border-brand-300 hover:bg-brand-50/50 transition-all">
+                <label className="flex flex-col items-center justify-center w-full h-20 border-2 border-dashed border-edge rounded-lg cursor-pointer hover:border-brand-300 hover:bg-brand-50/50 transition-all">
                   <svg className="w-6 h-6 text-slate-300 mb-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.41a2.25 2.25 0 013.182 0l2.909 2.91m-18 3.75h16.5a1.5 1.5 0 001.5-1.5V6a1.5 1.5 0 00-1.5-1.5H3.75A1.5 1.5 0 002.25 6v12a1.5 1.5 0 001.5 1.5zm10.5-11.25h.008v.008h-.008V8.25zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z" />
                   </svg>
-                  <span className="text-[10px] text-slate-400">Upload {block.label}</span>
+                  <span className="text-[10px] text-ink-muted">Upload {block.label}</span>
                   <input
                     type="file"
                     accept="image/*"
@@ -992,9 +1065,9 @@ export default function EditorPage() {
         {/* Google Maps link — only when template has {location} tag */}
         {hasLocationTag && (
           <div className="mb-4">
-            <label className="block text-xs font-medium text-slate-500 mb-1">
+            <label className="block text-xs font-medium text-ink-muted mb-1">
               Google Maps Link
-              <span className="text-slate-400 font-normal ml-1">(optional — for accurate location on PDF)</span>
+              <span className="text-ink-muted font-normal ml-1">(optional — for accurate location on PDF)</span>
             </label>
             <div className="relative">
               <input
@@ -1004,70 +1077,54 @@ export default function EditorPage() {
                 onChange={(e) => setLocationUrl(e.target.value)}
                 className="input-field w-full text-sm py-2 pl-8 placeholder:text-slate-300"
               />
-              <svg className="w-4 h-4 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+              <svg className="w-4 h-4 text-ink-muted absolute left-2.5 top-1/2 -translate-y-1/2" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M15 10.5a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" />
                 <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 10.5c0 7.142-7.5 11.25-7.5 11.25S4.5 17.642 4.5 10.5a7.5 7.5 0 1 1 15 0Z" />
               </svg>
             </div>
-            <p className="text-[10px] text-slate-400 mt-0.5">
+            <p className="text-[10px] text-ink-muted mt-0.5">
               Open Google Maps, find your venue, tap Share and paste the link here
             </p>
           </div>
         )}
 
-        {/* Customize Colors & Font -- hidden by default */}
-        <button
-          onClick={() => setShowCustomize((v) => !v)}
-          className="w-full flex items-center justify-center gap-2 text-sm text-slate-500 hover:text-slate-700 py-2 mb-2 transition-colors"
-        >
-          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" />
-          </svg>
-          {showCustomize ? "Hide" : "Customize"} Colors & Font
-          <svg className={`w-3 h-3 transition-transform ${showCustomize ? "rotate-180" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-          </svg>
-        </button>
+        {/* Colour/font customisation intentionally NOT offered here.
+            Templates are professionally designed as a whole — letting
+            customers recolour text or swap fonts on the checkout step
+            mostly produced worse-looking invitations and support requests.
+            Admins still control these per-template in the admin editor. */}
 
-        {showCustomize && (
-          <div className="space-y-4 mb-4" style={{ animation: "fadeSlideIn 0.3s ease-out" }}>
-            {/* Universal color override */}
-            <div className="card p-4">
-              <div className="flex items-center gap-3">
-                <input
-                  type="color"
-                  value={textColorOverrides._default || template.default_text_color || "#FFFFFF"}
-                  onChange={(e) => setTextColorOverride("_default", e.target.value)}
-                  className="w-8 h-8 rounded-lg border border-slate-200 cursor-pointer flex-shrink-0"
-                />
-                <span className="text-sm text-slate-600 flex-1">All text color</span>
-                {textColorOverrides._default && (
-                  <button
-                    onClick={() => clearTextColorOverride("_default")}
-                    className="text-xs text-red-400 hover:text-red-500 font-medium"
-                  >
-                    Reset
-                  </button>
-                )}
-              </div>
-            </div>
-
-            {/* Font Selector */}
-            <FontPicker
-              fonts={fonts}
-              selectedId={font?.id ?? null}
-              fallbackFontId={template.default_font_id}
-              onSelect={(fontId) => {
-                if (!fontId) {
-                  clearFont();
-                } else {
-                  handleFontChange(fontId);
-                }
+        {/* Watermark discount opt-in — lives on the main page (not inside the
+            confirm popup) so it's visible right next to the price-slash
+            animation on the button below it. Checking it opens a static
+            preview popup showing exactly where/how the mark will look. */}
+        {!editingRender && !authUser?.is_admin && !!template?.discount_amount_paise && (
+          <label className="flex items-start gap-2.5 mb-3 px-1 cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={watermarkOptIn}
+              onChange={(e) => {
+                const checked = e.target.checked;
+                setWatermarkOptIn(checked);
+                if (checked) setShowWatermarkPreview(true);
               }}
+              className="mt-0.5 w-4 h-4 shrink-0 rounded accent-brand-500 cursor-pointer"
             />
-          </div>
+            <span className="text-sm text-ink-muted leading-snug">
+              Get ₹{(template.discount_amount_paise / 100).toFixed(0)} off with a small brand watermark on one corner of the video
+            </span>
+          </label>
         )}
 
+        {showWatermarkPreview && template && (
+          <WatermarkPreviewPopup template={template} onClose={() => setShowWatermarkPreview(false)} />
+        )}
+
+        </div>
+
+        {/* Pinned action footer — deliberately OUTSIDE the scroll region above
+            so the primary CTA is always visible without scrolling. */}
+        <div className="sticky bottom-0 z-20 bg-page pt-3 mt-1 border-t border-edge lg:flex-shrink-0">
         {editingRender ? (
           <button
             onClick={handleSaveRenderEdit}
@@ -1089,41 +1146,46 @@ export default function EditorPage() {
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
             </svg>
-            {submitting ? "Processing..." : "Render Video"}
+            {submitting
+              ? "Processing..."
+              : authUser?.is_admin
+                ? "Render Video"
+                : renderPriceLabel("Render Video")}
           </button>
         )}
 
         {editRenderError && (
           <p className="text-red-500 text-sm text-center mt-2">{editRenderError}</p>
         )}
+        </div>
 
         {/* Confirm & Share popup */}
         {!editingRender && showConfirmPopup && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
             <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setShowConfirmPopup(false)} />
-            <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6">
+            <div className="relative bg-surface rounded-2xl shadow-2xl w-full max-w-sm p-6">
               <button
                 onClick={() => setShowConfirmPopup(false)}
-                className="absolute top-3 right-3 text-slate-400 hover:text-slate-600 transition-colors"
+                className="absolute top-3 right-3 text-ink-muted hover:text-ink-muted transition-colors"
               >
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                 </svg>
               </button>
 
-              <h3 className="text-lg font-bold text-slate-800 mb-1">Almost there!</h3>
-              <p className="text-sm text-slate-500 mb-5">
+              <h3 className="text-lg font-bold text-ink mb-1">Almost there!</h3>
+              <p className="text-sm text-ink-muted mb-5">
                 Share this preview with your family to verify before you proceed.
               </p>
 
               {/* Summary of entered values */}
-              <div className="bg-slate-50 rounded-xl p-3 mb-5 space-y-1">
+              <div className="bg-surface-alt rounded-xl p-3 mb-5 space-y-1">
                 {tags.filter((t) => fieldValues[t]?.trim()).map((tag) => {
                   const cfg = tagConfigs[tag] ?? {};
                   return (
                     <div key={tag} className="flex justify-between text-sm">
-                      <span className="text-slate-400">{cfg.label ?? humanizeTag(tag)}</span>
-                      <span className="font-medium text-slate-700">{fieldValues[tag]}</span>
+                      <span className="text-ink-muted">{cfg.label ?? humanizeTag(tag)}</span>
+                      <span className="font-medium text-ink">{fieldValues[tag]}</span>
                     </div>
                   );
                 })}
@@ -1141,7 +1203,7 @@ export default function EditorPage() {
                 </svg>
                 Share Preview on WhatsApp
               </a>
-              <p className="text-xs text-slate-400 text-center mb-3">
+              <p className="text-xs text-ink-muted text-center mb-3">
                 Only the video preview is shared — your details stay private
               </p>
 
@@ -1154,7 +1216,7 @@ export default function EditorPage() {
                     onChange={(e) => setActuallyRender(e.target.checked)}
                     className="w-4 h-4 rounded border-slate-300 text-brand-600 focus:ring-brand-500"
                   />
-                  <span className="text-sm text-slate-600">Actually render video</span>
+                  <span className="text-sm text-ink-muted">Actually render video</span>
                 </label>
               )}
 
@@ -1165,11 +1227,11 @@ export default function EditorPage() {
               >
                 {authUser?.is_admin
                   ? (import.meta.env.DEV && !actuallyRender ? "Skip Render (Dev)" : "Render Video (Admin)")
-                  : `Proceed to Payment — ₹${template ? (template.price / 100).toFixed(0) : "99"}`}
+                  : renderPriceLabel("Proceed to Payment")}
               </button>
 
               {!authUser?.is_admin && (
-                <p className="text-xs text-slate-400 text-center mt-3">
+                <p className="text-xs text-ink-muted text-center mt-3">
                   You'll be redirected to a secure payment page
                 </p>
               )}
@@ -1181,7 +1243,7 @@ export default function EditorPage() {
       {/* Preview Panel -- pinned compact bar under the navbar on mobile so the
           user can see edits update live without losing their place in the
           form; full-size sticky sidebar on desktop (order-1 mobile, order-2 desktop). */}
-      <div className="sticky top-16 z-30 -mx-4 px-4 pb-3 bg-[#FAFBFC]/95 backdrop-blur-sm lg:static lg:mx-0 lg:px-0 lg:pb-0 lg:bg-transparent lg:backdrop-blur-none flex-1 flex justify-center order-1 lg:order-2">
+      <div className="sticky top-16 z-30 -mx-4 px-4 pb-3 bg-page/95 backdrop-blur-sm lg:static lg:mx-0 lg:px-0 lg:pb-0 lg:bg-transparent lg:backdrop-blur-none flex-1 flex justify-center order-1 lg:order-2">
         <PreviewPlayer />
       </div>
     </div>

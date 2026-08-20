@@ -5,15 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#4f6ef7" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-
-    <!-- Google tag (gtag.js) -->
-    <script async src="https://www.googletagmanager.com/gtag/js?id=G-TMP09P3NV9"></script>
-    <script>
-      window.dataLayer = window.dataLayer || [];
-      function gtag(){dataLayer.push(arguments);}
-      gtag('js', new Date());
-      gtag('config', 'G-TMP09P3NV9');
-    </script>
+    <link rel="preload" as="image" href="/logo.webp" type="image/webp" />
 
     <title>Bring My Matter — Online Invitation Video Maker for Indian Weddings</title>
     <meta
@@ -29,14 +21,14 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
       rel="stylesheet"
-      href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap"
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap"
       media="print"
       onload="this.media='all'"
     />
     <noscript>
       <link
         rel="stylesheet"
-        href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap"
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap"
       />
     </noscript>
 
@@ -67,8 +59,11 @@
         "@type": "Organization",
         "name": "Bring My Matter",
         "url": "https://bringmymatter.com",
+        "logo": "https://bringmymatter.com/logo.png",
+        "image": "https://bringmymatter.com/logo.png",
         "description": "Online invitation video and card maker for Indian weddings and celebrations.",
         "areaServed": "IN",
+        "knowsLanguage": ["en", "hi", "gu"],
         "contactPoint": {
           "@type": "ContactPoint",
           "contactType": "customer support",
@@ -77,6 +72,34 @@
         }
       }
     </script>
+
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "WebApplication",
+        "name": "Bring My Matter",
+        "url": "https://bringmymatter.com",
+        "applicationCategory": "DesignApplication",
+        "operatingSystem": "Any",
+        "browserRequirements": "Requires JavaScript",
+        "description": "Create and download personalised HD video invitations and PDF cards for Indian weddings, engagements, birthdays and housewarmings.",
+        "inLanguage": ["en", "hi", "gu"],
+        "offers": {
+          "@type": "Offer",
+          "priceCurrency": "INR",
+          "availability": "https://schema.org/InStock"
+        }
+      }
+    </script>
+    <!-- Google tag (gtag.js) -->
+    <script async src="https://www.googletagmanager.com/gtag/js?id=G-TMP09P3NV9"></script>
+    <script>
+      window.dataLayer = window.dataLayer || [];
+      function gtag(){dataLayer.push(arguments);}
+      gtag('js', new Date());
+      gtag('config', 'G-TMP09P3NV9');
+    </script>
+
   </head>
   <body>
     <div id="root"></div>

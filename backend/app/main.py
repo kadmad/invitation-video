@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
-from app.api import admin, auth, categories, drafts, fonts, payments, templates, renders, transliterate
+from app.api import admin, auth, categories, drafts, fonts, payments, templates, renders, sitemap, transliterate
 
 app = FastAPI(title=settings.APP_NAME)
 
@@ -28,6 +28,7 @@ app.include_router(drafts.router, prefix="/api/drafts", tags=["drafts"])
 app.include_router(renders.router, prefix="/api/renders", tags=["renders"])
 app.include_router(payments.router, prefix="/api/payments", tags=["payments"])
 app.include_router(transliterate.router, prefix="/api/transliterate", tags=["transliterate"])
+app.include_router(sitemap.router, tags=["sitemap"])  # no /api prefix — served at the site root
 
 
 @app.get("/health")

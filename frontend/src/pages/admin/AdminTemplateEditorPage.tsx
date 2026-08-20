@@ -53,7 +53,15 @@ export default function AdminTemplateEditorPage() {
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [activePanel, setActivePanel] = useState<"text" | "image">("text");
   const [renderNotes, setRenderNotes] = useState("");
-  const [price, setPrice] = useState(9900);
+  const [seoDescription, setSeoDescription] = useState("");
+  const [price, setPrice] = useState<number | null>(null);
+  const [discountAmount, setDiscountAmount] = useState<number | null>(null);
+  const [watermarkX, setWatermarkX] = useState(0.39);
+  const [watermarkY, setWatermarkY] = useState(0.88);
+  const [watermarkWidth, setWatermarkWidth] = useState(0.22);
+  const [watermarkRotation, setWatermarkRotation] = useState(0);
+  const [editingWatermark, setEditingWatermark] = useState(false);
+  const [publishError, setPublishError] = useState<string | null>(null);
   const [draftRecovered, setDraftRecovered] = useState(false);
   const [hasDraft, setHasDraft] = useState(false);
   const [panelOpen, setPanelOpen] = useState(true);
@@ -117,7 +125,13 @@ export default function AdminTemplateEditorPage() {
         setDefaultTextColor(tmpl.default_text_color ?? "#FFFFFF");
         setDefaultFontId(tmpl.default_font_id ?? null);
         setRenderNotes(tmpl.render_notes ?? "");
-        setPrice(tmpl.price ?? 9900);
+        setSeoDescription(tmpl.seo_description ?? "");
+        setPrice(tmpl.price ?? null);
+        setDiscountAmount(tmpl.discount_amount_paise ?? null);
+        setWatermarkX(tmpl.watermark_position_x ?? 0.39);
+        setWatermarkY(tmpl.watermark_position_y ?? 0.88);
+        setWatermarkWidth(tmpl.watermark_width ?? 0.22);
+        setWatermarkRotation(tmpl.watermark_rotation ?? 0);
         setPdfSnapshotTimestamps(tmpl.pdf_snapshot_timestamps ?? []);
         setCategories(cats);
 
@@ -216,6 +230,11 @@ export default function AdminTemplateEditorPage() {
 
   const handleSave = async () => {
     if (!id || !template) return;
+    if (isPublished && (!price || !discountAmount || discountAmount >= price)) {
+      setPublishError("Price and a watermark discount smaller than price are required before publishing.");
+      return;
+    }
+    setPublishError(null);
     setSaving(true);
     try {
       // Save all text blocks FIRST (so preview render picks up latest data)
@@ -234,7 +253,13 @@ export default function AdminTemplateEditorPage() {
         default_text_color: defaultTextColor,
         default_font_id: defaultFontId,
         render_notes: renderNotes || null,
+        seo_description: seoDescription || null,
         price,
+        discount_amount_paise: discountAmount,
+        watermark_position_x: watermarkX,
+        watermark_position_y: watermarkY,
+        watermark_width: watermarkWidth,
+        watermark_rotation: watermarkRotation,
         pdf_snapshot_timestamps: pdfSnapshotTimestamps.length > 0 ? pdfSnapshotTimestamps : null,
         render_preview: renderPreview,
       } as any);
@@ -247,8 +272,9 @@ export default function AdminTemplateEditorPage() {
       setRenderPreview(false);
       setSaveSuccess(true);
       setTimeout(() => setSaveSuccess(false), 2000);
-    } catch (err) {
+    } catch (err: any) {
       console.error("Failed to save template", err);
+      setPublishError(err?.response?.data?.detail ?? "Failed to save template");
     } finally {
       setSaving(false);
     }
@@ -272,10 +298,10 @@ export default function AdminTemplateEditorPage() {
   if (loading) {
     return (
       <div className="space-y-4 animate-pulse">
-        <div className="card px-5 py-3.5 h-[4.5rem] border border-slate-200" />
+        <div className="card px-5 py-3.5 h-[4.5rem] border border-edge" />
         <div className="flex gap-4">
-          <div className="flex-1 card h-96 border border-slate-200" />
-          <div className="w-80 card h-96 border border-slate-200" />
+          <div className="flex-1 card h-96 border border-edge" />
+          <div className="w-80 card h-96 border border-edge" />
         </div>
       </div>
     );
@@ -321,12 +347,15 @@ export default function AdminTemplateEditorPage() {
         </div>
       )}
 
-      {/* Top bar — single compact row */}
-      <div className="card flex-shrink-0 border border-slate-200 overflow-visible relative z-20 px-3 py-1.5 flex items-center gap-3">
+      {/* Top bar. Wraps instead of squeezing — with ~13 controls this was
+          compressing inputs (and Save) to unusable widths on smaller screens.
+          Fields wrap onto additional lines; the action group is pinned right
+          via ml-auto and never shrinks, so Save is always reachable. */}
+      <div className="card flex-shrink-0 border border-edge overflow-visible relative z-20 px-3 py-2 flex flex-wrap items-center gap-x-3 gap-y-2">
         {/* Back */}
         <Link
           to="/admin/templates"
-          className="text-slate-400 hover:text-slate-600 transition p-1 -ml-1"
+          className="text-ink-muted hover:text-ink-muted transition p-1 -ml-1"
         >
           <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 19.5L3 12m0 0l7.5-7.5M3 12h18" />
@@ -340,7 +369,7 @@ export default function AdminTemplateEditorPage() {
           type="text"
           value={name}
           onChange={(e) => setName(e.target.value)}
-          className="input-field text-sm font-medium w-40"
+          className="input-field text-sm font-medium w-40 flex-shrink-0"
           title="Template name"
         />
 
@@ -366,7 +395,7 @@ export default function AdminTemplateEditorPage() {
             setDefaultTextColor(e.target.value);
             if (template) setTemplate({ ...template, default_text_color: e.target.value });
           }}
-          className="w-6 h-6 rounded border border-slate-200 cursor-pointer p-0.5"
+          className="w-6 h-6 rounded border border-edge cursor-pointer p-0.5"
           title="Default text color"
         />
 
@@ -385,16 +414,55 @@ export default function AdminTemplateEditorPage() {
 
         {/* Price */}
         <div className="flex items-center gap-1 flex-shrink-0">
-          <span className="text-[10px] text-slate-400">₹</span>
+          <span className="text-[10px] text-ink-muted">₹</span>
           <input
             type="number"
-            value={price / 100}
-            onChange={(e) => setPrice(Math.max(0, Math.round(parseFloat(e.target.value) * 100)) || 0)}
-            className="input-field text-xs w-16 text-center"
+            value={price === null ? "" : price / 100}
+            onChange={(e) => {
+              const v = e.target.value;
+              setPrice(v === "" ? null : Math.max(0, Math.round(parseFloat(v) * 100)) || 0);
+            }}
+            placeholder="Price"
+            title="Price (required before publishing)"
+            className={`input-field text-xs w-16 text-center ${price === null ? "border-red-300" : ""}`}
             min="0"
             step="1"
           />
         </div>
+
+        {/* Watermark discount */}
+        <div className="flex items-center gap-1 flex-shrink-0">
+          <span className="text-[10px] text-ink-muted">−₹</span>
+          <input
+            type="number"
+            value={discountAmount === null ? "" : discountAmount / 100}
+            onChange={(e) => {
+              const v = e.target.value;
+              setDiscountAmount(v === "" ? null : Math.max(0, Math.round(parseFloat(v) * 100)) || 0);
+            }}
+            placeholder="Discount"
+            title="Watermarked-render discount (required before publishing)"
+            className={`input-field text-xs w-16 text-center ${discountAmount === null ? "border-red-300" : ""}`}
+            min="0"
+            step="1"
+          />
+        </div>
+
+        {/* Watermark placement */}
+        <button
+          onClick={() => setEditingWatermark((v) => !v)}
+          className={`text-[10px] font-medium px-2 py-1.5 rounded-lg transition flex-shrink-0 ${
+            editingWatermark ? "bg-amber-100 text-amber-700" : "text-ink-muted hover:text-ink-muted hover:bg-surface-alt"
+          }`}
+          title="Only ONE small watermark, placed in a corner — drag/resize/rotate to place it. Keep it small: it's a discreet brand mark on the discounted render, not a full-frame overlay."
+        >
+          Watermark
+        </button>
+        {editingWatermark && (
+          <span className="text-[10px] text-amber-600 flex-shrink-0">
+            One small watermark only — place it in a corner
+          </span>
+        )}
 
         {/* Render notes */}
         <input
@@ -402,17 +470,32 @@ export default function AdminTemplateEditorPage() {
           value={renderNotes}
           onChange={(e) => setRenderNotes(e.target.value)}
           placeholder="Render notes..."
-          className="input-field text-xs flex-1 min-w-0"
+          className="input-field text-xs flex-1 min-w-[10rem]"
         />
 
-        <div className="w-px h-6 bg-slate-200" />
+        {/* SEO meta description for this template's public /editor/{slug}
+            page. Left blank, the page falls back to a generated sentence —
+            hand-written copy mentioning occasion/style/language ranks better. */}
+        <input
+          type="text"
+          value={seoDescription}
+          onChange={(e) => setSeoDescription(e.target.value)}
+          placeholder="SEO description..."
+          title="Meta description for this template's public page (~150-160 chars). Blank = auto-generated."
+          maxLength={300}
+          className="input-field text-xs flex-1 min-w-[12rem]"
+        />
+
+        {/* Actions — pinned right, never shrink. */}
+        <div className="flex items-center gap-3 ml-auto flex-shrink-0">
+        <div className="w-px h-6 bg-edge" />
 
         {/* Undo/Redo */}
         <div className="flex items-center gap-0.5">
           <button
             onClick={() => useAdminTemplateStore.temporal.getState().undo()}
             disabled={!canUndo}
-            className="p-1 rounded text-slate-400 hover:text-slate-600 hover:bg-slate-100 disabled:opacity-30 transition"
+            className="p-1 rounded text-ink-muted hover:text-ink-muted hover:bg-surface-alt disabled:opacity-30 transition"
             title="Undo (Ctrl+Z)"
           >
             <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -422,7 +505,7 @@ export default function AdminTemplateEditorPage() {
           <button
             onClick={() => useAdminTemplateStore.temporal.getState().redo()}
             disabled={!canRedo}
-            className="p-1 rounded text-slate-400 hover:text-slate-600 hover:bg-slate-100 disabled:opacity-30 transition"
+            className="p-1 rounded text-ink-muted hover:text-ink-muted hover:bg-surface-alt disabled:opacity-30 transition"
             title="Redo (Ctrl+Shift+Z)"
           >
             <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -432,7 +515,7 @@ export default function AdminTemplateEditorPage() {
         </div>
 
         {/* Published toggle */}
-        <Toggle checked={isPublished} onChange={setIsPublished} />
+        <Toggle checked={isPublished} onChange={(v) => { setIsPublished(v); setPublishError(null); }} />
 
         {/* Render checkbox + Save */}
         <label className="flex items-center gap-1 cursor-pointer select-none" title="Queue preview render on save">
@@ -442,7 +525,7 @@ export default function AdminTemplateEditorPage() {
             onChange={(e) => setRenderPreview(e.target.checked)}
             className="w-3.5 h-3.5 rounded border-slate-300 text-primary-500 focus:ring-primary-500"
           />
-          <span className="text-[10px] text-slate-500">Render</span>
+          <span className="text-[10px] text-ink-muted">Render</span>
         </label>
         <button
           onClick={() => setShowAeImport(true)}
@@ -467,7 +550,19 @@ export default function AdminTemplateEditorPage() {
             <span className="absolute -top-1 -right-1 w-2 h-2 bg-amber-400 rounded-full border-2 border-white" />
           )}
         </div>
+        </div>
       </div>
+
+      {publishError && (
+        <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 bg-red-50 border border-red-200 text-red-700 px-5 py-2.5 rounded-xl shadow-lg text-sm font-medium flex items-center gap-3 animate-slide-up">
+          {publishError}
+          <button onClick={() => setPublishError(null)} className="text-red-400 hover:text-red-600 ml-1">
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+      )}
 
       {showAeImport && id && (
         <AEImportModal
@@ -480,8 +575,8 @@ export default function AdminTemplateEditorPage() {
       )}
 
       {/* PDF Snapshot Timestamps */}
-      <div className="card flex-shrink-0 border border-slate-200 px-3 py-1.5 mt-1 flex items-center gap-2 flex-wrap">
-        <span className="text-[10px] font-medium text-slate-500 uppercase tracking-wider flex-shrink-0">PDF Snapshots</span>
+      <div className="card flex-shrink-0 border border-edge px-3 py-1.5 mt-1 flex items-center gap-2 flex-wrap">
+        <span className="text-[10px] font-medium text-ink-muted uppercase tracking-wider flex-shrink-0">PDF Snapshots</span>
         <div className="w-px h-5 bg-slate-200" />
         {pdfSnapshotTimestamps.map((ts, idx) => (
           <span key={idx} className="inline-flex items-center gap-1 bg-primary-50 text-primary-700 text-xs font-medium px-2 py-0.5 rounded-full">
@@ -538,7 +633,7 @@ export default function AdminTemplateEditorPage() {
           </button>
         </div>
         {pdfSnapshotTimestamps.length === 0 && (
-          <span className="text-[10px] text-slate-400">No timestamps — PDF generation disabled</span>
+          <span className="text-[10px] text-ink-muted">No timestamps — PDF generation disabled</span>
         )}
       </div>
 
@@ -546,13 +641,26 @@ export default function AdminTemplateEditorPage() {
       <div className="flex flex-1 min-h-0 overflow-hidden mt-1 relative">
         {/* Left: Video preview */}
         <div ref={canvasRef} className="flex-1 flex flex-col min-h-0">
-          <VideoPreviewCanvas playerRef={playerRef} />
+          <VideoPreviewCanvas
+            playerRef={playerRef}
+            watermarkEditing={editingWatermark}
+            watermarkX={watermarkX}
+            watermarkY={watermarkY}
+            watermarkWidth={watermarkWidth}
+            watermarkRotation={watermarkRotation}
+            onWatermarkChange={(x, y, w, r) => {
+              setWatermarkX(x);
+              setWatermarkY(y);
+              setWatermarkWidth(w);
+              setWatermarkRotation(r);
+            }}
+          />
         </div>
 
         {/* Panel toggle button */}
         <button
           onClick={() => setPanelOpen(!panelOpen)}
-          className="absolute right-0 top-2 z-30 bg-white border border-slate-200 rounded-l-lg px-1.5 py-3 text-slate-400 hover:text-slate-600 hover:bg-slate-50 transition shadow-sm"
+          className="absolute right-0 top-2 z-30 bg-surface border border-edge rounded-l-lg px-1.5 py-3 text-ink-muted hover:text-ink-muted hover:bg-surface-alt transition shadow-sm"
           style={{ right: panelOpen ? "420px" : 0 }}
           title={panelOpen ? "Hide panel" : "Show panel"}
         >
@@ -568,17 +676,17 @@ export default function AdminTemplateEditorPage() {
         {/* Right: Block panel with tabs */}
         <div
           ref={panelRef}
-          className={`w-[420px] card flex flex-col flex-shrink-0 min-h-0 border border-slate-200 transition-all duration-300 ${
+          className={`w-[420px] card flex flex-col flex-shrink-0 min-h-0 border border-edge transition-all duration-300 ${
             panelOpen ? "ml-4" : "ml-0 translate-x-full absolute right-0 top-0 bottom-0 opacity-0 pointer-events-none"
           }`}
         >
-          <div className="flex border-b border-slate-200 px-4 pt-3">
+          <div className="flex border-b border-edge px-4 pt-3">
             <button
               onClick={() => setActivePanel("text")}
               className={`px-4 py-2.5 text-xs font-medium border-b-2 transition-colors ${
                 activePanel === "text"
                   ? "border-primary-500 text-primary-600"
-                  : "border-transparent text-slate-400 hover:text-slate-600"
+                  : "border-transparent text-ink-muted hover:text-ink-muted"
               }`}
             >
               Text Blocks
@@ -588,7 +696,7 @@ export default function AdminTemplateEditorPage() {
               className={`px-4 py-2.5 text-xs font-medium border-b-2 transition-colors ${
                 activePanel === "image"
                   ? "border-amber-500 text-amber-600"
-                  : "border-transparent text-slate-400 hover:text-slate-600"
+                  : "border-transparent text-ink-muted hover:text-ink-muted"
               }`}
             >
               Image Blocks

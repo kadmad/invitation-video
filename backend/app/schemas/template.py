@@ -74,6 +74,8 @@ class TemplateListResponse(BaseModel):
     preview_key: str | None = None
     preview_status: str | None = None
     price: int
+    discount_amount_paise: int | None = None
+    seo_description: str | None = None
     created_at: datetime
 
     model_config = {"from_attributes": True}

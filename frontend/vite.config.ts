@@ -9,6 +9,25 @@ export default defineConfig({
       "@": path.resolve(__dirname, "./src"),
     },
   },
+  build: {
+    // Route-level code splitting lives in App.tsx (React.lazy). This adds
+    // vendor splitting on top so the rarely-changing framework code sits in
+    // its own long-cached chunk instead of being invalidated by every app
+    // edit. Remotion/moveable are named explicitly because they're huge and
+    // only used by the editor and admin routes respectively.
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          "vendor-react": ["react", "react-dom", "react-router-dom"],
+          "vendor-remotion": ["remotion", "@remotion/player"],
+          "vendor-moveable": ["react-moveable"],
+        },
+      },
+    },
+    // The default 500 kB warning fired constantly on the old single bundle.
+    // Route chunks are now well under this; keep it as a real regression alarm.
+    chunkSizeWarningLimit: 500,
+  },
   server: {
     host: "0.0.0.0",
     port: 5173,
@@ -22,6 +41,14 @@ export default defineConfig({
     // dev calls the backend directly on :8000 and never hits this, so it's a
     // no-op otherwise. "backend" is the docker-compose service DNS name.
     proxy: {
+      // In production Caddy routes /sitemap.xml to the backend (it's generated
+      // from the DB, not a static file). Mirror that here so the dev server
+      // doesn't just hand back the SPA shell for it — otherwise the URL looks
+      // broken locally while being fine in prod.
+      "/sitemap.xml": {
+        target: "http://backend:8000",
+        changeOrigin: false,
+      },
       "/api": {
         target: "http://backend:8000",
         // Keep the original Host header (whatever the browser used — the

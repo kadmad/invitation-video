@@ -10,6 +10,14 @@ interface SeoOptions {
   noIndex?: boolean;
   /** Optional JSON-LD structured data injected as application/ld+json. */
   jsonLd?: Record<string, unknown>;
+  /**
+   * Absolute URL of the social share image. Defaults to the site logo —
+   * pass a template thumbnail on per-template routes so shared links
+   * preview the actual invitation rather than a generic logo.
+   */
+  image?: string;
+  /** Describes `image` for screen readers / when the image fails to load. */
+  imageAlt?: string;
 }
 
 function setMeta(selector: string, attr: "name" | "property", key: string, content: string) {
@@ -36,10 +44,11 @@ function setLink(rel: string, href: string) {
  * Client-side head management for a route: title, description, canonical,
  * Open Graph / Twitter cards and optional JSON-LD.
  */
-export function useSeo({ title, description, path, noIndex, jsonLd }: SeoOptions) {
+export function useSeo({ title, description, path, noIndex, jsonLd, image, imageAlt }: SeoOptions) {
   useEffect(() => {
     const fullTitle = title.includes(SITE_NAME) ? title : `${title} | ${SITE_NAME}`;
     const url = `${SITE_URL}${path}`;
+    const imageUrl = image || `${SITE_URL}/logo.png`;
 
     document.title = fullTitle;
     setMeta('meta[name="description"]', "name", "description", description);
@@ -56,9 +65,13 @@ export function useSeo({ title, description, path, noIndex, jsonLd }: SeoOptions
     setMeta('meta[property="og:url"]', "property", "og:url", url);
     setMeta('meta[property="og:type"]', "property", "og:type", "website");
     setMeta('meta[property="og:site_name"]', "property", "og:site_name", SITE_NAME);
+    setMeta('meta[property="og:locale"]', "property", "og:locale", "en_IN");
+    setMeta('meta[property="og:image"]', "property", "og:image", imageUrl);
+    setMeta('meta[property="og:image:alt"]', "property", "og:image:alt", imageAlt || fullTitle);
     setMeta('meta[name="twitter:card"]', "name", "twitter:card", "summary_large_image");
     setMeta('meta[name="twitter:title"]', "name", "twitter:title", fullTitle);
     setMeta('meta[name="twitter:description"]', "name", "twitter:description", description);
+    setMeta('meta[name="twitter:image"]', "name", "twitter:image", imageUrl);
 
     let script: HTMLScriptElement | null = null;
     if (jsonLd) {
@@ -73,5 +86,5 @@ export function useSeo({ title, description, path, noIndex, jsonLd }: SeoOptions
       script?.remove();
     };
     // jsonLd is inlined at each call site; stringify keeps the effect stable.
-  }, [title, description, path, noIndex, JSON.stringify(jsonLd ?? null)]);
+  }, [title, description, path, noIndex, image, imageAlt, JSON.stringify(jsonLd ?? null)]);
 }

@@ -7,7 +7,7 @@ import TemplateCarousel from "@/components/common/TemplateCarousel";
 import { DUMMY_TEMPLATES } from "@/lib/dummyTemplates";
 import { useSeo } from "@/lib/seo";
 import { API_URL } from "@/api/client";
-import { SITE_DESCRIPTION, SITE_NAME, SITE_URL } from "@/lib/site";
+import { SITE_NAME, SITE_URL } from "@/lib/site";
 import { getTemplateVideoSrc as getVideoUrl } from "@/lib/templateVideo";
 import type { Template, Category } from "@/types";
 
@@ -124,7 +124,7 @@ function TemplateCard({
     <Link
       ref={cardRef}
       to={`/editor/${t.slug}`}
-      className="card overflow-hidden group opacity-0 animate-slide-up select-none"
+      className="card overflow-hidden opacity-0 animate-slide-up select-none"
       style={{
         animationDelay: `${Math.min(index * 50, 300)}ms`,
         animationFillMode: "forwards",
@@ -136,7 +136,7 @@ function TemplateCard({
       draggable={false}
     >
       {/* Thumbnail with hover overlay */}
-      <div className="relative aspect-[9/16] bg-slate-100 overflow-hidden">
+      <div className="relative aspect-[9/16] bg-surface-alt overflow-hidden">
         {/* Static thumbnail */}
         {t.thumbnail_key ? (
           <img
@@ -194,16 +194,22 @@ function TemplateCard({
           />
         )}
 
-        {/* Hover shadow veil */}
+        {/* Faint hover veil — just enough to signal interactivity, not
+            enough to obscure the video preview it's supposed to show off. */}
         <div
           className={`absolute inset-0 bg-black transition-opacity duration-200 pointer-events-none z-[5] ${
-            hovered && videoReady ? "opacity-30" : "opacity-0"
+            hovered && videoReady ? "opacity-10" : "opacity-0"
           }`}
         />
 
-        {/* CTA overlay */}
-        <div className="absolute inset-0 bg-black/20 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center z-10">
-          <span className="btn-brand text-sm pointer-events-none">Use Template</span>
+        {/* Small bottom-anchored label, not a full-card block — the point
+            of hovering is to see the video, not to have it covered up. */}
+        <div
+          className={`absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/50 to-transparent p-2 flex justify-center pointer-events-none transition-opacity duration-200 ${
+            hovered ? "opacity-100" : "opacity-0"
+          }`}
+        >
+          <span className="btn-brand text-xs px-3 py-1.5 pointer-events-none">Use Template</span>
         </div>
 
         {/* Hover preview generating status notice */}
@@ -231,9 +237,9 @@ function TemplateCard({
 
       {/* Info section */}
       <div className="p-4">
-        <h3 className="font-semibold text-slate-900">{t.name}</h3>
+        <h3 className="font-semibold text-ink">{t.name}</h3>
         <div className="flex items-center gap-2 mt-1">
-          <span className="text-xs text-slate-400">
+          <span className="text-xs text-ink-muted">
             {parseFloat((t.duration_frames / t.fps).toFixed(2))}s &middot; {t.width}x{t.height}
           </span>
           {category && (
@@ -269,36 +275,35 @@ function Pagination({
   }
   return (
     <div className="flex items-center justify-center gap-1 mt-8">
-      <button onClick={() => onPageChange(page - 1)} disabled={page === 1} className="px-3 py-1.5 text-sm rounded-lg border border-slate-200 disabled:opacity-40 hover:bg-slate-50">Prev</button>
+      <button onClick={() => onPageChange(page - 1)} disabled={page === 1} className="px-3 py-1.5 text-sm rounded-lg border border-edge disabled:opacity-40 hover:bg-surface-alt">Prev</button>
       {pages.map((p, i) =>
         p === "..." ? (
-          <span key={`d${i}`} className="px-2 text-slate-400">...</span>
+          <span key={`d${i}`} className="px-2 text-ink-muted">...</span>
         ) : (
-          <button key={p} onClick={() => onPageChange(p)} className={`px-3 py-1.5 text-sm rounded-lg border ${p === page ? "bg-brand-500 text-white border-brand-500" : "border-slate-200 hover:bg-slate-50"}`}>{p}</button>
+          <button key={p} onClick={() => onPageChange(p)} className={`px-3 py-1.5 text-sm rounded-lg border ${p === page ? "bg-brand-500 text-white border-brand-500" : "border-edge hover:bg-surface-alt"}`}>{p}</button>
         ),
       )}
-      <button onClick={() => onPageChange(page + 1)} disabled={page === totalPages} className="px-3 py-1.5 text-sm rounded-lg border border-slate-200 disabled:opacity-40 hover:bg-slate-50">Next</button>
+      <button onClick={() => onPageChange(page + 1)} disabled={page === totalPages} className="px-3 py-1.5 text-sm rounded-lg border border-edge disabled:opacity-40 hover:bg-surface-alt">Next</button>
     </div>
   );
 }
 
 export default function TemplateBrowsePage() {
+  // Distinct description (not SITE_DESCRIPTION — that's the homepage's, and
+  // duplicate meta descriptions across URLs waste crawl relevance). The
+  // WebSite + SearchAction entity intentionally lives only on the homepage;
+  // emitting it here too created two competing WebSite entities.
   useSeo({
     title: "Invitation Video Templates",
-    description: SITE_DESCRIPTION,
+    description:
+      "Browse ready-made video invitation templates for weddings, engagements, birthdays and housewarmings. Pick a design, personalise the names and dates in English, Hindi or Gujarati, and download in minutes.",
     path: "/templates",
     jsonLd: {
       "@context": "https://schema.org",
-      "@type": "WebSite",
-      name: SITE_NAME,
-      url: SITE_URL,
-      description: SITE_DESCRIPTION,
-      publisher: { "@type": "Organization", name: SITE_NAME, url: SITE_URL },
-      potentialAction: {
-        "@type": "SearchAction",
-        target: `${SITE_URL}/templates?search={search_term_string}`,
-        "query-input": "required name=search_term_string",
-      },
+      "@type": "CollectionPage",
+      name: "Invitation Video Templates",
+      url: `${SITE_URL}/templates`,
+      isPartOf: { "@type": "WebSite", name: SITE_NAME, url: SITE_URL },
     },
   });
 
@@ -334,12 +339,16 @@ export default function TemplateBrowsePage() {
 
   return (
     <PageTransition>
-      <h1 className="text-3xl font-bold text-slate-900 mb-6">Templates</h1>
+      <h1 className="text-3xl font-bold text-ink mb-2">Invitation Video Templates</h1>
+      <p className="text-ink-muted mb-6">
+        Ready-made designs for weddings, engagements, birthdays and housewarmings — personalise any
+        template in English, Hindi or Gujarati.
+      </p>
 
       {/* Search input with icon */}
       <div className="relative mb-4">
         <svg
-          className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400 pointer-events-none"
+          className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-ink-muted pointer-events-none"
           fill="none"
           viewBox="0 0 24 24"
           stroke="currentColor"
@@ -367,7 +376,7 @@ export default function TemplateBrowsePage() {
           className={
             selectedCategory === ""
               ? "bg-brand-500 text-white rounded-full px-4 py-1.5 text-sm font-medium whitespace-nowrap"
-              : "bg-white ring-1 ring-slate-200 text-slate-600 rounded-full px-4 py-1.5 text-sm font-medium hover:bg-slate-50 whitespace-nowrap"
+              : "bg-surface ring-1 ring-edge text-ink-muted rounded-full px-4 py-1.5 text-sm font-medium hover:bg-surface-alt whitespace-nowrap"
           }
         >
           All
@@ -379,7 +388,7 @@ export default function TemplateBrowsePage() {
             className={
               selectedCategory === cat.id
                 ? "bg-brand-500 text-white rounded-full px-4 py-1.5 text-sm font-medium whitespace-nowrap"
-                : "bg-white ring-1 ring-slate-200 text-slate-600 rounded-full px-4 py-1.5 text-sm font-medium hover:bg-slate-50 whitespace-nowrap"
+                : "bg-surface ring-1 ring-edge text-ink-muted rounded-full px-4 py-1.5 text-sm font-medium hover:bg-surface-alt whitespace-nowrap"
             }
           >
             {cat.name}
@@ -389,7 +398,7 @@ export default function TemplateBrowsePage() {
 
       {/* Templates */}
       {displayTemplates.length === 0 ? (
-        <p className="text-slate-400 text-center py-12">No templates found</p>
+        <p className="text-ink-muted text-center py-12">No templates found</p>
       ) : (
         <>
           {/* Mobile: swipeable carousel, every template, no pagination */}

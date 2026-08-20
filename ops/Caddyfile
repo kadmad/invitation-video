@@ -4,9 +4,19 @@
 # renewal on its own; nothing else to configure for TLS.
 
 {$DOMAIN} {
-    encode gzip
+    # zstd first, gzip fallback — zstd is ~15-20% smaller than gzip on our
+    # largest assets and is supported by all current browsers; anything that
+    # doesn't advertise it silently gets gzip instead.
+    encode zstd gzip
 
     handle /api/* {
+        reverse_proxy backend:8000
+    }
+
+    # Dynamically generated (includes every published template) — see
+    # backend/app/api/sitemap.py. Must come before the frontend catch-all
+    # or the static frontend/public/sitemap.xml would shadow it.
+    handle /sitemap.xml {
         reverse_proxy backend:8000
     }
 

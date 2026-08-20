@@ -31,5 +31,11 @@ export const DUMMY_TEMPLATES: Template[] = [
   default_text_color: "#000000",
   default_font_id: null,
   render_notes: null,
+  seo_description: null,
   price: 0,
+  discount_amount_paise: null,
+  watermark_position_x: null,
+  watermark_position_y: null,
+  watermark_width: null,
+  watermark_rotation: null,
 }));

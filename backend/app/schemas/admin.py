@@ -57,7 +57,13 @@ class AdminTemplateUpdate(BaseModel):
     default_text_color: str | None = None
     default_font_id: uuid.UUID | None = None
     render_notes: str | None = None
+    seo_description: str | None = None
     price: int | None = None
+    discount_amount_paise: int | None = None
+    watermark_position_x: float | None = None
+    watermark_position_y: float | None = None
+    watermark_width: float | None = None
+    watermark_rotation: float | None = None
     pdf_snapshot_timestamps: list[float] | None = None
     render_preview: bool = False  # explicit flag — only queue preview render when True
 
@@ -70,6 +76,7 @@ class TextBlockCreate(BaseModel):
     position_x: float = 0.5
     position_y: float = 0.5
     max_width: float = 0.8
+    rotation: float = 0.0
     font_id: uuid.UUID | None = None
     font_size_ratio: float = 0.05
     text_color: str = "#FFFFFF"
@@ -95,6 +102,7 @@ class TextBlockUpdate(BaseModel):
     position_x: float | None = None
     position_y: float | None = None
     max_width: float | None = None
+    rotation: float | None = None
     font_id: uuid.UUID | None = None
     font_size_ratio: float | None = None
     text_color: str | None = None
@@ -122,6 +130,7 @@ class TextBlockResponse(BaseModel):
     position_x: float
     position_y: float
     max_width: float
+    rotation: float | None = None
     font_id: uuid.UUID | None
     font_size_ratio: float
     text_color: str
@@ -212,6 +221,7 @@ class AwaitingRenderResponse(BaseModel):
     has_pdf: bool
     error_message: str | None
     auto_dispatched: bool  # has a celery_task_id — already queued/running on some connected worker, no click needed
+    source: str = "local"  # "local" or "production" — see PROD_DATABASE_URL in config.py
 
 
 class AwaitingRendersListResponse(BaseModel):
@@ -229,6 +239,7 @@ class ImageBlockCreate(BaseModel):
     position_y: float = 0.5
     width: float = 0.3
     height: float = 0.3
+    rotation: float = 0.0
     mask_shape: str = "none"
     mask_feather: float = 0.0
     ken_burns_enabled: bool = False
@@ -248,6 +259,7 @@ class ImageBlockUpdate(BaseModel):
     position_y: float | None = None
     width: float | None = None
     height: float | None = None
+    rotation: float | None = None
     mask_shape: str | None = None
     mask_feather: float | None = None
     ken_burns_enabled: bool | None = None
@@ -269,6 +281,7 @@ class ImageBlockResponse(BaseModel):
     position_y: float
     width: float
     height: float
+    rotation: float | None = None
     mask_shape: str
     mask_feather: float
     frame_image_key: str | None
@@ -302,6 +315,13 @@ class AdminTemplateListResponse(BaseModel):
     default_text_color: str
     default_font_id: uuid.UUID | None
     render_notes: str | None
+    seo_description: str | None = None
+    price: int | None = None
+    discount_amount_paise: int | None = None
+    watermark_position_x: float | None = None
+    watermark_position_y: float | None = None
+    watermark_width: float | None = None
+    watermark_rotation: float | None = None
     preview_key: str | None = None
     preview_status: str | None = None
     created_at: datetime

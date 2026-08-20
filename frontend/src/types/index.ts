@@ -66,6 +66,7 @@ export interface TextBlock {
   position_x: number;
   position_y: number;
   max_width: number;
+  rotation?: number | null;
   font_id: string | null;
   font_size_ratio: number;
   text_color: string;
@@ -115,6 +116,7 @@ export interface ImageBlock {
   position_y: number;
   width: number;
   height: number;
+  rotation?: number | null;
   mask_shape: string;
   mask_feather: number;
   frame_image_key: string | null;
@@ -151,7 +153,13 @@ export interface Template {
   default_text_color: string;
   default_font_id: string | null;
   render_notes: string | null;
-  price: number;
+  seo_description: string | null;
+  price: number | null;
+  discount_amount_paise: number | null;
+  watermark_position_x: number | null;
+  watermark_position_y: number | null;
+  watermark_width: number | null;
+  watermark_rotation: number | null;
   pdf_snapshot_timestamps?: number[];
 }
 
@@ -198,6 +206,7 @@ export interface AwaitingRender {
   has_pdf: boolean;
   error_message: string | null;
   auto_dispatched: boolean;
+  source: "local" | "production";
 }
 
 export interface AwaitingRendersList {

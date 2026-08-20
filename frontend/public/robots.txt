@@ -1,14 +1,26 @@
 User-agent: *
+
+# Public, indexable surface. /editor/ is listed explicitly because those
+# per-template pages are the highest-intent URLs on the site and are what
+# sitemap.xml submits — previously they were only crawlable by accident
+# (nothing disallowed them) rather than by declaration.
 Allow: /$
 Allow: /templates
+Allow: /editor/
 Allow: /terms
 Allow: /privacy
 Allow: /refund
+
+# Private / authenticated areas.
 Disallow: /admin
 Disallow: /dashboard
 Disallow: /my-orders
 Disallow: /my-customizations
 Disallow: /invoice/
 Disallow: /render/
+
+# Thin or duplicate pages that would dilute the indexable set.
+Disallow: /login-callback
+Disallow: /*?preview=1
 
 Sitemap: https://bringmymatter.com/sitemap.xml
