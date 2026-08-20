@@ -8,6 +8,7 @@ import {
 import ConfirmModal from "@/components/admin/ConfirmModal";
 import Toggle from "@/components/common/Toggle";
 import type { Category } from "@/types";
+import { toast, errorMessage } from "@/store/toastStore";
 
 interface CategoryForm {
   name: string;
@@ -88,6 +89,7 @@ export default function AdminCategoriesPage() {
       load();
     } catch (err) {
       console.error("Failed to save category", err);
+      toast.error(errorMessage(err, "Failed to save category"));
     } finally {
       setSaving(false);
     }
@@ -101,6 +103,7 @@ export default function AdminCategoriesPage() {
       load();
     } catch (err) {
       console.error("Failed to delete category", err);
+      toast.error(errorMessage(err, "Failed to delete category"));
     }
   };
 
@@ -118,6 +121,7 @@ export default function AdminCategoriesPage() {
         prev.map((c) => (c.id === cat.id ? { ...c, is_active: !newValue } : c))
       );
       console.error("Failed to toggle category", err);
+      toast.error(errorMessage(err, "Failed to update category"));
     }
   };
 

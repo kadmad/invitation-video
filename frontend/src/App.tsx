@@ -4,6 +4,7 @@ import { useAuthStore } from "@/store/authStore";
 import PageLayout from "@/components/layout/PageLayout";
 import AuthModal from "@/components/auth/AuthModal";
 import ScrollToTop from "@/components/common/ScrollToTop";
+import Toaster from "@/components/common/Toaster";
 
 // The landing page is the overwhelmingly common entry point, so it stays in
 // the main chunk — lazy-loading it would just add a network round-trip before
@@ -158,6 +159,7 @@ export default function App() {
       {/* Outside the layout routes: the auth modal is a fixed overlay and must
           survive on any route, admin included. */}
       <AuthModal />
+      <Toaster />
     </>
   );
 }

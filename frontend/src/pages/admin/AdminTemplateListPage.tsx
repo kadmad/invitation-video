@@ -10,6 +10,7 @@ import {
 import ConfirmModal from "@/components/admin/ConfirmModal";
 import { API_URL } from "@/api/client";
 import type { Template, Category } from "@/types";
+import { toast, errorMessage } from "@/store/toastStore";
 
 const PER_PAGE = 12;
 const BASE_URL = API_URL;
@@ -355,6 +356,7 @@ export default function AdminTemplateListPage() {
       load();
     } catch (err) {
       console.error("Failed to create template", err);
+      toast.error(errorMessage(err, "Failed to create template"));
     } finally {
       setSaving(false);
     }
@@ -368,6 +370,9 @@ export default function AdminTemplateListPage() {
       load();
     } catch (err) {
       console.error("Failed to delete template", err);
+      // Deleting a template with orders returns a 400 explaining why —
+      // previously this was console-only, so the failure was invisible.
+      toast.error(errorMessage(err, "Failed to delete template"));
     }
   };
 

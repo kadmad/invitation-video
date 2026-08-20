@@ -352,6 +352,30 @@ async def delete_template(
     template = result.scalar_one_or_none()
     if not template:
         raise HTTPException(status_code=404, detail="Template not found")
+
+    # render_jobs.template_id and payments.template_id are NOT NULL with no
+    # ON DELETE rule, so deleting a template that has orders made SQLAlchemy
+    # try to null those columns out — a NotNullViolation surfacing as a bare
+    # 500. Cascading instead would be worse: it would erase paid orders and
+    # the customer's ability to re-download what they bought. Refuse with an
+    # explanation and point the admin at unpublishing, which is what they
+    # actually want (hide it from the storefront, keep history intact).
+    renders = await db.scalar(
+        select(func.count()).select_from(RenderJob).where(RenderJob.template_id == template_id)
+    )
+    orders = await db.scalar(
+        select(func.count()).select_from(Payment).where(Payment.template_id == template_id)
+    )
+    if renders or orders:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"Can't delete \"{template.name}\" — it has {orders} order(s) and "
+                f"{renders} render(s) attached, and deleting it would destroy that "
+                f"purchase history. Unpublish it instead to hide it from customers."
+            ),
+        )
+
     await db.delete(template)
     await db.commit()
     return {"status": "deleted"}

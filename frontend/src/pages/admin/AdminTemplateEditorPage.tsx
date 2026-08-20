@@ -25,6 +25,7 @@ import {
   clearAdminDraft,
   cleanExpiredDrafts,
 } from "@/lib/adminDraft";
+import { toast, errorMessage } from "@/store/toastStore";
 
 export default function AdminTemplateEditorPage() {
   const { id } = useParams<{ id: string }>();
@@ -50,7 +51,6 @@ export default function AdminTemplateEditorPage() {
   const [defaultTextColor, setDefaultTextColor] = useState("#FFFFFF");
   const [defaultFontId, setDefaultFontId] = useState<string | null>(null);
   const [fonts, setFonts] = useState<Font[]>([]);
-  const [saveSuccess, setSaveSuccess] = useState(false);
   const [activePanel, setActivePanel] = useState<"text" | "image">("text");
   const [renderNotes, setRenderNotes] = useState("");
   const [seoDescription, setSeoDescription] = useState("");
@@ -62,7 +62,6 @@ export default function AdminTemplateEditorPage() {
   const [watermarkRotation, setWatermarkRotation] = useState(0);
   const [watermarkOpacity, setWatermarkOpacity] = useState(0.85);
   const [editingWatermark, setEditingWatermark] = useState(false);
-  const [publishError, setPublishError] = useState<string | null>(null);
   const [draftRecovered, setDraftRecovered] = useState(false);
   const [hasDraft, setHasDraft] = useState(false);
   const [panelOpen, setPanelOpen] = useState(true);
@@ -143,6 +142,7 @@ export default function AdminTemplateEditorPage() {
         }
       } catch (err) {
         console.error("Failed to load template", err);
+        toast.error(errorMessage(err, "Failed to load this template"));
       } finally {
         setLoading(false);
       }
@@ -233,10 +233,9 @@ export default function AdminTemplateEditorPage() {
   const handleSave = async () => {
     if (!id || !template) return;
     if (isPublished && (!price || !discountAmount || discountAmount >= price)) {
-      setPublishError("Price and a watermark discount smaller than price are required before publishing.");
+      toast.error("Price and a watermark discount smaller than price are required before publishing.");
       return;
     }
-    setPublishError(null);
     setSaving(true);
     try {
       // Save all text blocks FIRST (so preview render picks up latest data)
@@ -273,11 +272,10 @@ export default function AdminTemplateEditorPage() {
       setHasDraft(false);
       setDraftRecovered(false);
       setRenderPreview(false);
-      setSaveSuccess(true);
-      setTimeout(() => setSaveSuccess(false), 2000);
+      toast.success("Template saved");
     } catch (err: any) {
       console.error("Failed to save template", err);
-      setPublishError(err?.response?.data?.detail ?? "Failed to save template");
+      toast.error(errorMessage(err, "Failed to save template"));
     } finally {
       setSaving(false);
     }
@@ -317,14 +315,6 @@ export default function AdminTemplateEditorPage() {
   return (
     <div className="flex flex-col" style={{ height: "calc(100vh - 2.5rem)" }}>
       {/* Save success toast */}
-      {saveSuccess && (
-        <div className="fixed top-4 right-4 z-50 bg-accent-500 text-white px-5 py-2.5 rounded-xl shadow-lg text-sm font-medium animate-slide-up flex items-center gap-2">
-          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
-          </svg>
-          Template saved
-        </div>
-      )}
 
       {/* Draft recovery banner */}
       {draftRecovered && (
@@ -535,7 +525,7 @@ export default function AdminTemplateEditorPage() {
         </div>
 
         {/* Published toggle */}
-        <Toggle checked={isPublished} onChange={(v) => { setIsPublished(v); setPublishError(null); }} />
+        <Toggle checked={isPublished} onChange={(v) => { setIsPublished(v); }} />
 
         {/* Render checkbox + Save */}
         <label className="flex items-center gap-1 cursor-pointer select-none" title="Queue preview render on save">
@@ -573,16 +563,6 @@ export default function AdminTemplateEditorPage() {
         </div>
       </div>
 
-      {publishError && (
-        <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 bg-red-50 border border-red-200 text-red-700 px-5 py-2.5 rounded-xl shadow-lg text-sm font-medium flex items-center gap-3 animate-slide-up">
-          {publishError}
-          <button onClick={() => setPublishError(null)} className="text-red-400 hover:text-red-600 ml-1">
-            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </button>
-        </div>
-      )}
 
       {showAeImport && id && (
         <AEImportModal

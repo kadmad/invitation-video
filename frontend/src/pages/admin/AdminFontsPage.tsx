@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { listAdminFonts, uploadFont, deleteFont } from "@/api/admin";
 import ConfirmModal from "@/components/admin/ConfirmModal";
 import type { Font } from "@/types";
+import { toast, errorMessage } from "@/store/toastStore";
 
 interface FontForm {
   name: string;
@@ -56,6 +57,7 @@ export default function AdminFontsPage() {
       load();
     } catch (err) {
       console.error("Failed to upload font", err);
+      toast.error(errorMessage(err, "Failed to upload font"));
     } finally {
       setSaving(false);
     }
@@ -69,6 +71,7 @@ export default function AdminFontsPage() {
       load();
     } catch (err) {
       console.error("Failed to delete font", err);
+      toast.error(errorMessage(err, "Failed to delete font"));
     }
   };
 

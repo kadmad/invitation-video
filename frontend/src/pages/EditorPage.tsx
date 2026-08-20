@@ -3,6 +3,7 @@ import { useParams, useNavigate, useSearchParams } from "react-router-dom";
 import { getTemplate } from "@/api/templates";
 import { API_URL } from "@/api/client";
 import { useSeo } from "@/lib/seo";
+import { toast, errorMessage } from "@/store/toastStore";
 import { SITE_NAME, SITE_URL, SITE_DESCRIPTION } from "@/lib/site";
 import { listFonts, getFontFileUrl } from "@/api/fonts";
 import { createOrder, verifyPayment, adminRender } from "@/api/payments";
@@ -651,7 +652,7 @@ export default function EditorPage() {
       });
       navigate(`/render/${editingRender.id}`);
     } catch (err: any) {
-      alert(err.response?.data?.detail || "Failed to save changes");
+      toast.error(errorMessage(err, "Failed to save changes"));
     } finally {
       setSubmitting(false);
     }
@@ -734,8 +735,7 @@ export default function EditorPage() {
             );
             navigate(`/render/${result.render_job_id}`);
           } catch (err: any) {
-            const detail = err.response?.data?.detail || "Payment verification failed";
-            alert(detail);
+            toast.error(errorMessage(err, "Payment verification failed"));
           }
         },
         modal: {
@@ -757,8 +757,7 @@ export default function EditorPage() {
       const rzp = new window.Razorpay(options);
       rzp.open();
     } catch (err: any) {
-      const detail = err.response?.data?.detail || "Failed to create payment order";
-      alert(detail);
+      toast.error(errorMessage(err, "Failed to create payment order"));
       setSubmitting(false);
     }
   };
@@ -1030,6 +1029,8 @@ export default function EditorPage() {
                           setImageUpload(block.id, result.url);
                         } catch (err) {
                           console.error("Failed to upload image", err);
+                        toast.error(errorMessage(err, "Couldn't upload that image. Please try another."));
+                          toast.error(errorMessage(err, "Couldn't upload that image. Please try another."));
                         }
                       }}
                     />
