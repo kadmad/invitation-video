@@ -91,13 +91,27 @@
         }
       }
     </script>
-    <!-- Google tag (gtag.js) -->
-    <script async src="https://www.googletagmanager.com/gtag/js?id=G-TMP09P3NV9"></script>
+    <!-- Google tag (gtag.js) — production hostname only.
+         Loaded conditionally rather than unconditionally so local dev, the
+         Tailscale prod-worker stack on :5174, LAN IPs and tunnel previews
+         never report into the live GA property. Anything that isn't the real
+         domain simply never fetches the script. -->
     <script>
-      window.dataLayer = window.dataLayer || [];
-      function gtag(){dataLayer.push(arguments);}
-      gtag('js', new Date());
-      gtag('config', 'G-TMP09P3NV9');
+      (function () {
+        var GA_ID = 'G-TMP09P3NV9';
+        var h = location.hostname;
+        if (h !== 'bringmymatter.com' && h !== 'www.bringmymatter.com') return;
+
+        window.dataLayer = window.dataLayer || [];
+        window.gtag = function () { dataLayer.push(arguments); };
+        gtag('js', new Date());
+        gtag('config', GA_ID);
+
+        var s = document.createElement('script');
+        s.async = true;
+        s.src = 'https://www.googletagmanager.com/gtag/js?id=' + GA_ID;
+        document.head.appendChild(s);
+      })();
     </script>
 
   </head>
