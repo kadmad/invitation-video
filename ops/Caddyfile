@@ -9,14 +9,14 @@
     # doesn't advertise it silently gets gzip instead.
     encode zstd gzip
 
-    handle /api/* {
-        reverse_proxy backend:8000
-    }
-
-    # Dynamically generated (includes every published template) — see
-    # backend/app/api/sitemap.py. Must come before the frontend catch-all
-    # or the static frontend/public/sitemap.xml would shadow it.
-    handle /sitemap.xml {
+    # Everything the backend owns. /sitemap.xml is generated from published
+    # templates (backend/app/api/sitemap.py) and is served at the site root,
+    # not under /api — it must be matched here, or the catch-all below hands
+    # it to the frontend and the crawler gets the SPA shell instead of XML.
+    # A single named matcher is used rather than two `handle` blocks because
+    # the bare-path form silently fell through to the frontend.
+    @backend path /api/* /sitemap.xml
+    handle @backend {
         reverse_proxy backend:8000
     }
 
