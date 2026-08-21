@@ -105,7 +105,11 @@
         window.dataLayer = window.dataLayer || [];
         window.gtag = function () { dataLayer.push(arguments); };
         gtag('js', new Date());
-        gtag('config', GA_ID);
+        // Page views are sent from src/lib/analytics.ts instead: this is a
+        // SPA, so gtag's automatic hit only ever fires for the first URL and
+        // every client-side navigation after it went unreported. Leaving the
+        // automatic hit on would double-count the initial load.
+        gtag('config', GA_ID, { send_page_view: false });
 
         var s = document.createElement('script');
         s.async = true;

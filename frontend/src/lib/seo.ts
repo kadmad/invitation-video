@@ -1,5 +1,6 @@
 import { useEffect } from "react";
 import { SITE_NAME, SITE_URL } from "./site";
+import { notifySeoReady } from "./analytics";
 
 interface SeoOptions {
   title: string;
@@ -81,6 +82,10 @@ export function useSeo({ title, description, path, noIndex, jsonLd, image, image
       script.textContent = JSON.stringify(jsonLd);
       document.head.appendChild(script);
     }
+
+    // The title for this route is now correct, so any page_view queued by the
+    // navigation can be sent with it rather than the previous page's title.
+    notifySeoReady();
 
     return () => {
       script?.remove();

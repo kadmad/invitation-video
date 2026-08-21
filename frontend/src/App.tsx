@@ -5,6 +5,7 @@ import PageLayout from "@/components/layout/PageLayout";
 import AuthModal from "@/components/auth/AuthModal";
 import ScrollToTop from "@/components/common/ScrollToTop";
 import Toaster from "@/components/common/Toaster";
+import { usePageViews } from "@/lib/analytics";
 
 // The landing page is the overwhelmingly common entry point, so it stays in
 // the main chunk — lazy-loading it would just add a network round-trip before
@@ -73,6 +74,10 @@ function CustomerLayout() {
 
 export default function App() {
   const { loadUser } = useAuthStore();
+
+  // Reports a GA page_view per client-side navigation. Without it the whole
+  // SPA counted as one view of the entry URL.
+  usePageViews();
 
   useEffect(() => {
     loadUser();
