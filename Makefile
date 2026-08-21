@@ -6,12 +6,14 @@ up:
 down:
 	docker compose down
 
+# No `docker compose down` here any more: the worker stack now has its own
+# project name (see docker-compose.local-worker.yml), so it coexists with the
+# dev stack instead of replacing it.
 up-worker:
-	docker compose down
 	docker compose -f docker-compose.local-worker.yml --env-file .env.production-worker up -d --build
 
 down-worker:
-	docker compose -f docker-compose.local-worker.yml down
+	docker compose -f docker-compose.local-worker.yml --env-file .env.production-worker down
 
 logs-worker-stack:
 	docker compose -f docker-compose.local-worker.yml logs -f

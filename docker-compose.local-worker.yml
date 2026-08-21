@@ -27,6 +27,13 @@
 # local dev's :5173/admin will never show production render jobs no matter
 # what this stack is doing, because it queries a different database.
 
+# Explicit project name. Without this, Compose derives the project from the
+# directory name — the SAME name docker-compose.yml gets — so the two stacks
+# share one project and each `up` recreates the other's containers. That is
+# what silently killed the production render worker. Pinning the name is what
+# actually makes the "runs alongside the dev stack" claim above true.
+name: prod-worker
+
 services:
   backend:
     build:
@@ -39,6 +46,10 @@ services:
       - ./backend:/app
     env_file:
       - .env.production-worker
+    # Restart policy is applied at container CREATE time, not at `up`. If you
+    # add/change it, you must `up -d --force-recreate` or the running container
+    # keeps the old policy and silently stays dead after a Docker restart.
+    restart: unless-stopped
 
   worker:
     build:
@@ -68,6 +79,7 @@ services:
       - /app/node_modules
     env_file:
       - .env.production-worker
+    restart: unless-stopped
 
   renderer:
     build:
@@ -75,17 +87,21 @@ services:
       dockerfile: Dockerfile
     ports:
       - "3100:3100"
-    shm_size: "4gb"
+    # Sized for the Docker Desktop VM, not the host. The VM here is 4 GB (of
+    # an 8 GB Mac); the previous 6g limit + 4gb shm could never be satisfied,
+    # so Chrome headless got OOM-killed mid-render. Keep these under the VM's
+    # memory or renders die with no useful error.
+    shm_size: "1gb"
     volumes:
       - ./renderer:/app
       - ./frontend:/frontend
       - /app/node_modules
     environment:
       RENDERER_PORT: 3100
-      RENDER_CONCURRENCY: ${RENDER_CONCURRENCY:-4}
-      MAX_PARALLEL_JOBS: ${MAX_PARALLEL_JOBS:-2}
+      RENDER_CONCURRENCY: ${RENDER_CONCURRENCY:-2}
+      MAX_PARALLEL_JOBS: ${MAX_PARALLEL_JOBS:-1}
     deploy:
       resources:
         limits:
-          memory: 6g
+          memory: 3g
     restart: unless-stopped
