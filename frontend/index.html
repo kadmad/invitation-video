@@ -91,16 +91,15 @@
         }
       }
     </script>
-    <!-- Google tag (gtag.js) — production hostname only.
-         Loaded conditionally rather than unconditionally so local dev, the
-         Tailscale prod-worker stack on :5174, LAN IPs and tunnel previews
-         never report into the live GA property. Anything that isn't the real
-         domain simply never fetches the script. -->
+    <!-- Google tag (gtag.js) — loads on every hostname.
+         There used to be a production-hostname gate here so local dev, the
+         Tailscale prod-worker stack on :5174 and LAN IPs stayed out of the
+         live property. It was removed deliberately: the trade is that local
+         browsing now shows up in GA, which is accepted so that nothing about
+         the tag is conditional while traffic is being verified. -->
     <script>
       (function () {
         var GA_ID = 'G-BCZ263H3YZ';
-        var h = location.hostname;
-        if (h !== 'bringmymatter.com' && h !== 'www.bringmymatter.com') return;
 
         window.dataLayer = window.dataLayer || [];
         window.gtag = function () { dataLayer.push(arguments); };
