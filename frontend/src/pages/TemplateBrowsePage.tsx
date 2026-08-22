@@ -248,6 +248,40 @@ function TemplateCard({
             </span>
           )}
         </div>
+
+        {/* Discounted price — anchor the higher price (struck through) next
+            to the lower watermark-opt-in price so the discount reads as a
+            deal at a glance, plus a "% OFF" badge for extra pull. Leads
+            with the lower number since that's the price most likely to
+            convert a scrolling browser into a click. */}
+        {!!t.price && t.price > 0 && (() => {
+          const fullPaise = t.price!;
+          const discountPaise = t.discount_amount_paise ?? 0;
+          return (
+            <div className="mt-2">
+              <div className="flex items-baseline gap-1.5 flex-wrap">
+                <span className="text-lg font-extrabold text-ink">
+                  ₹{Math.round((fullPaise - discountPaise) / 100)}
+                </span>
+                {!!discountPaise && (
+                  <>
+                    <span className="text-xs text-ink-muted line-through">
+                      ₹{Math.round(fullPaise / 100)}
+                    </span>
+                    <span className="animate-scale-in bg-emerald-50 text-emerald-600 text-[10px] font-bold px-1.5 py-0.5 rounded-full">
+                      {Math.round((discountPaise / fullPaise) * 100)}% OFF
+                    </span>
+                  </>
+                )}
+              </div>
+              {!!discountPaise && (
+                <p className="text-[10px] text-ink-muted mt-0.5">
+                  with watermark &middot; ₹{Math.round(fullPaise / 100)} without
+                </p>
+              )}
+            </div>
+          );
+        })()}
       </div>
     </Link>
   );

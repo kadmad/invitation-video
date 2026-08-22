@@ -98,7 +98,6 @@ export default function EditorPage() {
   const labelTranslitTimer = useRef<ReturnType<typeof setTimeout>>();
   const [linkCopied, setLinkCopied] = useState(false);
   const [actuallyRender, setActuallyRender] = useState(false);
-  const [showWatermarkPreview, setShowWatermarkPreview] = useState(false);
   const [locationUrl, setLocationUrl] = useState("");
   const [editingRender, setEditingRender] = useState<RenderJob | null>(null);
   const [editRenderError, setEditRenderError] = useState("");
@@ -1095,29 +1094,6 @@ export default function EditorPage() {
             mostly produced worse-looking invitations and support requests.
             Admins still control these per-template in the admin editor. */}
 
-        {/* Watermark discount opt-in — lives on the main page (not inside the
-            confirm popup) so it's visible right next to the price-slash
-            animation on the button below it. Checking it opens a static
-            preview popup showing exactly where/how the mark will look. */}
-        {!editingRender && !authUser?.is_admin && !!template?.discount_amount_paise && (
-          <label className="flex items-start gap-2.5 mb-3 px-1 cursor-pointer select-none">
-            <input
-              type="checkbox"
-              checked={watermarkOptIn}
-              onChange={(e) => {
-                const checked = e.target.checked;
-                setWatermarkOptIn(checked);
-                if (checked) setShowWatermarkPreview(true);
-              }}
-              className="mt-0.5 w-4 h-4 shrink-0 rounded accent-brand-500 cursor-pointer"
-            />
-            <span className="text-sm text-ink-muted leading-snug">
-              Get ₹{(template.discount_amount_paise / 100).toFixed(0)} off with a small brand watermark on one corner of the video
-            </span>
-          </label>
-        )}
-
-
         </div>
 
         {/* Pinned action footer — deliberately OUTSIDE the scroll region above
@@ -1144,11 +1120,7 @@ export default function EditorPage() {
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
             </svg>
-            {submitting
-              ? "Processing..."
-              : authUser?.is_admin
-                ? "Render Video"
-                : renderPriceLabel("Render Video")}
+            {submitting ? "Processing..." : "Render Video"}
           </button>
         )}
 
@@ -1172,9 +1144,15 @@ export default function EditorPage() {
           and let the z-30 preview panel paint over the payment dialog. */}
         {/* Confirm & Share popup */}
       {!editingRender && showConfirmPopup && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 overflow-y-auto">
           <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setShowConfirmPopup(false)} />
-          <div className="relative bg-surface rounded-2xl shadow-2xl w-full max-w-sm p-6">
+          {/* Vertical stack on mobile; landscape two-column layout once the
+              viewport is wide enough (lg) for it, so the dialog reads as a
+              wide card instead of a tall scroll on desktop. max-h + its own
+              overflow-y-auto so content taller than the viewport (e.g. the
+              watermark preview) scrolls inside the dialog instead of being
+              clipped off-screen. */}
+          <div className="relative bg-surface rounded-2xl shadow-2xl w-full max-w-sm lg:max-w-2xl max-h-[90vh] overflow-y-auto p-6 transition-[max-width] duration-300 ease-in-out my-auto">
             <button
               onClick={() => setShowConfirmPopup(false)}
               className="absolute top-3 right-3 text-ink-muted hover:text-ink-muted transition-colors"
@@ -1189,70 +1167,107 @@ export default function EditorPage() {
               Share this preview with your family to verify before you proceed.
             </p>
 
-            {/* Summary of entered values */}
-            <div className="bg-surface-alt rounded-xl p-3 mb-5 space-y-1">
-              {tags.filter((t) => fieldValues[t]?.trim()).map((tag) => {
-                const cfg = tagConfigs[tag] ?? {};
-                return (
-                  <div key={tag} className="flex justify-between text-sm">
-                    <span className="text-ink-muted">{cfg.label ?? humanizeTag(tag)}</span>
-                    <span className="font-medium text-ink">{fieldValues[tag]}</span>
-                  </div>
-                );
-              })}
+            <div className="lg:flex lg:gap-6 lg:items-start">
+              {/* Left column: what you entered + share */}
+              <div className="lg:w-1/2">
+                {/* Summary of entered values */}
+                <div className="bg-surface-alt rounded-xl p-3 mb-5 space-y-1">
+                  {tags.filter((t) => fieldValues[t]?.trim()).map((tag) => {
+                    const cfg = tagConfigs[tag] ?? {};
+                    return (
+                      <div key={tag} className="flex justify-between text-sm">
+                        <span className="text-ink-muted">{cfg.label ?? humanizeTag(tag)}</span>
+                        <span className="font-medium text-ink">{fieldValues[tag]}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {/* WhatsApp share */}
+                <a
+                  href={`https://wa.me/?text=${encodeURIComponent(`Hey! Please check this invitation video preview and let me know if it looks good:\n${window.location.origin}/editor/${slug}?preview=1\n\nThis is just a preview - no details are shared.`)}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="w-full flex items-center justify-center gap-2 rounded-xl py-3 text-sm font-semibold text-white bg-[#25D366] hover:bg-[#1ebe57] transition-colors mb-3"
+                >
+                  <svg className="w-5 h-5" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 0 1-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 0 1-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 0 1 2.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0 0 12.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 0 0 5.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 0 0-3.48-8.413Z" />
+                  </svg>
+                  Share Preview on WhatsApp
+                </a>
+                <p className="text-xs text-ink-muted text-center mb-5 lg:mb-0">
+                  Only the video preview is shared — your details stay private
+                </p>
+              </div>
+
+              {/* Right column: watermark discount opt-in, over the render
+                  button, then the render button itself. */}
+              <div className="lg:w-1/2 lg:border-l lg:border-edge lg:pl-6">
+                {!authUser?.is_admin && !!template?.discount_amount_paise && (
+                  <>
+                    <label className="flex items-start gap-2.5 mb-3 px-1 cursor-pointer select-none">
+                      <input
+                        type="checkbox"
+                        checked={watermarkOptIn}
+                        onChange={(e) => setWatermarkOptIn(e.target.checked)}
+                        className="mt-0.5 w-4 h-4 shrink-0 rounded accent-brand-500 cursor-pointer"
+                      />
+                      <span className="text-sm text-ink-muted leading-snug">
+                        Get ₹{(template.discount_amount_paise / 100).toFixed(0)} off with a small brand watermark on one corner of the video
+                      </span>
+                    </label>
+
+                    {/* Inline preview, right under the checkbox — not a
+                        second stacked modal. Always mounted and animated
+                        via a 0fr/1fr grid-rows transition (rather than
+                        conditionally rendered) so the dialog grows/shrinks
+                        as a smooth morph instead of an instant jump. */}
+                    <div
+                      className={`grid transition-[grid-template-rows] duration-300 ease-in-out ${
+                        watermarkOptIn ? "grid-rows-[1fr]" : "grid-rows-[0fr]"
+                      }`}
+                    >
+                      <div className="overflow-hidden">
+                        <WatermarkPreviewPopup template={template} />
+                      </div>
+                    </div>
+                  </>
+                )}
+
+                {/* Dev: actually render checkbox (admin only) */}
+                {import.meta.env.DEV && authUser?.is_admin && (
+                  <label className="flex items-center gap-2 mb-3 px-1 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={actuallyRender}
+                      onChange={(e) => setActuallyRender(e.target.checked)}
+                      className="w-4 h-4 rounded border-slate-300 text-brand-600 focus:ring-brand-500"
+                    />
+                    <span className="text-sm text-ink-muted">Actually render video</span>
+                  </label>
+                )}
+
+                {/* Proceed to payment / render */}
+                <button
+                  onClick={handleProceedToPayment}
+                  className="btn-brand w-full py-3 text-base"
+                >
+                  {authUser?.is_admin
+                    ? (import.meta.env.DEV && !actuallyRender ? "Skip Render (Dev)" : "Render Video (Admin)")
+                    : renderPriceLabel("Proceed to Payment")}
+                </button>
+
+                {!authUser?.is_admin && (
+                  <p className="text-xs text-ink-muted text-center mt-3">
+                    You'll be redirected to a secure payment page
+                  </p>
+                )}
+              </div>
             </div>
-
-            {/* WhatsApp share */}
-            <a
-              href={`https://wa.me/?text=${encodeURIComponent(`Hey! Please check this invitation video preview and let me know if it looks good:\n${window.location.origin}/editor/${slug}?preview=1\n\nThis is just a preview - no details are shared.`)}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="w-full flex items-center justify-center gap-2 rounded-xl py-3 text-sm font-semibold text-white bg-[#25D366] hover:bg-[#1ebe57] transition-colors mb-3"
-            >
-              <svg className="w-5 h-5" viewBox="0 0 24 24" fill="currentColor">
-                <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 0 1-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 0 1-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 0 1 2.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0 0 12.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 0 0 5.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 0 0-3.48-8.413Z" />
-              </svg>
-              Share Preview on WhatsApp
-            </a>
-            <p className="text-xs text-ink-muted text-center mb-3">
-              Only the video preview is shared — your details stay private
-            </p>
-
-            {/* Dev: actually render checkbox (admin only) */}
-            {import.meta.env.DEV && authUser?.is_admin && (
-              <label className="flex items-center gap-2 mb-3 px-1 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={actuallyRender}
-                  onChange={(e) => setActuallyRender(e.target.checked)}
-                  className="w-4 h-4 rounded border-slate-300 text-brand-600 focus:ring-brand-500"
-                />
-                <span className="text-sm text-ink-muted">Actually render video</span>
-              </label>
-            )}
-
-            {/* Proceed to payment / render */}
-            <button
-              onClick={handleProceedToPayment}
-              className="btn-brand w-full py-3 text-base"
-            >
-              {authUser?.is_admin
-                ? (import.meta.env.DEV && !actuallyRender ? "Skip Render (Dev)" : "Render Video (Admin)")
-                : renderPriceLabel("Proceed to Payment")}
-            </button>
-
-            {!authUser?.is_admin && (
-              <p className="text-xs text-ink-muted text-center mt-3">
-                You'll be redirected to a secure payment page
-              </p>
-            )}
           </div>
         </div>
       )}
 
-      {showWatermarkPreview && template && (
-        <WatermarkPreviewPopup template={template} onClose={() => setShowWatermarkPreview(false)} />
-      )}
     </div>
     </PageTransition>
   );
