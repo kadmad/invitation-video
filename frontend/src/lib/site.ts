@@ -14,13 +14,13 @@ export const SITE_DESCRIPTION =
 
 /** Legal entity operating the service. */
 export const LEGAL_ENTITY = "Bring My Matter"; // TODO: registered company / proprietorship name
-export const LEGAL_ADDRESS = "Gujarat, India"; // TODO: full registered address
+export const LEGAL_ADDRESS = "2, Dhirajlal & Sons, Near Shahpur Gate, Shahpur Cross Road, Shahpur - 380001";
 export const LEGAL_JURISDICTION = "Ahmedabad, Gujarat, India"; // TODO: courts of exclusive jurisdiction
 
 export const SUPPORT_EMAIL = "support@bringmymatter.com";
 export const PRIVACY_EMAIL = "privacy@bringmymatter.com";
 export const GRIEVANCE_OFFICER = "Grievance Officer"; // TODO: named officer, required by DPDP Act 2023
-export const SUPPORT_PHONE = "+91 00000 00000"; // TODO: support number
+export const SUPPORT_PHONE = "+91 63515 36569";
 
 /**
  * Version of the Terms & Privacy Policy the signup checkbox records consent

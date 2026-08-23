@@ -12,6 +12,7 @@ import {
   SITE_NAME,
   SITE_URL,
   SUPPORT_EMAIL,
+  SUPPORT_PHONE,
 } from "@/lib/site";
 
 const sections: LegalSection[] = [
@@ -377,6 +378,8 @@ const sections: LegalSection[] = [
           {LEGAL_ADDRESS}
           <br />
           Email: <a href={`mailto:${SUPPORT_EMAIL}`}>{SUPPORT_EMAIL}</a>
+          <br />
+          Phone: <a href={`tel:${SUPPORT_PHONE.replace(/\s/g, "")}`}>{SUPPORT_PHONE}</a>
         </p>
       </>
     ),

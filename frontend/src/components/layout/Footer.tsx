@@ -1,6 +1,6 @@
 import { Link } from "react-router-dom";
 import { useAuthStore } from "@/store/authStore";
-import { SITE_NAME, SITE_TAGLINE, SUPPORT_EMAIL } from "@/lib/site";
+import { LEGAL_ADDRESS, SITE_NAME, SITE_TAGLINE, SUPPORT_EMAIL, SUPPORT_PHONE } from "@/lib/site";
 
 const publicProductLinks = [{ to: "/templates", label: "Browse templates" }];
 const authedProductLinks = [
@@ -21,7 +21,7 @@ export default function Footer() {
   return (
     <footer className="border-t border-edge bg-surface mt-12">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
-        <div className="grid gap-8 sm:grid-cols-3">
+        <div className="grid gap-8 sm:grid-cols-2 lg:grid-cols-4">
           <div>
             <Link to="/" className="inline-block">
               <img src="/logo.png" alt={SITE_NAME} className="h-28 sm:h-40 w-auto" />
@@ -52,14 +52,26 @@ export default function Footer() {
                   </Link>
                 </li>
               ))}
+            </ul>
+          </div>
+
+          <div>
+            <h2 className="text-sm font-semibold text-ink mb-3">Contact</h2>
+            <ul className="space-y-2 text-sm text-ink-muted">
               <li>
-                <a
-                  href={`mailto:${SUPPORT_EMAIL}`}
-                  className="text-ink-muted hover:text-brand-500 transition-colors"
-                >
-                  Contact support
+                <a href={`mailto:${SUPPORT_EMAIL}`} className="hover:text-brand-500 transition-colors">
+                  {SUPPORT_EMAIL}
                 </a>
               </li>
+              <li>
+                <a
+                  href={`tel:${SUPPORT_PHONE.replace(/\s/g, "")}`}
+                  className="hover:text-brand-500 transition-colors"
+                >
+                  {SUPPORT_PHONE}
+                </a>
+              </li>
+              <li className="max-w-[220px]">{LEGAL_ADDRESS}</li>
             </ul>
           </div>
         </div>
