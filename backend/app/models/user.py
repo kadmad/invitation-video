@@ -23,3 +23,7 @@ class User(UUIDMixin, TimestampMixin, Base):
     terms_version: Mapped[str | None] = mapped_column(String(20), nullable=True)
 
     render_jobs = relationship("RenderJob", back_populates="user")
+
+    @property
+    def has_password(self) -> bool:
+        return self.hashed_password is not None

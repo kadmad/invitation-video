@@ -24,6 +24,7 @@ const RenderStatusPage = lazy(() => import("@/pages/RenderStatusPage"));
 const MyOrdersPage = lazy(() => import("@/pages/MyOrdersPage"));
 const InvoicePage = lazy(() => import("@/pages/InvoicePage"));
 const MyCustomizationsPage = lazy(() => import("@/pages/MyCustomizationsPage"));
+const ProfilePage = lazy(() => import("@/pages/ProfilePage"));
 const LoginCallbackPage = lazy(() => import("@/pages/LoginCallbackPage"));
 const TermsPage = lazy(() => import("@/pages/legal/TermsPage"));
 const PrivacyPage = lazy(() => import("@/pages/legal/PrivacyPage"));
@@ -150,6 +151,14 @@ export default function App() {
             element={
               <ProtectedRoute>
                 <MyCustomizationsPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/profile"
+            element={
+              <ProtectedRoute>
+                <ProfilePage />
               </ProtectedRoute>
             }
           />

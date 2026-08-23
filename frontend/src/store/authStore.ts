@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import type { User } from "@/types";
-import { getMe, googleAuth } from "@/api/auth";
+import { emailLogin, getMe, googleAuth } from "@/api/auth";
 
 interface AuthState {
   user: User | null;
@@ -13,6 +13,7 @@ interface AuthState {
     redirectUri: string,
     acceptedTerms: boolean
   ) => Promise<{ is_new_user: boolean }>;
+  loginWithPassword: (email: string, password: string) => Promise<void>;
   logout: () => void;
   loadUser: () => Promise<void>;
   openAuthModal: (onSuccess?: () => void) => void;
@@ -38,6 +39,19 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       callback();
     }
     return { is_new_user };
+  },
+
+  loginWithPassword: async (email, password) => {
+    const { access_token } = await emailLogin(email, password);
+    localStorage.setItem("token", access_token);
+    set({ token: access_token });
+    const user = await getMe();
+    set({ user, showAuthModal: false });
+    const callback = get().authModalCallback;
+    if (callback) {
+      set({ authModalCallback: null });
+      callback();
+    }
   },
 
   logout: () => {

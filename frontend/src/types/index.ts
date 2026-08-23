@@ -8,6 +8,7 @@ export interface User {
   avatar_url: string | null;
   is_active: boolean;
   is_admin: boolean;
+  has_password: boolean;
 }
 
 export interface Category {

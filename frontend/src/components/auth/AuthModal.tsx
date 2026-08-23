@@ -1,20 +1,38 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, FormEvent } from "react";
 import { Link } from "react-router-dom";
 import { useAuthStore } from "@/store/authStore";
 
 export default function AuthModal() {
-  const { showAuthModal, closeAuthModal } = useAuthStore();
+  const { showAuthModal, closeAuthModal, loginWithPassword } = useAuthStore();
   // Pre-ticked, as agreed with the product owner. Users can untick it, and the
   // consent that is actually recorded is the state of this box at click time.
   const [acceptedTerms, setAcceptedTerms] = useState(true);
   const [error, setError] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
     if (showAuthModal) {
       setAcceptedTerms(true);
       setError("");
+      setEmail("");
+      setPassword("");
     }
   }, [showAuthModal]);
+
+  const handlePasswordLogin = async (e: FormEvent) => {
+    e.preventDefault();
+    setError("");
+    setSubmitting(true);
+    try {
+      await loginWithPassword(email, password);
+    } catch {
+      setError("Invalid email or password");
+    } finally {
+      setSubmitting(false);
+    }
+  };
 
   const handleGoogleLogin = () => {
     if (!acceptedTerms) {
@@ -129,6 +147,41 @@ export default function AuthModal() {
         </label>
 
         {error && <p className="text-red-500 text-sm mt-3">{error}</p>}
+
+        <div className="flex items-center gap-3 my-5">
+          <div className="h-px bg-edge flex-1" />
+          <span className="text-xs text-ink-muted">OR LOG IN WITH PASSWORD</span>
+          <div className="h-px bg-edge flex-1" />
+        </div>
+
+        <form onSubmit={handlePasswordLogin} className="space-y-3">
+          <input
+            type="email"
+            required
+            placeholder="Email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            className="w-full border border-edge rounded-xl py-2.5 px-3.5 text-sm text-ink bg-surface focus:outline-none focus:ring-2 focus:ring-brand-500"
+          />
+          <input
+            type="password"
+            required
+            placeholder="Password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            className="w-full border border-edge rounded-xl py-2.5 px-3.5 text-sm text-ink bg-surface focus:outline-none focus:ring-2 focus:ring-brand-500"
+          />
+          <button
+            type="submit"
+            disabled={submitting}
+            className="w-full btn-brand-outline text-sm py-2.5 disabled:opacity-60"
+          >
+            {submitting ? "Logging in..." : "Log In"}
+          </button>
+        </form>
+        <p className="text-xs text-ink-muted mt-3">
+          Password login only works if you've set one up already, from Profile in your account menu.
+        </p>
       </div>
     </div>
   );

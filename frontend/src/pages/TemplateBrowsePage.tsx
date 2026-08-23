@@ -274,11 +274,6 @@ function TemplateCard({
                   </>
                 )}
               </div>
-              {!!discountPaise && (
-                <p className="text-[10px] text-ink-muted mt-0.5">
-                  with watermark &middot; ₹{Math.round(fullPaise / 100)} without
-                </p>
-              )}
             </div>
           );
         })()}

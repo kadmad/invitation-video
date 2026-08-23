@@ -227,7 +227,7 @@ export default function LandingPage() {
               <h1 className="text-3xl sm:text-4xl lg:text-5xl font-extrabold leading-tight text-[#2A2420]">
                 Your Perfect{" "}
                 <span className="bg-gradient-to-r from-[#B98D4C] via-[#F3D9A0] to-[#8B6F47] bg-clip-text text-transparent bg-[length:200%_100%] motion-reduce:animate-none animate-shimmer-slow">
-                  Digital Video Invitation.
+                  Digital Invitation.
                 </span>{" "}
                 Designed, Animated, and Delivered in Minutes.
               </h1>

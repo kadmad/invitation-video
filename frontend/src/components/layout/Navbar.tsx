@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, NavLink } from "react-router-dom";
 import { useAuthStore } from "@/store/authStore";
 import MobileNavDrawer from "./MobileNavDrawer";
@@ -7,6 +7,19 @@ export default function Navbar() {
   const { user, logout, openAuthModal } = useAuthStore();
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
+  const [profileMenuOpen, setProfileMenuOpen] = useState(false);
+  const profileMenuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!profileMenuOpen) return;
+    const onClickOutside = (e: MouseEvent) => {
+      if (profileMenuRef.current && !profileMenuRef.current.contains(e.target as Node)) {
+        setProfileMenuOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", onClickOutside);
+    return () => document.removeEventListener("mousedown", onClickOutside);
+  }, [profileMenuOpen]);
 
   // Once the page has scrolled past the top, morph the full logo down to
   // just its "B" mark (see the crop-window comment below) so the sticky
@@ -145,25 +158,61 @@ export default function Navbar() {
                     Admin
                   </NavLink>
                 )}
-                <div className="flex items-center gap-3">
-                  {user.avatar_url ? (
-                    <img
-                      src={user.avatar_url}
-                      alt={user.full_name || "User"}
-                      referrerPolicy="no-referrer"
-                      className="w-8 h-8 rounded-full object-cover"
-                    />
-                  ) : (
-                    <div className="w-8 h-8 rounded-full bg-brand-100 text-brand-700 flex items-center justify-center text-sm font-semibold">
-                      {user.first_name?.charAt(0)?.toUpperCase() || user.full_name?.charAt(0)?.toUpperCase() || "U"}
+                <div className="relative" ref={profileMenuRef}>
+                  <button
+                    type="button"
+                    onClick={() => setProfileMenuOpen((v) => !v)}
+                    className="flex items-center gap-1.5"
+                    aria-haspopup="menu"
+                    aria-expanded={profileMenuOpen}
+                  >
+                    {user.avatar_url ? (
+                      <img
+                        src={user.avatar_url}
+                        alt={user.full_name || "User"}
+                        referrerPolicy="no-referrer"
+                        className="w-8 h-8 rounded-full object-cover"
+                      />
+                    ) : (
+                      <div className="w-8 h-8 rounded-full bg-brand-100 text-brand-700 flex items-center justify-center text-sm font-semibold">
+                        {user.first_name?.charAt(0)?.toUpperCase() || user.full_name?.charAt(0)?.toUpperCase() || "U"}
+                      </div>
+                    )}
+                    <svg
+                      className={`w-3.5 h-3.5 text-ink-muted transition-transform ${profileMenuOpen ? "rotate-180" : ""}`}
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                    </svg>
+                  </button>
+
+                  {profileMenuOpen && (
+                    <div
+                      role="menu"
+                      className="absolute right-0 top-full mt-2 w-44 bg-surface border border-edge rounded-xl shadow-lg py-1.5 z-50"
+                    >
+                      <Link
+                        to="/profile"
+                        role="menuitem"
+                        onClick={() => setProfileMenuOpen(false)}
+                        className="block px-4 py-2 text-sm text-ink hover:bg-surface-alt transition-colors"
+                      >
+                        Profile
+                      </Link>
+                      <button
+                        role="menuitem"
+                        onClick={() => {
+                          setProfileMenuOpen(false);
+                          logout();
+                        }}
+                        className="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-surface-alt transition-colors"
+                      >
+                        Logout
+                      </button>
                     </div>
                   )}
-                  <button
-                    onClick={logout}
-                    className="text-sm text-ink-muted hover:text-red-600 transition-colors"
-                  >
-                    Logout
-                  </button>
                 </div>
               </>
             ) : (
