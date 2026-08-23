@@ -14,7 +14,7 @@ export const SITE_DESCRIPTION =
 
 /** Legal entity operating the service. */
 export const LEGAL_ENTITY = "Bring My Matter"; // TODO: registered company / proprietorship name
-export const LEGAL_ADDRESS = "2, Dhirajlal & Sons, Near Shahpur Gate, Shahpur Cross Road, Shahpur - 380001";
+export const LEGAL_ADDRESS = "2, Dhirajlal & Sons, Near Shahpur Gate, Shahpur Cross Road, Shahpur, Ahmedabad - 380001";
 export const LEGAL_JURISDICTION = "Ahmedabad, Gujarat, India"; // TODO: courts of exclusive jurisdiction
 
 export const SUPPORT_EMAIL = "support@bringmymatter.com";
