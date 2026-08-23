@@ -37,7 +37,7 @@ function buildSegments(content: string, ranges: FormatRange[]): Segment[] {
 
   const boundaries = new Set<number>([0, content.length]);
 
-  const tagRegex = /\{(\w+)\}/g;
+  const tagRegex = /\{[^{}]+\}/g;
   let tagMatch;
   const tagSpans: Array<[number, number]> = [];
   while ((tagMatch = tagRegex.exec(content)) !== null) {

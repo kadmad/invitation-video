@@ -14,6 +14,8 @@ class CreateOrderRequest(BaseModel):
     location_url: str | None = None
     skip_render: bool = False
     is_watermarked: bool = False
+    music_key: str | None = None
+    music_start_seconds: float | None = None
 
 
 class CreateOrderResponse(BaseModel):

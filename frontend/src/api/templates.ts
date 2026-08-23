@@ -42,3 +42,17 @@ export async function uploadUserImage(
   );
   return data;
 }
+
+export async function uploadUserMusic(
+  templateId: string,
+  file: File,
+): Promise<{ music_key: string; duration_seconds: number }> {
+  const form = new FormData();
+  form.append("file", file);
+  const { data } = await client.post(
+    `/templates/${templateId}/upload-music`,
+    form,
+    { headers: { "Content-Type": "multipart/form-data" } },
+  );
+  return data;
+}

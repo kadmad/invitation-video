@@ -85,14 +85,14 @@ def _transliterate_block_content(content: str, itc: str, overrides: dict[str, st
     Returns (new_content, char_map) where char_map maps old char indices to new ones.
     Uses overrides map for admin-selected transliterations.
     """
-    parts = re.split(r"(\{\w+\})", content)
+    parts = re.split(r"(\{[^{}]+\})", content)
     orig_offset = 0
     new_offset = 0
     char_map: list[int] = []
     new_parts = []
 
     for i, part in enumerate(parts):
-        if re.match(r"^\{\w+\}$", part):
+        if re.match(r"^\{[^{}]+\}$", part):
             # Tag — keep as-is, 1:1 mapping
             for c in range(len(part)):
                 char_map.append(new_offset + c)  # char_map[orig_offset + c]
@@ -191,6 +191,9 @@ def render_video_task(self, job_id: str):
 
             with tempfile.TemporaryDirectory() as tmp_dir:
                 source_path = os.path.join(tmp_dir, "source.mp4")
+                music_path = None
+                if job.music_key:
+                    music_path = os.path.join(tmp_dir, f"music{os.path.splitext(job.music_key)[1] or '.mp3'}")
 
                 font_paths = {}
                 default_font_path = None
@@ -216,6 +219,8 @@ def render_video_task(self, job_id: str):
 
                 download_tasks = [(template.video_key, source_path)]
                 download_tasks.extend(font_download_info.values())
+                if music_path:
+                    download_tasks.append((job.music_key, music_path))
 
                 with ThreadPoolExecutor(max_workers=len(download_tasks)) as pool:
                     list(pool.map(_download, download_tasks))
@@ -273,7 +278,7 @@ def render_video_task(self, job_id: str):
                     block_translit_overrides = block.transliteration_overrides or {}
 
                     # Transliterate user-provided tag values
-                    block_tags = re.findall(r"\{(\w+)\}", block.content)
+                    block_tags = [t.strip() for t in re.findall(r"\{([^{}]+)\}", block.content)]
                     for tag in block_tags:
                         if tag in already_transliterated or tag not in tag_values:
                             continue
@@ -304,6 +309,7 @@ def render_video_task(self, job_id: str):
                     blocks_json.append(_block_to_dict(b, content_ovr, ranges_ovr))
 
                 video_url = storage_service.internal_presigned_url(template.video_key, expires=600)
+                music_url = storage_service.internal_presigned_url(job.music_key, expires=600) if job.music_key else None
 
                 default_font_family = None
                 if template.default_font_id and str(template.default_font_id) in font_families:
@@ -321,6 +327,8 @@ def render_video_task(self, job_id: str):
 
                 input_props = {
                     "videoUrl": video_url,
+                    "musicUrl": music_url,
+                    "musicStartSeconds": job.music_start_seconds or 0,
                     "width": template.width,
                     "height": template.height,
                     "textBlocks": blocks_json,
@@ -418,6 +426,9 @@ def render_video_task(self, job_id: str):
                         watermark_width=template.watermark_width,
                         watermark_rotation=template.watermark_rotation,
                         watermark_opacity=template.watermark_opacity,
+                        music_path=music_path,
+                        music_start_seconds=job.music_start_seconds or 0,
+                        video_duration_seconds=template.duration_frames / template.fps,
                     )
                     ffmpeg.render()
 
@@ -532,15 +543,13 @@ def render_preview_task(self, template_id: str):
 
         default_lang = font_lang_cache.get(str(template.default_font_id), "english") if template.default_font_id else "english"
 
-        # Build placeholder tag values from tag_config
+        # Sample values for the admin preview — the tag text itself is the
+        # default value now, same convention as the customer editor.
         tag_values: dict[str, str] = {}
         for block in text_blocks:
-            if not block.tag_config:
-                continue
-            for tag, cfg in block.tag_config.items():
+            for tag in [t.strip() for t in re.findall(r"\{([^{}]+)\}", block.content)]:
                 if tag not in tag_values:
-                    placeholder = cfg.get("placeholder", "") if isinstance(cfg, dict) else ""
-                    tag_values[tag] = placeholder or tag.replace("_", " ").title()
+                    tag_values[tag] = tag
 
         # Transliterate per-block: both tag values AND static content, remap format_ranges
         already_transliterated: set[str] = set()
@@ -563,7 +572,7 @@ def render_preview_task(self, template_id: str):
             block_translit_overrides = block.transliteration_overrides or {}
 
             # Transliterate tag placeholder values
-            block_tags = re.findall(r"\{(\w+)\}", block.content)
+            block_tags = [t.strip() for t in re.findall(r"\{([^{}]+)\}", block.content)]
             for tag in block_tags:
                 if tag in already_transliterated or tag not in tag_values:
                     continue

@@ -104,19 +104,17 @@ export default function VideoPreviewCanvas({
     return map;
   }, [fontList]);
 
-  // Show placeholder value if admin set one, otherwise tag name as-is
+  // Tag text itself is the default value shown until a customer types
+  // something — same convention as the customer editor's preview.
   const sampleTagValues = useMemo(() => {
     if (!template) return {};
     const values: Record<string, string> = {};
     for (const block of template.text_blocks ?? []) {
-      const re = /\{(\w+)\}/g;
+      const re = /\{([^{}]+)\}/g;
       let m: RegExpExecArray | null;
       while ((m = re.exec(block.content)) !== null) {
-        const tag = m[1];
-        if (!values[tag]) {
-          const placeholder = block.tag_config?.[tag]?.placeholder;
-          values[tag] = placeholder || `{${tag}}`;
-        }
+        const tag = m[1].trim();
+        if (!values[tag]) values[tag] = tag;
       }
     }
     return values;
@@ -140,7 +138,7 @@ export default function VideoPreviewCanvas({
       if (!font || font.language === "english") continue;
 
       // Split content into alternating [static, tag, static, tag, ...] parts
-      const parts = block.content.split(/(\{\w+\})/g);
+      const parts = block.content.split(/(\{[^{}]+\})/g);
       const hasStatic = parts.some((p, i) => i % 2 === 0 && p.trim());
       if (hasStatic) {
         blockSegments[block.id] = { parts, language: font.language };
@@ -152,10 +150,10 @@ export default function VideoPreviewCanvas({
       }
 
       // Sample tag values used in this block
-      const tagRe = /\{(\w+)\}/g;
+      const tagRe = /\{([^{}]+)\}/g;
       let match: RegExpExecArray | null;
       while ((match = tagRe.exec(block.content)) !== null) {
-        const tag = match[1];
+        const tag = match[1].trim();
         const val = sampleTagValues[tag];
         if (val) {
           toTransliterate[`tag:${tag}:${font.language}`] = { text: val, language: font.language };
@@ -186,11 +184,11 @@ export default function VideoPreviewCanvas({
           if (key.startsWith(`seg:${block.id}:`)) segOverrides[key] = ov;
         }
         // Tag value overrides
-        const tagRe = /\{(\w+)\}/g;
+        const tagRe = /\{([^{}]+)\}/g;
         let m: RegExpExecArray | null;
         while ((m = tagRe.exec(block.content)) !== null) {
           const font = fontList.find((f) => f.id === (block.font_id ?? template!.default_font_id));
-          if (font) segOverrides[`tag:${m[1]}:${font.language}`] = ov;
+          if (font) segOverrides[`tag:${m[1].trim()}:${font.language}`] = ov;
         }
       }
 

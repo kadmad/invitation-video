@@ -5,10 +5,10 @@ import type { Template, Font, FormatRange } from "@/types";
 export function extractTags(template: Template): string[] {
   const tagSet = new Set<string>();
   for (const block of template.text_blocks ?? []) {
-    const re = /\{(\w+)\}/g;
+    const re = /\{([^{}]+)\}/g;
     let m: RegExpExecArray | null;
     while ((m = re.exec(block.content)) !== null) {
-      tagSet.add(m[1]);
+      tagSet.add(m[1].trim());
     }
   }
   return Array.from(tagSet);
@@ -38,6 +38,15 @@ interface EditorState {
   blockFormatOverrides: Record<string, FormatRange[]>;
   transliteratedBlockOverrides: Record<string, string>;
   watermarkPreview: boolean;
+  // Customer's own chosen music — held locally until confirm/save, when it's
+  // uploaded and the returned key submitted with the order.
+  musicFile: File | null;
+  musicObjectUrl: string | null;
+  musicDurationSeconds: number | null;
+  musicStartSeconds: number;
+  setMusic: (file: File, objectUrl: string, durationSeconds: number) => void;
+  setMusicStartSeconds: (seconds: number) => void;
+  clearMusic: () => void;
   setWatermarkPreview: (enabled: boolean) => void;
   setImageUpload: (blockId: string, url: string) => void;
   clearImageUpload: (blockId: string) => void;
@@ -78,6 +87,34 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   blockFormatOverrides: {},
   transliteratedBlockOverrides: {},
   watermarkPreview: false,
+  musicFile: null,
+  musicObjectUrl: null,
+  musicDurationSeconds: null,
+  musicStartSeconds: 0,
+
+  setMusic: (file, objectUrl, durationSeconds) =>
+    set((state) => {
+      if (state.musicObjectUrl) URL.revokeObjectURL(state.musicObjectUrl);
+      return {
+        musicFile: file,
+        musicObjectUrl: objectUrl,
+        musicDurationSeconds: durationSeconds,
+        musicStartSeconds: 0,
+      };
+    }),
+
+  setMusicStartSeconds: (seconds) => set({ musicStartSeconds: seconds }),
+
+  clearMusic: () =>
+    set((state) => {
+      if (state.musicObjectUrl) URL.revokeObjectURL(state.musicObjectUrl);
+      return {
+        musicFile: null,
+        musicObjectUrl: null,
+        musicDurationSeconds: null,
+        musicStartSeconds: 0,
+      };
+    }),
 
   setWatermarkPreview: (enabled) => set({ watermarkPreview: enabled }),
 
@@ -172,20 +209,27 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     set({ transliteratedBlockOverrides: overrides }),
 
   reset: () =>
-    set((state) => ({
-      template: null,
-      font: null,
-      fontUrl: null,
-      fieldValues: {},
-      transliteratedValues: {},
-      textColorOverrides: {},
-      imageUploads: {},
-      seekToTime: null,
-      editorMode: "express",
-      blockOverrides: {},
-      blockFormatOverrides: {},
-      transliteratedBlockOverrides: {},
-      watermarkPreview: false,
-      prefill: state.prefill, // preserve
-    })),
+    set((state) => {
+      if (state.musicObjectUrl) URL.revokeObjectURL(state.musicObjectUrl);
+      return {
+        template: null,
+        font: null,
+        fontUrl: null,
+        fieldValues: {},
+        transliteratedValues: {},
+        textColorOverrides: {},
+        imageUploads: {},
+        seekToTime: null,
+        editorMode: "express",
+        blockOverrides: {},
+        blockFormatOverrides: {},
+        transliteratedBlockOverrides: {},
+        watermarkPreview: false,
+        musicFile: null,
+        musicObjectUrl: null,
+        musicDurationSeconds: null,
+        musicStartSeconds: 0,
+        prefill: state.prefill, // preserve
+      };
+    }),
 }));

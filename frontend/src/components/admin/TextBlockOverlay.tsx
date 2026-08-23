@@ -40,8 +40,9 @@ export default function TextBlockOverlay({
   }, [selected, isPrimary, mounted]);
 
   // Expand tags for display text
-  const displayText = block.content.replace(/\{(\w+)\}/g, (_, tag) => {
-    return tagValues[tag] ?? tag;
+  const displayText = block.content.replace(/\{([^{}]+)\}/g, (_, rawTag) => {
+    const tag = rawTag.trim();
+    return tagValues[tag] || tag;
   });
 
   // Match Remotion: fontSize = font_size_ratio * videoHeight (containerHeight here)
@@ -69,7 +70,7 @@ export default function TextBlockOverlay({
         : rawLeft;
   const boxTop = block.position_y * containerHeight - extraPad;
 
-  const label = block.content.replace(/\{(\w+)\}/g, (_, t) => t).slice(0, 40);
+  const label = block.content.replace(/\{([^{}]+)\}/g, (_, t) => t.trim()).slice(0, 40);
 
   // Persist position for one or all selected blocks
   const persist = useCallback(async () => {

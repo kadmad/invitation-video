@@ -464,7 +464,7 @@ export default function TimelineFooter({ playerRef, pdfSnapshotTimestamps, onPdf
             const widthPct = ((b.end_time - b.start_time) / totalSeconds) * 100;
             const isSelected = selectedBlockIds?.includes(b.id) ?? b.id === selectedBlockId;
             const isText = b.type === "text";
-            const label = ("content" in b ? b.content : "").replace(/\{(\w+)\}/g, (_, t) => t).slice(0, 30);
+            const label = ("content" in b ? b.content : "").replace(/\{([^{}]+)\}/g, (_, t) => t.trim()).slice(0, 30);
 
             return (
               <div

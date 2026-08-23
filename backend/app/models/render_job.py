@@ -1,6 +1,6 @@
 import uuid
 
-from sqlalchemy import Boolean, ForeignKey, Integer, String, Text
+from sqlalchemy import Boolean, Float, ForeignKey, Integer, String, Text
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -39,6 +39,10 @@ class RenderJob(UUIDMixin, TimestampMixin, Base):
     # locked the moment an admin claims it (status -> "processing").
     render_method: Mapped[str] = mapped_column(String(10), default="server")
     is_watermarked: Mapped[bool] = mapped_column(Boolean, default=False)
+    # Customer's own uploaded audio track (R2/S3 key), replacing the
+    # template's original audio in the final render. None = keep original.
+    music_key: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    music_start_seconds: Mapped[float | None] = mapped_column(Float, nullable=True)
 
     user = relationship("User", back_populates="render_jobs")
     template = relationship("Template", back_populates="render_jobs")

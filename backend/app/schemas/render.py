@@ -9,6 +9,8 @@ class RenderCreate(BaseModel):
     font_id: uuid.UUID | None = None
     field_values: dict[str, str]
     text_color_override: dict[str, str] | None = None  # {"_default": "#hex", "<block_id>": "#hex"}
+    music_key: str | None = None
+    music_start_seconds: float | None = None
 
 
 class RenderResponse(BaseModel):
@@ -20,6 +22,8 @@ class RenderResponse(BaseModel):
     text_color_override: dict | None
     block_overrides: dict | None = None
     block_format_overrides: dict | None = None
+    music_key: str | None = None
+    music_start_seconds: float | None = None
     progress: int
     output_key: str | None
     pdf_key: str | None
@@ -48,3 +52,5 @@ class RenderUpdate(BaseModel):
     block_overrides: dict[str, str] | None = None
     block_format_overrides: dict | None = None
     location_url: str | None = None
+    music_key: str | None = None
+    music_start_seconds: float | None = None

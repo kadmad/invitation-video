@@ -174,6 +174,8 @@ export interface RenderJob {
   text_color_override: Record<string, string> | null;
   block_overrides?: Record<string, string> | null;
   block_format_overrides?: Record<string, FormatRange[]> | null;
+  music_key?: string | null;
+  music_start_seconds?: number | null;
   progress: number;
   output_key: string | null;
   pdf_key: string | null;

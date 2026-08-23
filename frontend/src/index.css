@@ -241,6 +241,63 @@
   scrollbar-gutter: stable;
 }
 
+/* Music start-point slider — pill track + floating thumb in the same
+   gold/ink brand pair as .btn-brand (the render button right below it).
+   The gradient "fill" (played / available / blocked-out zones) is computed
+   per-render and passed as an inline background — this only strips native
+   OS chrome and shapes the track/thumb. */
+.music-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 6px;
+  border-radius: 9999px;
+  outline: none;
+  cursor: pointer;
+}
+.music-slider::-webkit-slider-runnable-track {
+  height: 6px;
+  border-radius: 9999px;
+  background: transparent;
+}
+.music-slider::-moz-range-track {
+  height: 6px;
+  border-radius: 9999px;
+  background: transparent;
+}
+.music-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  margin-top: -5px;
+  border-radius: 50%;
+  background: #F6EFE1;
+  border: 3px solid #2A2420;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.25);
+  cursor: pointer;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+.music-slider::-webkit-slider-thumb:hover {
+  transform: scale(1.15);
+}
+.music-slider::-webkit-slider-thumb:active {
+  transform: scale(1.25);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.35);
+}
+.music-slider::-moz-range-thumb {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #F6EFE1;
+  border: 3px solid #2A2420;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.25);
+  cursor: pointer;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+.music-slider::-moz-range-thumb:hover {
+  transform: scale(1.15);
+}
+
 /* Timeline scrollbar — always visible, thin */
 .timeline-scroll::-webkit-scrollbar {
   width: 6px;

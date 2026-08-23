@@ -590,7 +590,7 @@ function expandTags(
   content: string,
   tagValues: Record<string, string>,
 ): { expanded: string; mapIndex: (rawIdx: number) => number } {
-  const tagRegex = /\{(\w+)\}/g;
+  const tagRegex = /\{([^{}]+)\}/g;
   // Build offset array: for each raw position, how much to shift in expanded text
   const offsets: number[] = new Array(content.length + 1).fill(0);
   let cumulativeDelta = 0;
@@ -598,8 +598,8 @@ function expandTags(
 
   tagRegex.lastIndex = 0;
   while ((match = tagRegex.exec(content)) !== null) {
-    const tagKey = match[1];
-    const replacement = tagValues[tagKey] ?? "";
+    const tagKey = match[1].trim();
+    const replacement = tagValues[tagKey] || tagKey;
     const tagLen = match[0].length;
     const repLen = replacement.length;
     cumulativeDelta += repLen - tagLen;
@@ -620,8 +620,9 @@ function expandTags(
   let lastIndex = 0;
   tagRegex.lastIndex = 0;
   while ((match = tagRegex.exec(content)) !== null) {
+    const tagKey = match[1].trim();
     expanded += content.slice(lastIndex, match.index);
-    expanded += tagValues[match[1]] ?? "";
+    expanded += tagValues[tagKey] || tagKey;
     lastIndex = match.index + match[0].length;
   }
   expanded += content.slice(lastIndex);
@@ -969,14 +970,17 @@ function AnimatedTextBlock({
     () =>
       blockOverride !== undefined
         ? blockOverride
-        : block.content.replace(/\{(\w+)\}/g, (_, tag) => tagValues[tag] ?? ""),
+        : block.content.replace(/\{([^{}]+)\}/g, (_, rawTag) => {
+            const tag = rawTag.trim();
+            return tagValues[tag] || tag;
+          }),
     [blockOverride, block.content, tagValues],
   );
 
   const isPlaceholder = useMemo(
     () =>
       placeholderTags
-        ? Array.from(block.content.matchAll(/\{(\w+)\}/g)).some((m) => placeholderTags.has(m[1]))
+        ? Array.from(block.content.matchAll(/\{([^{}]+)\}/g)).some((m) => placeholderTags.has(m[1].trim()))
         : false,
     [placeholderTags, block.content],
   );

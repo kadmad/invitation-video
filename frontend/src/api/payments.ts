@@ -9,7 +9,9 @@ export async function createOrder(
   blockOverrides?: Record<string, string>,
   blockFormatOverrides?: Record<string, any[]>,
   locationUrl?: string,
-  isWatermarked?: boolean
+  isWatermarked?: boolean,
+  musicKey?: string,
+  musicStartSeconds?: number
 ) {
   const body: Record<string, unknown> = {
     template_id: templateId,
@@ -21,6 +23,10 @@ export async function createOrder(
   if (blockFormatOverrides) body.block_format_overrides = blockFormatOverrides;
   if (locationUrl) body.location_url = locationUrl;
   if (isWatermarked) body.is_watermarked = true;
+  if (musicKey) {
+    body.music_key = musicKey;
+    body.music_start_seconds = musicStartSeconds ?? 0;
+  }
   const { data } = await client.post<PaymentOrder>("/payments/create-order", body);
   return data;
 }
@@ -51,7 +57,9 @@ export async function adminRender(
   blockOverrides?: Record<string, string>,
   blockFormatOverrides?: Record<string, any[]>,
   locationUrl?: string,
-  skipRender?: boolean
+  skipRender?: boolean,
+  musicKey?: string,
+  musicStartSeconds?: number
 ) {
   const body: Record<string, unknown> = {
     template_id: templateId,
@@ -63,6 +71,10 @@ export async function adminRender(
   if (blockFormatOverrides) body.block_format_overrides = blockFormatOverrides;
   if (locationUrl) body.location_url = locationUrl;
   if (skipRender) body.skip_render = true;
+  if (musicKey) {
+    body.music_key = musicKey;
+    body.music_start_seconds = musicStartSeconds ?? 0;
+  }
   const { data } = await client.post<{ render_job_id: string; status: string }>(
     "/payments/admin-render",
     body

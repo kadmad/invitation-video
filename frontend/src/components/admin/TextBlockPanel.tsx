@@ -258,11 +258,6 @@ function BlockEditForm({
   const [selectedIndices, setSelectedIndices] = useState<number[]>([]);
   const translitTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Placeholder transliteration candidates
-  const [placeholderCandidates, setPlaceholderCandidates] = useState<Record<string, WordCandidates[]>>({});
-  const [placeholderIndices, setPlaceholderIndices] = useState<Record<string, number[]>>({});
-  const placeholderTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-
   // Build overrides map from current selections and save to block
   const buildOverridesMap = useCallback(() => {
     const overrides: Record<string, string> = {};
@@ -273,19 +268,8 @@ function BlockEditForm({
         overrides[wc.word] = wc.candidates[selIdx];
       }
     });
-    // Placeholder word overrides
-    for (const tag of Object.keys(placeholderCandidates)) {
-      const words = placeholderCandidates[tag];
-      const indices = placeholderIndices[tag] || [];
-      words.forEach((wc, idx) => {
-        const selIdx = indices[idx] ?? 0;
-        if (wc.candidates[selIdx]) {
-          overrides[wc.word] = wc.candidates[selIdx];
-        }
-      });
-    }
     return Object.keys(overrides).length > 0 ? overrides : null;
-  }, [translitCandidates, selectedIndices, placeholderCandidates, placeholderIndices]);
+  }, [translitCandidates, selectedIndices]);
 
   // Save handler that includes transliteration overrides. Only actually
   // passes transliteration_overrides through when it changed — passing it
@@ -374,122 +358,28 @@ function BlockEditForm({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [block.content, block.font_id, fontLanguage, isRegionalFont]);
 
-  // Fetch transliteration candidates for placeholder values
-  useEffect(() => {
-    if (!isRegionalFont || !block.tag_config) {
-      setPlaceholderCandidates({});
-      setPlaceholderIndices({});
-      return;
-    }
-    const placeholders: Record<string, string> = {};
-    for (const [tag, cfg] of Object.entries(block.tag_config)) {
-      const ph = cfg?.placeholder;
-      if (ph && ph.trim()) placeholders[tag] = ph;
-    }
-    if (Object.keys(placeholders).length === 0) {
-      setPlaceholderCandidates({});
-      setPlaceholderIndices({});
-      return;
-    }
-    if (placeholderTimer.current) clearTimeout(placeholderTimer.current);
-    placeholderTimer.current = setTimeout(() => {
-      transliterateBatchCandidates(placeholders, fontLanguage)
-        .then((result) => {
-          setPlaceholderCandidates(result);
-          const saved = block.transliteration_overrides;
-          const newIndices: Record<string, number[]> = {};
-          for (const [tag, words] of Object.entries(result)) {
-            if (saved) {
-              newIndices[tag] = words.map((wc) => {
-                const savedVal = saved[wc.word];
-                if (savedVal) {
-                  const idx = wc.candidates.indexOf(savedVal);
-                  return idx >= 0 ? idx : 0;
-                }
-                return 0;
-              });
-            } else {
-              newIndices[tag] = new Array(words.length).fill(0);
-            }
-          }
-          setPlaceholderIndices(newIndices);
-        })
-        .catch(() => {
-          setPlaceholderCandidates({});
-          setPlaceholderIndices({});
-        });
-    }, 400);
-    return () => {
-      if (placeholderTimer.current) clearTimeout(placeholderTimer.current);
-    };
-    // Note: block.transliteration_overrides intentionally excluded — only used for initial restore
-    // Live updates go through pushOverridesToStore, not re-fetching candidates
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [block.tag_config, fontLanguage, isRegionalFont]);
-
   // Push overrides to store so VideoPreviewCanvas picks them up immediately
-  const pushOverridesToStore = useCallback((
-    nextContentIndices: number[],
-    nextPlaceholderIndices: Record<string, number[]>,
-  ) => {
+  const pushOverridesToStore = useCallback((nextContentIndices: number[]) => {
     const overrides: Record<string, string> = {};
     translitCandidates.forEach((wc, idx) => {
       const selIdx = nextContentIndices[idx] ?? 0;
       if (wc.candidates[selIdx]) overrides[wc.word] = wc.candidates[selIdx];
     });
-    for (const tag of Object.keys(placeholderCandidates)) {
-      const words = placeholderCandidates[tag];
-      const indices = nextPlaceholderIndices[tag] || [];
-      words.forEach((wc, idx) => {
-        const selIdx = indices[idx] ?? 0;
-        if (wc.candidates[selIdx]) overrides[wc.word] = wc.candidates[selIdx];
-      });
-    }
     onUpdateField("transliteration_overrides", Object.keys(overrides).length > 0 ? overrides : null);
-  }, [translitCandidates, placeholderCandidates, onUpdateField]);
+  }, [translitCandidates, onUpdateField]);
 
   const handleTranslitSelect = (wordIdx: number, candidateIdx: number) => {
     setSelectedIndices((prev) => {
       const next = [...prev];
       next[wordIdx] = candidateIdx;
-      pushOverridesToStore(next, placeholderIndices);
+      pushOverridesToStore(next);
       return next;
     });
   };
 
-  const handlePlaceholderTranslitSelect = (tag: string, wordIdx: number, candidateIdx: number) => {
-    setPlaceholderIndices((prev) => {
-      const tagIndices = [...(prev[tag] || [])];
-      tagIndices[wordIdx] = candidateIdx;
-      const next = { ...prev, [tag]: tagIndices };
-      pushOverridesToStore(selectedIndices, next);
-      return next;
-    });
-  };
-
-  const tagKeys = block.tag_config ? Object.keys(block.tag_config) : [];
-
-  const addTag = () => {
-    const existing = block.tag_config ?? {};
-    const newKey = `tag_${Object.keys(existing).length + 1}`;
-    onUpdateField("tag_config", { ...existing, [newKey]: { label: "New Tag" } });
-  };
-
-  const removeTag = (key: string) => {
-    if (!block.tag_config) return;
-    const updated = { ...block.tag_config };
-    delete updated[key];
-    onUpdateField("tag_config", Object.keys(updated).length > 0 ? updated : null);
-  };
-
-  const updateTag = (oldKey: string, newKey: string, patch: Record<string, any>) => {
-    if (!block.tag_config) return;
-    const updated = { ...block.tag_config };
-    const config = updated[oldKey] ?? {};
-    if (newKey !== oldKey) delete updated[oldKey];
-    updated[newKey] = { ...config, ...patch };
-    onUpdateField("tag_config", updated);
-  };
+  // Tag identity is now purely the literal text between `{}` in the content —
+  // no separate admin-configured key/label/placeholder.
+  const tagKeys = [...new Set(Array.from(block.content.matchAll(/\{([^{}]+)\}/g), (m) => m[1].trim()))];
 
   return (
     <div className="px-3 pb-3 space-y-1">
@@ -533,50 +423,21 @@ function BlockEditForm({
               ))}
             </div>
           )}
-          {/* Auto-detected tag placeholders */}
-          {(() => {
-            const detectedTags = Array.from(block.content.matchAll(/\{(\w+)\}/g), (m) => m[1]);
-            const unique = [...new Set(detectedTags)];
-            if (unique.length === 0) return null;
-            return (
-              <div className="mt-2 space-y-1.5">
-                {unique.map((tag) => (
-                  <div key={tag}>
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs text-ink-muted font-mono shrink-0 w-20 truncate" title={tag}>{`{${tag}}`}</span>
-                      <input
-                        type="text"
-                        value={block.tag_config?.[tag]?.placeholder ?? ""}
-                        onChange={(e) => {
-                          const existing = block.tag_config ?? {};
-                          const cfg = existing[tag] ?? {};
-                          onUpdateField("tag_config", {
-                            ...existing,
-                            [tag]: { ...cfg, placeholder: e.target.value },
-                          });
-                        }}
-                        className="input-field text-xs flex-1 text-ink-muted"
-                        placeholder={`Default for ${tag}`}
-                      />
-                    </div>
-                    {isRegionalFont && placeholderCandidates[tag]?.length > 0 && (
-                      <div className="bg-primary-50 px-2 py-1 rounded mt-0.5 ml-[5.5rem] flex flex-wrap gap-1 items-center">
-                        {placeholderCandidates[tag].map((wc, wordIdx) => (
-                          <TranslitWord
-                            key={wordIdx}
-                            word={wc}
-                            selectedIndex={placeholderIndices[tag]?.[wordIdx] ?? 0}
-                            onSelect={(idx) => handlePlaceholderTranslitSelect(tag, wordIdx, idx)}
-                          />
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                ))}
-                <p className="text-[10px] text-slate-300">Leave empty to show tag name as-is</p>
-              </div>
-            );
-          })()}
+          {/* Detected tags — identity is the literal `{...}` text itself, which
+              is also what the customer sees as the default value until they
+              type something. Nothing to configure per tag anymore. */}
+          {tagKeys.length > 0 && (
+            <div className="mt-2 flex flex-wrap gap-1.5">
+              {tagKeys.map((tag) => (
+                <span
+                  key={tag}
+                  className="text-xs text-ink-muted font-mono bg-surface-alt px-1.5 py-0.5 rounded"
+                >
+                  {`{${tag}}`}
+                </span>
+              ))}
+            </div>
+          )}
         </div>
       </CollapsibleSection>
 
@@ -795,63 +656,6 @@ function BlockEditForm({
               className="input-field text-sm w-full"
             />
           </div>
-        </div>
-      </CollapsibleSection>
-
-      <CollapsibleSection title="Advanced" defaultOpen={false}>
-        <div>
-          <div className="flex items-center justify-between mb-2">
-            <label className="text-xs text-ink-muted">Tag Config</label>
-            <button
-              type="button"
-              onClick={addTag}
-              className="text-xs text-primary-500 hover:text-primary-700 font-medium"
-            >
-              + Add Tag
-            </button>
-          </div>
-          {tagKeys.length === 0 ? (
-            <p className="text-xs text-ink-muted">No tags configured</p>
-          ) : (
-            <div className="space-y-2">
-              {tagKeys.map((key) => (
-                <div key={key} className="bg-surface-alt rounded-lg p-2 space-y-1.5">
-                  <div className="flex items-center gap-2">
-                    <input
-                      type="text"
-                      value={key}
-                      onChange={(e) =>
-                        updateTag(key, e.target.value, { label: block.tag_config?.[key]?.label ?? "" })
-                      }
-                      className="input-field text-xs flex-1 font-mono"
-                      placeholder="tag_key"
-                    />
-                    <input
-                      type="text"
-                      value={block.tag_config?.[key]?.label ?? ""}
-                      onChange={(e) => updateTag(key, key, { label: e.target.value })}
-                      className="input-field text-xs flex-1"
-                      placeholder="Label"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => removeTag(key)}
-                      className="text-red-400 hover:text-red-600 text-xs"
-                    >
-                      x
-                    </button>
-                  </div>
-                  <input
-                    type="text"
-                    value={block.tag_config?.[key]?.placeholder ?? ""}
-                    onChange={(e) => updateTag(key, key, { placeholder: e.target.value })}
-                    className="input-field text-xs w-full text-ink-muted"
-                    placeholder="Placeholder text (e.g. Rahul & Priya)"
-                  />
-                </div>
-              ))}
-            </div>
-          )}
         </div>
       </CollapsibleSection>
 
@@ -1157,7 +961,7 @@ export default function TextBlockPanel() {
 
                   {/* Block label */}
                   <span className={`truncate flex-1 text-sm ${isSelected ? "text-primary-700 font-medium" : "text-ink"}`}>
-                    {block.content.replace(/\{(\w+)\}/g, (_, t) => t) || "Empty block"}
+                    {block.content.replace(/\{([^{}]+)\}/g, (_, t) => t.trim()) || "Empty block"}
                   </span>
 
                   {/* Chevron — expand/collapse on click */}
@@ -1256,7 +1060,7 @@ export default function TextBlockPanel() {
                     className="flex items-center gap-2 px-2 py-1 rounded text-[10px] text-ink-muted hover:bg-surface-alt cursor-default"
                   >
                     <span className="font-mono">{b.start_time.toFixed(1)}–{b.end_time.toFixed(1)}s</span>
-                    <span className="truncate">{b.content.replace(/\{(\w+)\}/g, (_, t) => t)}</span>
+                    <span className="truncate">{b.content.replace(/\{([^{}]+)\}/g, (_, t) => t.trim())}</span>
                   </div>
                 ))}
             </div>

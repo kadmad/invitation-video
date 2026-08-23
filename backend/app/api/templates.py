@@ -1,5 +1,9 @@
 import hashlib
 import hmac
+import json
+import os
+import subprocess
+import tempfile
 import time
 import uuid
 
@@ -307,3 +311,52 @@ async def upload_user_image(
 
     url = storage_service.presigned_url(image_key, public_host=request.url.hostname)
     return {"image_key": image_key, "url": url}
+
+
+@router.post("/{template_id}/upload-music")
+async def upload_user_music(
+    template_id: uuid.UUID,
+    file: UploadFile,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """Customer's own audio track, to replace the template's original audio
+    in their final render. Must be at least as long as the template video."""
+    result = await db.execute(select(Template).where(Template.id == template_id))
+    template = result.scalar_one_or_none()
+    if not template:
+        raise HTTPException(status_code=404, detail="Template not found")
+
+    video_duration = template.duration_frames / template.fps
+    data = await file.read()
+    ext = os.path.splitext(file.filename or "")[1] or ".mp3"
+
+    with tempfile.NamedTemporaryFile(suffix=ext) as tmp_audio:
+        tmp_audio.write(data)
+        tmp_audio.flush()
+
+        probe_result = subprocess.run(
+            [
+                "ffprobe", "-v", "quiet", "-print_format", "json",
+                "-show_streams", "-show_format", tmp_audio.name,
+            ],
+            capture_output=True, text=True,
+        )
+        try:
+            probe_info = json.loads(probe_result.stdout)
+            duration = float(probe_info.get("format", {}).get("duration", 0))
+        except (ValueError, json.JSONDecodeError):
+            duration = 0
+
+        if duration <= 0:
+            raise HTTPException(status_code=400, detail="Couldn't read that audio file")
+        if duration < video_duration:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Audio must be at least {video_duration:.0f}s long (video length) — this file is {duration:.0f}s",
+            )
+
+    music_key = f"user_music/{user.id}/{template_id}/{uuid.uuid4()}{ext}"
+    storage_service.upload(music_key, data, content_type=file.content_type or "audio/mpeg")
+
+    return {"music_key": music_key, "duration_seconds": duration}

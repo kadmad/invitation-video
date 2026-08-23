@@ -2,24 +2,22 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Player, type PlayerRef } from "@remotion/player";
 import GenericTemplate from "@/remotion/compositions/GenericTemplate";
-import { useEditorStore } from "@/store/editorStore";
+import { useEditorStore, extractTags } from "@/store/editorStore";
 import { listFonts, getFontFileUrl } from "@/api/fonts";
 import { fetchVideoUrl } from "@/api/templates";
 import { transliterateBatch } from "@/api/transliterate";
 import type { Font, TextBlock, FormatRange } from "@/types";
 
 export default function PreviewPlayer() {
-  const { template, font, fontUrl, fieldValues, transliteratedValues, textColorOverrides, seekToTime, editorMode, blockOverrides, blockFormatOverrides, transliteratedBlockOverrides } = useEditorStore();
+  const { template, font, fontUrl, fieldValues, transliteratedValues, textColorOverrides, seekToTime, editorMode, blockOverrides, blockFormatOverrides, transliteratedBlockOverrides, musicObjectUrl, musicStartSeconds } = useEditorStore();
 
-  // Build placeholder map from tag_config
+  // The tag text itself is the default value shown until the customer types
+  // something — both here and in the final render (see FFmpegRenderer._resolve_content).
   const placeholderValues = useMemo(() => {
     if (!template) return {};
     const map: Record<string, string> = {};
-    for (const block of template.text_blocks ?? []) {
-      if (!block.tag_config) continue;
-      for (const [tag, cfg] of Object.entries(block.tag_config)) {
-        if (cfg.placeholder && !map[tag]) map[tag] = cfg.placeholder;
-      }
+    for (const tag of extractTags(template)) {
+      map[tag] = tag;
     }
     return map;
   }, [template]);
@@ -141,7 +139,7 @@ export default function PreviewPlayer() {
       if (!f || f.language === "english") continue;
 
       // Split content into alternating [static, tag, static, tag, ...] parts
-      const parts = block.content.split(/(\{\w+\})/g);
+      const parts = block.content.split(/(\{[^{}]+\})/g);
       const hasStatic = parts.some((p, i) => i % 2 === 0 && p.trim());
       if (!hasStatic) continue;
 
@@ -348,6 +346,8 @@ export default function PreviewPlayer() {
   const inputProps = useMemo(
     () => ({
       videoUrl,
+      musicUrl: musicObjectUrl,
+      musicStartSeconds,
       textBlocks: previewBlocks,
       tagValues: effectiveValues,
       fontFamilies,
@@ -364,7 +364,7 @@ export default function PreviewPlayer() {
     [
       previewBlocks, effectiveValues, fontFamilies, videoUrl, textColorOverrides, font, placeholderTags,
       template?.default_font_id, template?.width, template?.height, template?.default_text_color,
-      effectiveBlockOverrides, effectiveBlockFormatOverrides,
+      effectiveBlockOverrides, effectiveBlockFormatOverrides, musicObjectUrl, musicStartSeconds,
     ]
   );
 

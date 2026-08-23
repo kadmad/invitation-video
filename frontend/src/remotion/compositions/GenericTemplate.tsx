@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback, useMemo } from "react";
-import { AbsoluteFill, OffthreadVideo, delayRender, continueRender } from "remotion";
+import { AbsoluteFill, Audio, OffthreadVideo, delayRender, continueRender, useVideoConfig } from "remotion";
 import AnimatedText from "../components/AnimatedText";
 import AnimatedTextBlock from "../components/AnimatedTextBlock";
 import AnimatedImageBlock from "../components/AnimatedImageBlock";
@@ -10,6 +10,11 @@ interface GenericTemplateProps {
   videoUrl: string | null;
   width: number;
   height: number;
+  // Customer's own uploaded audio track, replacing the video's original
+  // audio entirely — trimmed to the composition's own duration starting at
+  // musicStartSeconds. Omit/null musicUrl to keep the video's own audio.
+  musicUrl?: string | null;
+  musicStartSeconds?: number;
   // New tag-based props
   textBlocks?: TextBlock[];
   tagValues?: Record<string, string>;
@@ -41,6 +46,8 @@ export default function GenericTemplate({
   videoUrl,
   width,
   height,
+  musicUrl,
+  musicStartSeconds,
   textBlocks,
   tagValues,
   fontFamilies,
@@ -65,6 +72,8 @@ export default function GenericTemplate({
   watermarkRotation,
   watermarkOpacity,
 }: GenericTemplateProps) {
+  const { fps } = useVideoConfig();
+
   // Use new text_blocks path if available, otherwise fall back to legacy fields
   const useBlocks = textBlocks && textBlocks.length > 0;
   const placeholderSet = useMemo(
@@ -127,8 +136,15 @@ export default function GenericTemplate({
       {videoUrl && (
         <OffthreadVideo
           src={videoUrl}
-          volume={1}
+          volume={musicUrl ? 0 : 1}
           style={{ width: "100%", height: "100%", objectFit: "cover" }}
+        />
+      )}
+      {musicUrl && (
+        <Audio
+          src={musicUrl}
+          volume={1}
+          startFrom={Math.round((musicStartSeconds ?? 0) * fps)}
         />
       )}
 

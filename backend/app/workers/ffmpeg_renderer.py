@@ -29,6 +29,9 @@ class FFmpegRenderer:
         watermark_width: float | None = None,
         watermark_rotation: float | None = None,
         watermark_opacity: float | None = None,
+        music_path: str | None = None,
+        music_start_seconds: float = 0.0,
+        video_duration_seconds: float | None = None,
     ):
         self.source_path = source_path
         self.output_path = output_path
@@ -48,6 +51,12 @@ class FFmpegRenderer:
         self.watermark_width = watermark_width if watermark_width is not None else 0.22
         self.watermark_rotation = watermark_rotation or 0.0
         self.watermark_opacity = watermark_opacity if watermark_opacity is not None else 0.85
+        # Customer's own uploaded track, replacing the source video's audio
+        # entirely — trimmed to video_duration_seconds starting at
+        # music_start_seconds. None = keep the source video's own audio.
+        self.music_path = music_path
+        self.music_start_seconds = music_start_seconds
+        self.video_duration_seconds = video_duration_seconds
 
     @staticmethod
     def _escape_drawtext(text: str) -> str:
@@ -73,10 +82,10 @@ class FFmpegRenderer:
     @staticmethod
     def _resolve_content(block: TextBlock, tag_values: dict[str, str]) -> str:
         def replacer(match):
-            tag_name = match.group(1)
-            return tag_values.get(tag_name, match.group(0))
+            tag_name = match.group(1).strip()
+            return tag_values.get(tag_name) or tag_name
 
-        return re.sub(r"\{(\w+)\}", replacer, block.content)
+        return re.sub(r"\{([^{}]+)\}", replacer, block.content)
 
     def _get_font_path(self, block: TextBlock) -> str:
         """Font priority: user override > per-block font > template default > none."""
@@ -180,25 +189,60 @@ class FFmpegRenderer:
             "-i", self.source_path,
         ]
 
+        # Inputs beyond 0 (source video) are added in this fixed order so
+        # their filter_complex indices are known ahead of time.
+        next_input_idx = 1
+        watermark_idx = None
+        music_idx = None
+
         if self.watermark_enabled and os.path.exists(LOGO_PATH):
             cmd.extend(["-i", LOGO_PATH])
+            watermark_idx = next_input_idx
+            next_input_idx += 1
+
+        if self.music_path:
+            cmd.extend(["-i", self.music_path])
+            music_idx = next_input_idx
+            next_input_idx += 1
+
+        video_parts = []
+        video_label = "0:v"
+        if filter_str:
+            video_parts.append(f"[0:v]{filter_str}[txt]")
+            video_label = "txt"
+
+        if watermark_idx is not None:
             logo_w = max(int(self.watermark_width * self.width), 1)
             overlay_x = int(self.watermark_position_x * self.width)
             overlay_y = int(self.watermark_position_y * self.height)
-
-            video_label = "0:v"
-            parts = []
-            if filter_str:
-                parts.append(f"[0:v]{filter_str}[txt]")
-                video_label = "txt"
             wm_filters = f"scale={logo_w}:-1,format=rgba,colorchannelmixer=aa={self.watermark_opacity}"
             if self.watermark_rotation:
                 angle = math.radians(self.watermark_rotation)
                 wm_filters += f",rotate={angle}:c=none:ow=rotw({angle}):oh=roth({angle})"
-            parts.append(f"[1:v]{wm_filters}[wm]")
-            parts.append(f"[{video_label}][wm]overlay={overlay_x}:{overlay_y}[outv]")
+            video_parts.append(f"[{watermark_idx}:v]{wm_filters}[wm]")
+            video_parts.append(f"[{video_label}][wm]overlay={overlay_x}:{overlay_y}[outv]")
+            video_label = "outv"
 
-            cmd.extend(["-filter_complex", ";".join(parts), "-map", "[outv]", "-map", "0:a?"])
+        audio_parts = []
+        audio_map = "0:a?"
+        audio_codec = ["-c:a", "copy"]
+        if music_idx is not None:
+            duration = self.video_duration_seconds or 0
+            # If the uploaded track ever runs out before `duration` (it
+            # shouldn't — validated at upload time), atrim just yields less
+            # audio than requested rather than erroring.
+            audio_parts.append(
+                f"[{music_idx}:a]atrim=start={self.music_start_seconds}:duration={duration},"
+                f"asetpts=PTS-STARTPTS[aout]"
+            )
+            audio_map = "[aout]"
+            audio_codec = ["-c:a", "aac"]  # re-encoding a filtered stream, can't -c:a copy
+
+        filter_complex_parts = video_parts + audio_parts
+        if filter_complex_parts:
+            cmd.extend(["-filter_complex", ";".join(filter_complex_parts)])
+            cmd.extend(["-map", f"[{video_label}]" if video_label != "0:v" else "0:v"])
+            cmd.extend(["-map", audio_map])
         elif filter_str:
             cmd.extend(["-vf", filter_str])
 
@@ -206,7 +250,7 @@ class FFmpegRenderer:
             "-c:v", "libx264",
             "-crf", str(crf),
             "-preset", preset,
-            "-c:a", "copy",
+            *audio_codec,
             self.output_path,
         ])
 

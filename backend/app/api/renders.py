@@ -52,6 +52,8 @@ async def submit_render(
         font_id=body.font_id,
         field_values=body.field_values,
         text_color_override=body.text_color_override,
+        music_key=body.music_key,
+        music_start_seconds=body.music_start_seconds,
         status="pending",
     )
     db.add(job)

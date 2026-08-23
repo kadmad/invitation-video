@@ -1,6 +1,6 @@
 import uuid
 
-from sqlalchemy import Boolean, ForeignKey, Integer, Sequence, String
+from sqlalchemy import Boolean, Float, ForeignKey, Integer, Sequence, String
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -44,6 +44,10 @@ class Payment(UUIDMixin, TimestampMixin, Base):
     block_format_overrides: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     location_url: Mapped[str | None] = mapped_column(String(1000), nullable=True)
     is_watermarked: Mapped[bool] = mapped_column(Boolean, default=False)
+    # Customer's own uploaded audio track (R2/S3 key), replacing the
+    # template's original audio in the final render. None = keep original.
+    music_key: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    music_start_seconds: Mapped[float | None] = mapped_column(Float, nullable=True)
 
     user = relationship("User")
     render_job = relationship("RenderJob")

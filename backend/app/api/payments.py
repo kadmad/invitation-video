@@ -44,8 +44,8 @@ async def create_order(
     if not template.video_key:
         raise HTTPException(status_code=400, detail="Template has no source video uploaded yet")
 
-    # Use per-template price, fallback to global default
-    amount = template.price or settings.RENDER_PRICE_PAISE
+    # Use per-template price
+    amount = template.price
     if body.is_watermarked:
         if not template.discount_amount_paise:
             raise HTTPException(status_code=400, detail="Watermark discount not available for this template")
@@ -67,6 +67,8 @@ async def create_order(
         block_format_overrides=body.block_format_overrides,
         location_url=body.location_url,
         is_watermarked=body.is_watermarked,
+        music_key=body.music_key,
+        music_start_seconds=body.music_start_seconds,
     )
     db.add(payment)
     await db.commit()
@@ -131,6 +133,8 @@ async def verify_payment(
         pdf_status="queued" if has_pdf else None,
         render_method="server" if settings.SERVER_RENDERING else "manual",
         is_watermarked=payment.is_watermarked,
+        music_key=payment.music_key,
+        music_start_seconds=payment.music_start_seconds,
     )
     db.add(job)
     await db.flush()
@@ -205,6 +209,8 @@ async def admin_render(
         status="completed" if body.skip_render else "pending",
         progress=100 if body.skip_render else 0,
         pdf_status="queued" if has_pdf else None,
+        music_key=body.music_key,
+        music_start_seconds=body.music_start_seconds,
     )
     db.add(job)
     await db.flush()
@@ -223,6 +229,8 @@ async def admin_render(
         block_format_overrides=body.block_format_overrides,
         location_url=body.location_url,
         render_job_id=job.id,
+        music_key=body.music_key,
+        music_start_seconds=body.music_start_seconds,
     )
     db.add(payment)
     await db.commit()

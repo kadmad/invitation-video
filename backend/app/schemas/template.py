@@ -25,6 +25,7 @@ class TextBlockResponse(BaseModel):
     anim_out_duration: float
     start_time: float
     end_time: float
+    rotation: float | None = None
     tag_config: dict | None
     format_ranges: list[dict] | None = None
     transliteration_overrides: dict | None = None
@@ -50,6 +51,7 @@ class ImageBlockResponse(BaseModel):
     animation_type: str
     start_time: float
     end_time: float
+    rotation: float | None = None
     placeholder_key: str | None
     is_user_uploadable: bool
 
