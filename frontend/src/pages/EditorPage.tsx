@@ -96,6 +96,8 @@ export default function EditorPage() {
   const [fonts, setFonts] = useState<Font[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [showConfirmPopup, setShowConfirmPopup] = useState(false);
+  const [phoneNumber, setPhoneNumber] = useState("");
+  const [phoneError, setPhoneError] = useState("");
   const [transliteratedLabels, setTransliteratedLabels] = useState<Record<string, string>>({});
   const [transliterationCandidates, setTransliterationCandidates] = useState<Record<string, WordCandidates[]>>({});
   const [selectedCandidateIndices, setSelectedCandidateIndices] = useState<Record<string, number[]>>({});
@@ -735,6 +737,14 @@ export default function EditorPage() {
   // Step 2: Proceed to payment (or direct render for admin)
   const handleProceedToPayment = async () => {
     if (!template) return;
+    if (!authUser?.is_admin && !authUser?.phone_number) {
+      const digits = phoneNumber.replace(/\D/g, "");
+      if (!/^[6-9]\d{9}$/.test(digits)) {
+        setPhoneError("Enter a valid 10-digit mobile number");
+        return;
+      }
+      setPhoneError("");
+    }
     setShowConfirmPopup(false);
     setSubmitting(true);
     try {
@@ -791,8 +801,18 @@ export default function EditorPage() {
         locationUrl || undefined,
         watermarkOptIn,
         musicKey,
-        musicStartSeconds
+        musicStartSeconds,
+        !authUser?.phone_number ? phoneNumber.replace(/\D/g, "") : undefined
       );
+
+      // Order succeeded, so the backend accepted (and saved) the phone
+      // number — reflect it locally now so the field never asks again for
+      // this account, without waiting on a full profile refetch.
+      if (!authUser?.phone_number && phoneNumber) {
+        useAuthStore.setState((s) => ({
+          user: s.user ? { ...s.user, phone_number: `+91${phoneNumber.replace(/\D/g, "")}` } : s.user,
+        }));
+      }
 
       const options = {
         key: order.key_id,
@@ -1403,6 +1423,33 @@ export default function EditorPage() {
                     />
                     <span className="text-sm text-ink-muted">Actually render video</span>
                   </label>
+                )}
+
+                {/* Phone number — asked once per account, only while none is
+                    on file, so order-confirmation WhatsApp has somewhere to
+                    send to. */}
+                {!authUser?.is_admin && !authUser?.phone_number && (
+                  <div className="mb-3 px-1">
+                    <label className="block text-sm text-ink-muted mb-1.5">
+                      Mobile number, for your order confirmation
+                    </label>
+                    <div className="flex items-center border border-edge rounded-xl overflow-hidden focus-within:ring-2 focus-within:ring-brand-500">
+                      <span className="px-3 py-2.5 text-sm text-ink-muted bg-surface-alt border-r border-edge">+91</span>
+                      <input
+                        type="tel"
+                        inputMode="numeric"
+                        maxLength={10}
+                        placeholder="10-digit mobile number"
+                        value={phoneNumber}
+                        onChange={(e) => {
+                          setPhoneNumber(e.target.value.replace(/\D/g, "").slice(0, 10));
+                          setPhoneError("");
+                        }}
+                        className="flex-1 min-w-0 py-2.5 px-3 text-sm text-ink bg-surface focus:outline-none"
+                      />
+                    </div>
+                    {phoneError && <p className="text-red-500 text-xs mt-1.5">{phoneError}</p>}
+                  </div>
                 )}
 
                 {/* Proceed to payment / render */}

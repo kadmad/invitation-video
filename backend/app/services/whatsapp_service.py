@@ -2,63 +2,61 @@ import httpx
 
 from app.config import settings
 
-MSG91_WHATSAPP_URL = "https://api.msg91.com/api/v5/whatsapp/whatsapp-outbound-message/bulk/"
+META_GRAPH_API_VERSION = "v25.0"
 
 
-def _msg91_whatsapp_configured() -> bool:
-    return all([
-        settings.MSG91_AUTH_KEY,
-        settings.MSG91_WHATSAPP_INTEGRATED_NUMBER,
-        settings.MSG91_WHATSAPP_TEMPLATE_NAME,
-        settings.MSG91_WHATSAPP_TEMPLATE_NAMESPACE,
-    ])
+def _meta_configured() -> bool:
+    return all([settings.META_TOKEN, settings.META_PHONE_NUMBER_ID])
 
 
-def _to_msg91_mobile(phone_number: str) -> str:
-    """MSG91 wants the bare international number, no '+' — e.g. '91XXXXXXXXXX'."""
+def _to_whatsapp_number(phone_number: str) -> str:
+    """Meta wants the bare international number, no '+' — e.g. '91XXXXXXXXXX'."""
     return phone_number.lstrip("+")
 
 
-def _send_whatsapp_template(phone_number: str, body_text: str) -> bool:
-    """Send an approved WhatsApp template message via MSG91's Business API.
-    The template must be pre-approved with a single body variable
-    (body_1) — same generic single-variable pattern the old Twilio Content
-    Template used, so this one approved template covers every notification
-    this app sends."""
-    if not _msg91_whatsapp_configured():
-        print(f"[WhatsApp] MSG91 not configured. Would send to {phone_number}: {body_text!r}")
+def _send_whatsapp_template(phone_number: str, first_name: str, order_number: str) -> bool:
+    """Send the approved "ordered" WhatsApp template via Meta's Graph API.
+    Template has 2 body variables: {{1}} first name, {{2}} order number —
+    same one template covers both the customer "render ready" notification
+    and the admin "new manual render" alert."""
+    if not _meta_configured():
+        print(
+            f"[WhatsApp] Meta not configured. Would send to {phone_number}: "
+            f"name={first_name!r} order={order_number!r}"
+        )
         return False
 
-    to_number = _to_msg91_mobile(phone_number)
+    to_number = _to_whatsapp_number(phone_number)
+    url = f"https://graph.facebook.com/{META_GRAPH_API_VERSION}/{settings.META_PHONE_NUMBER_ID}/messages"
 
     try:
         resp = httpx.post(
-            MSG91_WHATSAPP_URL,
-            headers={"authkey": settings.MSG91_AUTH_KEY, "Content-Type": "application/json"},
+            url,
+            headers={
+                "Authorization": f"Bearer {settings.META_TOKEN}",
+                "Content-Type": "application/json",
+            },
             json={
-                "integrated_number": settings.MSG91_WHATSAPP_INTEGRATED_NUMBER,
-                "content_type": "template",
-                "payload": {
-                    "messaging_product": "whatsapp",
-                    "type": "template",
-                    "template": {
-                        "name": settings.MSG91_WHATSAPP_TEMPLATE_NAME,
-                        "language": {"code": "en", "policy": "deterministic"},
-                        "namespace": settings.MSG91_WHATSAPP_TEMPLATE_NAMESPACE,
-                        "to_and_components": [
-                            {
-                                "to": [to_number],
-                                "components": {
-                                    "body_1": {"type": "text", "value": body_text},
-                                },
-                            },
-                        ],
-                    },
+                "messaging_product": "whatsapp",
+                "to": to_number,
+                "type": "template",
+                "template": {
+                    "name": settings.META_WHATSAPP_TEMPLATE_NAME,
+                    "language": {"code": settings.META_WHATSAPP_TEMPLATE_LANG},
+                    "components": [
+                        {
+                            "type": "body",
+                            "parameters": [
+                                {"type": "text", "text": first_name},
+                                {"type": "text", "text": order_number},
+                            ],
+                        },
+                    ],
                 },
             },
             timeout=10,
         )
-        if resp.status_code in (200, 202):
+        if resp.status_code == 200:
             print(f"[WhatsApp] Sent to {phone_number}: {resp.text}")
             return True
         print(f"[WhatsApp] Failed to send to {phone_number}: {resp.status_code} {resp.text}")
@@ -68,28 +66,24 @@ def _send_whatsapp_template(phone_number: str, body_text: str) -> bool:
         return False
 
 
-def send_render_ready(phone_number: str, user_name: str, render_job_id: str):
-    """Send WhatsApp message with download link when render is complete."""
-    download_url = f"{settings.APP_BASE_URL}/render/{render_job_id}"
-    body_text = (
-        f"Hey {user_name}! ✨\n\n"
-        f"Your invitation video is ready and looks amazing!\n\n"
-        f"\U0001F3AC *Download your video:*\n{download_url}\n\n"
-        f"Share it with your loved ones and make your celebration special! \U0001F389\n\n"
-        f"— {settings.APP_NAME}"
-    )
-    return _send_whatsapp_template(phone_number, body_text)
+def send_order_confirmation(phone_number: str, user_name: str, order_number: str):
+    """Notify the customer their order was placed and paid for, via the
+    "ordered" template. Fired from payments.py verify_payment on payment
+    success — this is the only notification currently wired to Meta."""
+    first_name = (user_name or "Customer").split()[0]
+    return _send_whatsapp_template(phone_number, first_name, order_number)
+
+
+def send_render_ready(phone_number: str, user_name: str, order_number: str):
+    """Paused: no approved Meta template yet for "your video is ready".
+    MSG91 is retired, so this is a no-op until a template is added."""
+    print(f"[WhatsApp] send_render_ready paused (no Meta template yet) — {phone_number}")
+    return False
 
 
 def send_new_render_request(phone_number: str, user_name: str, template_name: str, order_number: str):
-    """Alert an admin that a new order needs a manual render (SERVER_RENDERING
-    is off). Sent to every admin with a phone_number on file — best-effort,
-    a failure here must never block the payment/order flow."""
-    body_text = (
-        f"\U0001F514 New render request — {order_number}\n\n"
-        f"Customer: {user_name}\n"
-        f"Template: {template_name}\n\n"
-        f"It's in the admin panel's \"Renders Awaiting\" queue.\n\n"
-        f"— {settings.APP_NAME}"
-    )
-    return _send_whatsapp_template(phone_number, body_text)
+    """Paused: no approved Meta template yet for the admin "new manual
+    render needed" alert. MSG91 is retired, so this is a no-op until a
+    template is added."""
+    print(f"[WhatsApp] send_new_render_request paused (no Meta template yet) — {phone_number}")
+    return False

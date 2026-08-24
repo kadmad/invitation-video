@@ -25,8 +25,19 @@ export default function Navbar() {
   // just its "B" mark (see the crop-window comment below) so the sticky
   // header stays a reasonable height instead of eating scroll real estate.
   // Applies on both mobile and desktop.
+  //
+  // Two different thresholds (not one) on purpose: a single cutoff around
+  // scrollY===24 let trackpad jitter/momentum hovering near that pixel flip
+  // `scrolled` back and forth on every scroll event, retriggering the 600ms
+  // logo transition each time — visible as the header jerking/flickering
+  // between big and small right at that scroll point. The dead zone between
+  // 24 and 64 means a stray pixel or two of jitter can no longer flip state.
   useEffect(() => {
-    const onScroll = () => setScrolled(window.scrollY > 24);
+    const SHRINK_AT = 64;
+    const GROW_AT = 24;
+    const onScroll = () => {
+      setScrolled((prev) => (prev ? window.scrollY > GROW_AT : window.scrollY > SHRINK_AT));
+    };
     onScroll();
     window.addEventListener("scroll", onScroll, { passive: true });
     return () => window.removeEventListener("scroll", onScroll);

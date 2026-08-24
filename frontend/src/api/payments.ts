@@ -11,7 +11,8 @@ export async function createOrder(
   locationUrl?: string,
   isWatermarked?: boolean,
   musicKey?: string,
-  musicStartSeconds?: number
+  musicStartSeconds?: number,
+  phoneNumber?: string
 ) {
   const body: Record<string, unknown> = {
     template_id: templateId,
@@ -27,6 +28,7 @@ export async function createOrder(
     body.music_key = musicKey;
     body.music_start_seconds = musicStartSeconds ?? 0;
   }
+  if (phoneNumber) body.phone_number = phoneNumber;
   const { data } = await client.post<PaymentOrder>("/payments/create-order", body);
   return data;
 }

@@ -52,18 +52,16 @@ class Settings(BaseSettings):
     # Razorpay
     RAZORPAY_KEY_ID: str = ""
     RAZORPAY_KEY_SECRET: str = ""
-    RENDER_PRICE_PAISE: int = 9900
 
-    # MSG91 (WhatsApp order/admin notifications) — replaced Twilio: MSG91
-    # handles Indian DLT registration directly and is materially cheaper for
-    # India-only traffic, which is all this app sends.
-    MSG91_AUTH_KEY: str = ""
-    # WhatsApp (Business API — see whatsapp_service.py). integrated_number is
-    # the WhatsApp-enabled number registered to this MSG91 account. Template
-    # must be pre-approved with a single body variable (body_1).
-    MSG91_WHATSAPP_INTEGRATED_NUMBER: str = ""
-    MSG91_WHATSAPP_TEMPLATE_NAME: str = ""
-    MSG91_WHATSAPP_TEMPLATE_NAMESPACE: str = ""
+    # Meta WhatsApp Cloud API (order/admin notifications) — replaced MSG91.
+    # META_TOKEN is a System User access token from Meta Business Suite.
+    # META_PHONE_NUMBER_ID is the WABA-registered sending number's id.
+    # Template "ordered" (en_US) takes 2 body variables: {{1}} customer
+    # first name, {{2}} order number — see whatsapp_service.py.
+    META_TOKEN: str = ""
+    META_PHONE_NUMBER_ID: str = ""
+    META_WHATSAPP_TEMPLATE_NAME: str = "ordered"
+    META_WHATSAPP_TEMPLATE_LANG: str = "en_US"
     APP_BASE_URL: str = "http://localhost:5173"  # frontend URL for download links
 
     # App

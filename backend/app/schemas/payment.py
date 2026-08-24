@@ -16,6 +16,9 @@ class CreateOrderRequest(BaseModel):
     is_watermarked: bool = False
     music_key: str | None = None
     music_start_seconds: float | None = None
+    # Only required the first time — once a user has a phone_number on file,
+    # the frontend stops asking and this is omitted on later orders.
+    phone_number: str | None = None
 
 
 class CreateOrderResponse(BaseModel):

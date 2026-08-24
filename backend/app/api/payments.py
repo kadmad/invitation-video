@@ -1,3 +1,4 @@
+import re
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -30,6 +31,18 @@ def _format_order_number(n: int) -> str:
     return f"INV-{n:06d}"
 
 
+INDIAN_MOBILE_PATTERN = re.compile(r"^[6-9]\d{9}$")
+
+
+def _normalize_phone_number(raw: str) -> str:
+    digits = re.sub(r"\D", "", raw)
+    if digits.startswith("91") and len(digits) == 12:
+        digits = digits[2:]
+    if not INDIAN_MOBILE_PATTERN.match(digits):
+        raise HTTPException(status_code=400, detail="Enter a valid 10-digit mobile number")
+    return f"+91{digits}"
+
+
 @router.post("/create-order", response_model=CreateOrderResponse)
 async def create_order(
     body: CreateOrderRequest,
@@ -43,6 +56,18 @@ async def create_order(
         raise HTTPException(status_code=404, detail="Template not found")
     if not template.video_key:
         raise HTTPException(status_code=400, detail="Template has no source video uploaded yet")
+
+    # Phone number is collected once, at checkout, so order-confirmation
+    # WhatsApp has somewhere to send to — asked only while the account has
+    # none on file; never overwritten once set.
+    if not user.phone_number:
+        if not body.phone_number:
+            raise HTTPException(status_code=400, detail="Phone number is required")
+        normalized_phone = _normalize_phone_number(body.phone_number)
+        existing = await db.execute(select(User).where(User.phone_number == normalized_phone))
+        if existing.scalar_one_or_none():
+            raise HTTPException(status_code=400, detail="This phone number is already linked to another account")
+        user.phone_number = normalized_phone
 
     # Use per-template price
     amount = template.price
@@ -159,13 +184,20 @@ async def verify_payment(
     job.celery_task_id = task.id
     await db.commit()
 
+    order_number = _format_order_number(payment.order_number) if payment.order_number else str(payment.id)
+
+    if user.phone_number:
+        try:
+            whatsapp_service.send_order_confirmation(user.phone_number, user.full_name or "Customer", order_number)
+        except Exception:
+            pass
+
     if not settings.SERVER_RENDERING:
         # Manual-render mode: still alert every admin with a phone number on
         # file as a heads-up (e.g. to prompt them to bring a worker online
         # if none is currently connected) — the render above proceeds on
         # its own regardless. Never let a notification failure block the
         # paid order from completing.
-        order_number = _format_order_number(payment.order_number) if payment.order_number else str(payment.id)
         admins_result = await db.execute(
             select(User).where(User.is_admin == True, User.phone_number.isnot(None))  # noqa: E712
         )

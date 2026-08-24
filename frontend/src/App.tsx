@@ -46,10 +46,20 @@ function RouteFallback() {
   return <div className="py-20 text-center text-ink-muted">Loading...</div>;
 }
 
+/** Gates customer-facing pages behind login. Instead of bouncing an
+ *  unauthenticated visitor to "/", it opens the login modal in place and
+ *  stays put — a successful login just re-renders this with a token, so the
+ *  visitor lands exactly where they meant to go. Only closing the modal
+ *  without logging in sends them home. */
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
-  const { token, loading } = useAuthStore();
+  const { token, loading, showAuthModal, openAuthModal } = useAuthStore();
+
+  useEffect(() => {
+    if (!loading && !token) openAuthModal();
+  }, [loading, token, openAuthModal]);
+
   if (loading) return <div className="p-8 text-center">Loading...</div>;
-  if (!token) return <Navigate to="/" replace />;
+  if (!token) return showAuthModal ? null : <Navigate to="/" replace />;
   return <>{children}</>;
 }
 
