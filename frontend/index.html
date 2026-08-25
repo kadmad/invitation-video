@@ -5,7 +5,10 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#4f6ef7" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <link rel="preload" as="image" href="/logo.webp" type="image/webp" />
+    <!-- The navbar logo, not the 1200x777 og:image master (logo.png/logo.webp,
+         used only for social share meta below) — preloading the master here
+         wasted bytes the navbar never actually requests. -->
+    <link rel="preload" as="image" href="/logo-nav.webp" type="image/webp" />
 
     <!-- Warms the templates API call in parallel with JS download/parse instead
          of after it: without this, the hero image (the LCP element) doesn't

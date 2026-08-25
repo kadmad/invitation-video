@@ -71,7 +71,7 @@ export default function Navbar() {
               }}
             >
               <img
-                src="/logo.png"
+                src="/logo-nav.webp"
                 alt="Bring My Matter"
                 draggable={false}
                 style={{
@@ -98,7 +98,7 @@ export default function Navbar() {
               }}
             >
               <img
-                src="/logo.png"
+                src="/logo-nav.webp"
                 alt="Bring My Matter"
                 draggable={false}
                 style={{

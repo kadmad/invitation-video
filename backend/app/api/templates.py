@@ -258,7 +258,11 @@ async def get_thumbnail(
         content=data,
         media_type="image/webp",
         headers={
-            "Cache-Control": "public, max-age=86400",
+            # 7d, not 1d: PageSpeed flagged these as the dominant contributor
+            # to "use efficient cache lifetimes" savings — thumbnails rarely
+            # change once a template is published, so repeat visitors were
+            # re-downloading them daily for no reason.
+            "Cache-Control": "public, max-age=604800",
             "Access-Control-Allow-Origin": "*",
         },
     )
