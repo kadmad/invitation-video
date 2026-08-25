@@ -46,7 +46,10 @@ function PhoneMockup({
     let cancelled = false;
     getTemplateVideoSrc(template.id)
       .then((cached) => {
-        if (!cancelled) setVideoSrc(cached.url);
+        // No admin-reviewed preview yet means `url` is the raw source
+        // upload — arbitrary size, not safe to autoplay on the homepage.
+        // Stay on the static thumbnail for this template instead.
+        if (!cancelled && cached.hasPreview) setVideoSrc(cached.url);
       })
       .catch(() => {});
     return () => {

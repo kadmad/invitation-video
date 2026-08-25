@@ -43,9 +43,12 @@ function TemplateCard({
     const observer = new IntersectionObserver(
       ([entry]) => {
         if (entry.isIntersecting) {
-          // Prefetch token in background
+          // Prefetch token in background. No admin-reviewed preview yet
+          // means `url` is the raw source upload — arbitrary size, not
+          // safe to autoplay/preview in a card. Skip it; the static
+          // thumbnail stays put until a preview exists.
           getVideoUrl(t.id).then((cached) => {
-            setVideoSrc(cached.url);
+            if (cached.hasPreview) setVideoSrc(cached.url);
             if (cached.previewStatus) setPreviewStatus(cached.previewStatus);
           }).catch(() => {});
           observer.disconnect();
@@ -66,7 +69,9 @@ function TemplateCard({
     const interval = setInterval(async () => {
       try {
         const cached = await getVideoUrl(t.id, true);
-        setVideoSrc(cached.url);
+        // Raw source upload — not safe to preview until an actual preview
+        // render exists. See the intersection-observer prefetch above.
+        if (cached.hasPreview) setVideoSrc(cached.url);
         if (cached.previewStatus !== undefined) setPreviewStatus(cached.previewStatus);
       } catch { /* ignore */ }
     }, 2500);
@@ -88,7 +93,9 @@ function TemplateCard({
     try {
       const cached = await getVideoUrl(t.id, previewStatus === "processing");
       if (!hoveredRef.current) return;
-      setVideoSrc(cached.url);
+      // Raw source upload — not safe to preview until an actual preview
+      // render exists. See the intersection-observer prefetch above.
+      if (cached.hasPreview) setVideoSrc(cached.url);
       if (cached.previewStatus !== undefined) setPreviewStatus(cached.previewStatus);
     } catch { /* ignore */ }
   }, [t.id, t.video_key, videoSrc, videoReady, previewStatus]);

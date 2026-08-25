@@ -37,7 +37,14 @@ function CarouselTemplateCard({
     const observer = new IntersectionObserver(
       ([entry]) => {
         if (entry.isIntersecting) {
-          getVideoUrl(t.id).then((cached) => setVideoSrc(cached.url)).catch(() => {});
+          // No admin-reviewed preview yet means the URL is the raw source
+          // upload — arbitrary size, not safe to autoplay in a card loop.
+          // Stay on the static thumbnail for this template instead.
+          getVideoUrl(t.id)
+            .then((cached) => {
+              if (cached.hasPreview) setVideoSrc(cached.url);
+            })
+            .catch(() => {});
           observer.disconnect();
         }
       },

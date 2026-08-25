@@ -6,6 +6,13 @@ export interface CachedTemplateVideo {
   url: string;
   expiresAt: number;
   previewStatus?: string | null;
+  /** False when no admin-reviewed preview render exists yet, so `url` falls
+   *  back to the raw uploaded source video. Callers that autoplay a muted
+   *  background loop (landing hero, carousels) MUST check this before
+   *  rendering a <video> — a raw source upload is an arbitrary-size render
+   *  input, not something sized/compressed for public streaming, and has
+   *  been seen at 18MB+ for a short clip. */
+  hasPreview: boolean;
 }
 
 const tokenCache = new Map<string, CachedTemplateVideo>();
@@ -44,6 +51,7 @@ export async function getTemplateVideoSrc(templateId: string, forceRefresh = fal
       url,
       expiresAt: expires_at,
       previewStatus: preview_status,
+      hasPreview: Boolean(has_preview),
     };
     tokenCache.set(templateId, entry);
     inflight.delete(templateId);
