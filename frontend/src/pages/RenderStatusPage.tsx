@@ -89,8 +89,10 @@ export default function RenderStatusPage() {
     navigate(`/editor/${job.template_id}?editRender=${job.id}`);
   };
 
+  const watchUrl = id ? `${window.location.origin}/watch/${id}` : "";
+
   const handleCopyLink = async () => {
-    await navigator.clipboard.writeText(window.location.href);
+    await navigator.clipboard.writeText(watchUrl);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
@@ -374,7 +376,7 @@ export default function RenderStatusPage() {
             {/* Share Buttons */}
             <div className="flex gap-3">
               <a
-                href="https://wa.me/?text=Check out my video invitation!"
+                href={`https://wa.me/?text=${encodeURIComponent(`Check out my video invitation!\n${watchUrl}`)}`}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="flex-1 flex items-center justify-center gap-2 rounded-xl border border-edge py-2.5 text-sm font-medium text-ink hover:bg-surface-alt transition-colors"

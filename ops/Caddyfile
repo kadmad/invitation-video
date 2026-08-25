@@ -36,6 +36,18 @@
         reverse_proxy backend:8000
     }
 
+    # Same deal for /watch/{id} — the completed-render share page linked from
+    # the Copy Link / WhatsApp buttons. Bots get the server-rendered card
+    # (app/api/seo_render.py) with the template thumbnail; real visitors get
+    # the SPA video player.
+    @watchBot {
+        path /watch/*
+        header_regexp User-Agent (?i)(bot|facebookexternalhit|whatsapp|telegrambot|slackbot|discordbot|linkedinbot|twitterbot|pinterest|embedly|quora|redditbot|vkshare|skypeuripreview|applebot|w3c_validator)
+    }
+    handle @watchBot {
+        reverse_proxy backend:8000
+    }
+
     handle {
         reverse_proxy frontend:80
     }

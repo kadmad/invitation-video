@@ -21,6 +21,7 @@ const TemplateBrowsePage = lazy(() => import("@/pages/TemplateBrowsePage"));
 const EditorPage = lazy(() => import("@/pages/EditorPage"));
 const DashboardPage = lazy(() => import("@/pages/DashboardPage"));
 const RenderStatusPage = lazy(() => import("@/pages/RenderStatusPage"));
+const WatchPage = lazy(() => import("@/pages/WatchPage"));
 const MyOrdersPage = lazy(() => import("@/pages/MyOrdersPage"));
 const InvoicePage = lazy(() => import("@/pages/InvoicePage"));
 const MyCustomizationsPage = lazy(() => import("@/pages/MyCustomizationsPage"));
@@ -118,6 +119,7 @@ export default function App() {
           <Route path="/" element={<LandingPage />} />
           <Route path="/templates" element={<TemplateBrowsePage />} />
           <Route path="/editor/:slug" element={<EditorPage />} />
+          <Route path="/watch/:id" element={<WatchPage />} />
           <Route path="/terms" element={<TermsPage />} />
           <Route path="/privacy" element={<PrivacyPage />} />
           <Route path="/refund" element={<RefundPage />} />

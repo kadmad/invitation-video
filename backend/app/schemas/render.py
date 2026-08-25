@@ -43,6 +43,18 @@ class RenderResponse(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class RenderPublicResponse(BaseModel):
+    """Minimal, unauthenticated view of a completed render — powers the public
+    /watch/{id} share page. Deliberately excludes field_values, user info, and
+    anything about non-completed jobs, since this is reachable by ID alone."""
+    id: uuid.UUID
+    template_name: str | None = None
+    video_url: str
+    thumbnail_url: str | None = None
+
+    model_config = {"from_attributes": True}
+
+
 class RenderUpdate(BaseModel):
     """User-editable fields for a manual render still in "pending" status —
     same shape as what's captured at order time, just PATCHable afterward."""

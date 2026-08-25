@@ -6,11 +6,12 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.config import settings
 from app.dependencies import get_current_user, get_db
 from app.models.render_job import RenderJob
 from app.models.template import Template
 from app.models.user import User
-from app.schemas.render import RenderCreate, RenderResponse, RenderUpdate
+from app.schemas.render import RenderCreate, RenderPublicResponse, RenderResponse, RenderUpdate
 from app.services.storage_service import storage_service
 from app.workers.tasks import render_video_task
 
@@ -140,6 +141,39 @@ async def update_render(
     response.can_edit = job.status == "pending"
     response.typical_turnaround_hours = await _typical_manual_turnaround_hours(db)
     return response
+
+
+@router.get("/{render_id}/public", response_model=RenderPublicResponse)
+async def get_render_public(
+    render_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+):
+    """Unauthenticated summary of a completed render — powers the public
+    /watch/{id} share page used by the Copy Link / WhatsApp share buttons.
+    Points straight at the existing CDN video (no re-upload, no extra R2
+    cost) and 404s for anything not completed so in-progress or failed jobs
+    can't be probed just by guessing an ID."""
+    result = await db.execute(
+        select(RenderJob)
+        .where(RenderJob.id == render_id, RenderJob.status == "completed")
+        .options(selectinload(RenderJob.template))
+    )
+    job = result.scalar_one_or_none()
+    if not job or not job.output_key:
+        raise HTTPException(status_code=404, detail="Video not available")
+
+    base = settings.APP_BASE_URL.rstrip("/")
+    thumbnail_url = (
+        f"{base}/api/templates/{job.template.slug}/thumbnail"
+        if job.template and job.template.thumbnail_key
+        else None
+    )
+    return RenderPublicResponse(
+        id=job.id,
+        template_name=job.template.name if job.template else None,
+        video_url=storage_service.public_url(job.output_key),
+        thumbnail_url=thumbnail_url,
+    )
 
 
 @router.get("/{render_id}/download")

@@ -1,6 +1,21 @@
 import client from "./client";
 import type { RenderJob } from "@/types";
 
+export interface RenderPublic {
+  id: string;
+  template_name: string | null;
+  video_url: string;
+  thumbnail_url: string | null;
+}
+
+/** Unauthenticated summary of a completed render — backs the public
+ * /watch/:id share page (Copy Link / WhatsApp). 404s until the render is
+ * actually done. */
+export async function getPublicRender(renderId: string) {
+  const { data } = await client.get<RenderPublic>(`/renders/${renderId}/public`);
+  return data;
+}
+
 export async function submitRender(
   templateId: string,
   fontId: string,

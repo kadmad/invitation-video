@@ -1,13 +1,16 @@
 import json
+import uuid
 from html import escape
 
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import HTMLResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.config import settings
 from app.dependencies import get_db
+from app.models.render_job import RenderJob
 from app.models.template import Template
 
 router = APIRouter()
@@ -149,5 +152,79 @@ async def render_editor_page_for_bots(slug: str, request: Request, db: AsyncSess
             body=body,
             noindex=is_preview,
             json_ld=json_ld,
+        )
+    )
+
+
+@router.get("/watch/{render_id}", response_class=HTMLResponse)
+async def render_watch_page_for_bots(render_id: str, db: AsyncSession = Depends(get_db)):
+    """Server-rendered stand-in for /watch/{id}, for crawlers/social-link bots
+    only — same reasoning as render_editor_page_for_bots above. A customer's
+    "Share via WhatsApp" / "Copy Link" now point at /watch/{render_id}
+    (RenderStatusPage.tsx); without this, that link unfurled as a bare URL
+    with no title or image since the real page is a client-rendered SPA.
+    Always noindex — these are private, per-order pages, not content meant to
+    be discovered/ranked, just previewed nicely when shared."""
+    base = _base_url()
+    canonical = f"{base}/watch/{render_id}"
+    not_found_body = "<h1>Video not available</h1><p>This invitation video link is unavailable.</p>"
+
+    try:
+        parsed_id = uuid.UUID(render_id)
+    except ValueError:
+        return HTMLResponse(
+            _page(
+                title=f"Video not found | {SITE_NAME}",
+                description="This invitation video link is unavailable.",
+                canonical=canonical,
+                image=f"{base}/logo.png",
+                image_alt=SITE_NAME,
+                body=not_found_body,
+                noindex=True,
+            ),
+            status_code=404,
+        )
+
+    result = await db.execute(
+        select(RenderJob)
+        .where(RenderJob.id == parsed_id, RenderJob.status == "completed")
+        .options(selectinload(RenderJob.template))
+    )
+    job = result.scalar_one_or_none()
+
+    if job is None or not job.output_key:
+        return HTMLResponse(
+            _page(
+                title=f"Video not found | {SITE_NAME}",
+                description="This invitation video link is unavailable.",
+                canonical=canonical,
+                image=f"{base}/logo.png",
+                image_alt=SITE_NAME,
+                body=not_found_body,
+                noindex=True,
+            ),
+            status_code=404,
+        )
+
+    template = job.template
+    title = f"Watch our Invitation Video | {SITE_NAME}" if not template else f"Watch our {template.name} Invitation | {SITE_NAME}"
+    description = "Tap to watch the video invitation."
+    image = (
+        f"{base}/api/templates/{template.slug}/thumbnail"
+        if template and template.thumbnail_key
+        else f"{base}/logo.png"
+    )
+    image_alt = f"{template.name} invitation video" if template else SITE_NAME
+    body = f"<h1>{escape(title)}</h1><p>{escape(description)}</p><img src=\"{escape(image)}\" alt=\"{escape(image_alt)}\" />"
+
+    return HTMLResponse(
+        _page(
+            title=title,
+            description=description,
+            canonical=canonical,
+            image=image,
+            image_alt=image_alt,
+            body=body,
+            noindex=True,
         )
     )
