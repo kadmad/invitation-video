@@ -1,0 +1,17 @@
+# Bring My Matter
+
+> Online video invitation maker for Indian celebrations. Pick a preset template, personalise names/date/venue in English, Hindi or Gujarati, and download an HD video invitation plus a matching PDF card in minutes — no design skills or software needed.
+
+Bring My Matter is a template-driven editor: every template is already designed and animated, so customers only fill in their own details. Templates cover weddings, engagements, birthdays, housewarmings, baby showers and other celebrations, each in English, Hindi and Gujarati. Output is a shareable HD MP4 video (built for WhatsApp/Instagram sharing) and, where the template supports it, a printable PDF card.
+
+## Pages
+
+- [Home](https://bringmymatter.com/): Product overview, how it works, FAQ.
+- [Browse templates](https://bringmymatter.com/templates): Full catalogue of video invitation templates by occasion.
+- [Terms of service](https://bringmymatter.com/terms)
+- [Privacy policy](https://bringmymatter.com/privacy)
+- [Refund policy](https://bringmymatter.com/refund)
+
+## Templates
+
+Each published template has its own page at `/editor/{slug}` with its own name, description and preview image. The full, current list is machine-readable at [sitemap.xml](https://bringmymatter.com/sitemap.xml).
