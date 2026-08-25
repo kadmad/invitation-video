@@ -54,7 +54,7 @@ async function ensureBundle() {
 }
 
 async function doRender(id, params) {
-  const { compositionId, durationInFrames, fps, width, height, inputProps } = params;
+  const { compositionId, durationInFrames, fps, width, height, inputProps, crf } = params;
 
   try {
     const bundled = await ensureBundle();
@@ -97,6 +97,13 @@ async function doRender(id, params) {
       },
       offthreadVideoImageFormat: "jpeg",
       jpegQuality: 90,
+      // Omitted for customer renders — they keep Remotion's near-lossless
+      // default (CRF 18), which is what someone is paying for. Only the
+      // template preview render passes a value, since that one autoplays as
+      // a muted background loop in a ~290px card and was coming out LARGER
+      // than the source it was re-encoding (15-18MB), which is exactly the
+      // payload problem previews exist to avoid.
+      ...(crf ? { crf } : {}),
       enableMultiProcessOnLinux: false,
       ffmpegOverride: ({ args }) => {
         const idx = args.indexOf("medium");
@@ -138,6 +145,7 @@ app.post("/render", async (req, res) => {
     height,
     inputProps,
     renderId,
+    crf,
   } = req.body;
 
   const sync = req.query.sync === "true";
@@ -169,7 +177,7 @@ app.post("/render", async (req, res) => {
   activeJobs++;
 
   if (sync) {
-    await doRender(id, { compositionId, durationInFrames, fps, width, height, inputProps });
+    await doRender(id, { compositionId, durationInFrames, fps, width, height, inputProps, crf });
     const job = renderJobs.get(id);
     if (!job || job.status === "failed") {
       return res.status(500).json({ error: job?.error || "Render failed" });
@@ -186,7 +194,7 @@ app.post("/render", async (req, res) => {
     });
   } else {
     res.json({ renderId: id, status: "rendering" });
-    doRender(id, { compositionId, durationInFrames, fps, width, height, inputProps });
+    doRender(id, { compositionId, durationInFrames, fps, width, height, inputProps, crf });
   }
 });
 

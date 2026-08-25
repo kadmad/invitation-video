@@ -508,6 +508,28 @@ def render_video_task(self, job_id: str):
             raise
 
 
+# Template preview render output settings. The preview is a muted background
+# loop in a card roughly 290px wide, never a deliverable — 540p is still 2x
+# retina there, and CRF 28 is a normal web streaming quality. Customer renders
+# do not use these; they keep full template dimensions and Remotion's default.
+_PREVIEW_MAX_EDGE = 960
+_PREVIEW_CRF = 28
+
+
+def _preview_dimensions(width: int, height: int) -> tuple[int, int]:
+    """Scale template dimensions down for the preview render, preserving
+    aspect ratio and never upscaling. Caps the longest edge rather than the
+    height alone, so a landscape template doesn't come out far larger than a
+    portrait one. Both values are forced even — h264 cannot encode odd
+    dimensions."""
+    longest = max(width, height)
+    scale = min(1.0, _PREVIEW_MAX_EDGE / longest) if longest else 1.0
+    return (
+        max(2, int(width * scale) // 2 * 2),
+        max(2, int(height * scale) // 2 * 2),
+    )
+
+
 @celery_app.task(bind=True, name="render_preview")
 def render_preview_task(self, template_id: str):
     """Render preview video via Remotion SSR — pixel-perfect match with admin preview."""
@@ -604,12 +626,24 @@ def render_preview_task(self, template_id: str):
         if template.default_font_id and str(template.default_font_id) in font_families:
             default_font_family = font_families[str(template.default_font_id)]
 
+        # Downscale the preview for web streaming. Unlike a paid customer
+        # render (full size, Remotion's near-lossless default CRF), this file
+        # only ever autoplays as a muted background loop in a ~290px card, so
+        # rendering it at 1080p/CRF 18 produced a preview BIGGER than the
+        # source it re-encodes (15-18MB observed) — the exact payload problem
+        # previews exist to avoid. Every text/image block is positioned and
+        # sized as a ratio of the width/height passed in inputProps (see
+        # AnimatedText.tsx), so those must be scaled in lockstep with the
+        # canvas or the layout renders oversized. Dimensions are forced even,
+        # which h264 requires.
+        preview_width, preview_height = _preview_dimensions(template.width, template.height)
+
         # Call Remotion renderer service
         renderer_url = os.environ.get("RENDERER_URL", "http://renderer:3100")
         input_props = {
             "videoUrl": video_url,
-            "width": template.width,
-            "height": template.height,
+            "width": preview_width,
+            "height": preview_height,
             "textBlocks": blocks_json,
             "tagValues": tag_values,
             "fontFamilies": font_families,
@@ -626,8 +660,9 @@ def render_preview_task(self, template_id: str):
                     "compositionId": "GenericTemplate",
                     "durationInFrames": template.duration_frames,
                     "fps": template.fps,
-                    "width": template.width,
-                    "height": template.height,
+                    "width": preview_width,
+                    "height": preview_height,
+                    "crf": _PREVIEW_CRF,
                     "inputProps": input_props,
                     "renderId": render_id,
                 },
