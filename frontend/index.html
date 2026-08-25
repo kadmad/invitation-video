@@ -129,8 +129,12 @@
   </head>
   <body>
     <div id="root"></div>
-    <!-- defer: only needed at checkout, shouldn't block initial HTML parse/paint -->
-    <script src="https://checkout.razorpay.com/v1/checkout.js" defer></script>
+    <!-- Razorpay's checkout.js is now loaded on demand (src/lib/razorpay.ts)
+         right before checkout actually opens, not here: the SDK
+         self-initialises on load and fires its own network requests (config
+         + a risk-detection bundle), which every anonymous landing visitor
+         was paying for even though only one payment click per session ever
+         needs it. -->
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

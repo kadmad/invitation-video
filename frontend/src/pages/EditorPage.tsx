@@ -20,6 +20,7 @@ import PreviewPlayer from "@/components/editor/PreviewPlayer";
 import WatermarkPreviewPopup from "@/components/editor/WatermarkPreviewPopup";
 import PageTransition from "@/components/common/PageTransition";
 import RichTextEditor from "@/components/admin/RichTextEditor";
+import { loadRazorpayCheckout } from "@/lib/razorpay";
 
 /** Convert snake_case tag to human-readable label. */
 function humanizeTag(tag: string): string {
@@ -737,6 +738,10 @@ export default function EditorPage() {
   // Step 2: Proceed to payment (or direct render for admin)
   const handleProceedToPayment = async () => {
     if (!template) return;
+    // Kicked off in parallel with order creation below (not awaited yet) so
+    // loading the SDK on demand here, instead of unconditionally on every
+    // page via index.html, doesn't add serial latency to checkout.
+    const razorpayReady = loadRazorpayCheckout();
     if (!authUser?.is_admin && !authUser?.phone_number) {
       const digits = phoneNumber.replace(/\D/g, "");
       if (!/^[6-9]\d{9}$/.test(digits)) {
@@ -854,6 +859,7 @@ export default function EditorPage() {
         },
       };
 
+      await razorpayReady;
       const rzp = new window.Razorpay(options);
       rzp.open();
     } catch (err: any) {

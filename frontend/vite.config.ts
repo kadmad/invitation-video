@@ -10,30 +10,31 @@ export default defineConfig({
     },
   },
   build: {
-    // Vite's default modulepreload injection walks the FULL import graph
-    // reachable from the entry, including chunks only ever reached through
-    // a React.lazy()/dynamic import() — so vendor-remotion (136 kB, editor-
-    // only) and vendor-moveable (238 kB, admin-only) were being eagerly
-    // <link rel="modulepreload">'d in index.html and downloaded/parsed on
-    // every landing-page visit, hurting FCP/TBT for anonymous mobile
-    // traffic that never opens the editor or admin. Strip them from every
-    // entry's preload list; App.tsx's lazy() already fetches them on demand
-    // when those routes are actually visited.
-    modulePreload: {
-      resolveDependencies: (_filename, deps) =>
-        deps.filter((dep) => !dep.includes("vendor-remotion") && !dep.includes("vendor-moveable")),
-    },
     // Route-level code splitting lives in App.tsx (React.lazy). This adds
     // vendor splitting on top so the rarely-changing framework code sits in
     // its own long-cached chunk instead of being invalidated by every app
-    // edit. Remotion/moveable are named explicitly because they're huge and
-    // only used by the editor and admin routes respectively.
+    // edit.
+    //
+    // Remotion and react-moveable are deliberately NOT force-grouped into
+    // their own named vendor chunks here (they previously were). Forcing
+    // Rollup to bucket a whole package by name pulls that package's entire
+    // internal dependency subtree into the bucket too — including any
+    // low-level helper module that some other, unrelated eager import also
+    // happens to resolve to. When that happened, Rollup had no choice but
+    // to add a genuine static `import` of the whole vendor-remotion chunk
+    // into the main entry chunk to bind that one shared helper — so the
+    // 136 kB editor-only Remotion bundle was downloading and executing on
+    // every landing-page visit, invisibly, regardless of App.tsx's
+    // React.lazy() boundary or any <link rel="modulepreload"> hint. Letting
+    // Rollup's default automatic chunking handle these two packages instead
+    // still code-splits them into EditorPage's / the admin routes' own
+    // on-demand chunks (React.lazy() still gates when those chunks are
+    // fetched) — it just no longer force-merges their whole dependency
+    // subtree into one chunk that a shared helper can drag into main.
     rollupOptions: {
       output: {
         manualChunks: {
           "vendor-react": ["react", "react-dom", "react-router-dom"],
-          "vendor-remotion": ["remotion", "@remotion/player"],
-          "vendor-moveable": ["react-moveable"],
         },
       },
     },
