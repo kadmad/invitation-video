@@ -3,7 +3,6 @@ import { Link } from "react-router-dom";
 import { listTemplates } from "@/api/templates";
 import { listCategories } from "@/api/categories";
 import PageTransition from "@/components/common/PageTransition";
-import TemplateCarousel from "@/components/common/TemplateCarousel";
 import { DUMMY_TEMPLATES } from "@/lib/dummyTemplates";
 import { useSeo } from "@/lib/seo";
 import { API_URL } from "@/api/client";
@@ -437,23 +436,19 @@ export default function TemplateBrowsePage() {
         <p className="text-ink-muted text-center py-12">No templates found</p>
       ) : (
         <>
-          {/* Mobile: swipeable carousel, every template, no pagination */}
-          <div className="-mx-4 sm:hidden">
-            <TemplateCarousel templates={displayTemplates} categories={categories} />
+          {/* Same tiled grid at every breakpoint — 2 columns on mobile, up to
+              4 on desktop. Used to swap to a single-card swipeable carousel
+              below sm:, which read as an odd, cramped mismatch with the rest
+              of the site's browsing UX on a phone. */}
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4 sm:gap-5">
+            {paginated.map((t, i) => {
+              const category = categories.find((c) => c.id === t.category_id);
+              return (
+                <TemplateCard key={t.id} template={t} category={category} index={i} />
+              );
+            })}
           </div>
-
-          {/* Tablet/desktop: paginated grid */}
-          <div className="hidden sm:block">
-            <div className="grid sm:grid-cols-3 lg:grid-cols-4 gap-5">
-              {paginated.map((t, i) => {
-                const category = categories.find((c) => c.id === t.category_id);
-                return (
-                  <TemplateCard key={t.id} template={t} category={category} index={i} />
-                );
-              })}
-            </div>
-            <Pagination page={page} totalPages={totalPages} onPageChange={setPage} />
-          </div>
+          <Pagination page={page} totalPages={totalPages} onPageChange={setPage} />
         </>
       )}
     </PageTransition>

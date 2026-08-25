@@ -114,7 +114,9 @@ function CarouselTemplateCard({
       <div className="relative aspect-[9/16] bg-surface-alt overflow-hidden">
         {t.thumbnail_key ? (
           <img
-            src={`${BASE_URL}/templates/${t.slug}/thumbnail`}
+            // Cards are a fixed 260px wide regardless of breakpoint — ?size=sm
+            // serves a 520px-wide variant instead of the 720px master.
+            src={`${BASE_URL}/templates/${t.slug}/thumbnail?size=sm`}
             alt={t.name}
             loading="lazy"
             draggable={false}

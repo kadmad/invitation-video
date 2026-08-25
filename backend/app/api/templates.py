@@ -6,10 +6,12 @@ import subprocess
 import tempfile
 import time
 import uuid
+from io import BytesIO
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, UploadFile, status
 from fastapi.responses import RedirectResponse, Response, StreamingResponse
+from PIL import Image
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -241,9 +243,33 @@ async def stream_preview_file(
     return await _stream_from_storage(request, template.preview_key)
 
 
+_THUMBNAIL_SM_WIDTH = 520  # ~2x the widest small-display use (carousel cards, 260px)
+
+
+def _resize_thumbnail_sm(data: bytes) -> bytes:
+    """Downscale a template thumbnail to _THUMBNAIL_SM_WIDTH for the small,
+    decorative contexts (landing hero, carousels) that never display it any
+    larger — the stored master is sized for the /templates browse grid and
+    og:image/social-share use, where mobile single-column cards and link
+    previews genuinely want the full resolution. Falls back to the original
+    bytes on any decode failure rather than 500ing a thumbnail request."""
+    try:
+        img = Image.open(BytesIO(data))
+        if img.width <= _THUMBNAIL_SM_WIDTH:
+            return data
+        height = round(img.height * _THUMBNAIL_SM_WIDTH / img.width)
+        img = img.convert("RGB").resize((_THUMBNAIL_SM_WIDTH, height), Image.LANCZOS)
+        out = BytesIO()
+        img.save(out, format="WEBP", quality=78, method=6)
+        return out.getvalue()
+    except Exception:
+        return data
+
+
 @router.get("/{slug}/thumbnail")
 async def get_thumbnail(
     slug: str,
+    size: str | None = Query(None, description="'sm' for a small resized variant"),
     db: AsyncSession = Depends(get_db),
 ):
     """Proxy template WebP thumbnail from MinIO."""
@@ -254,6 +280,8 @@ async def get_thumbnail(
     if not template.thumbnail_key:
         raise HTTPException(status_code=404, detail="No thumbnail available")
     data = storage_service.download(template.thumbnail_key)
+    if size == "sm":
+        data = _resize_thumbnail_sm(data)
     return Response(
         content=data,
         media_type="image/webp",

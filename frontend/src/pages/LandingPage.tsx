@@ -15,7 +15,9 @@ import type { Template } from "@/types";
 const BASE_URL = API_URL;
 
 function thumbUrl(slug: string) {
-  return `${BASE_URL}/templates/${slug}/thumbnail`;
+  // The hero mockups never render wider than ~192px — ?size=sm serves a
+  // 520px-wide variant instead of the 720px browse-grid/og:image master.
+  return `${BASE_URL}/templates/${slug}/thumbnail?size=sm`;
 }
 
 /**
