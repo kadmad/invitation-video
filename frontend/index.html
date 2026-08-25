@@ -7,6 +7,15 @@
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <link rel="preload" as="image" href="/logo.webp" type="image/webp" />
 
+    <!-- Warms the templates API call in parallel with JS download/parse instead
+         of after it: without this, the hero image (the LCP element) doesn't
+         start fetching until the JS bundle downloads, parses, mounts React and
+         fires the useEffect that calls listTemplates() — a fully serial chain.
+         The browser dedupes this against the matching fetch() in api/templates.ts
+         (same URL/credentials), so it costs nothing when unused and saves the
+         full JS-parse time off LCP when it is. -->
+    <link rel="preload" as="fetch" href="/api/templates/" crossorigin="anonymous" />
+
     <title>Bring My Matter — Online Invitation Video Maker for Indian Weddings</title>
     <meta
       name="description"

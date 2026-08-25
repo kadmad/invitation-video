@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
-from app.api import admin, auth, categories, drafts, fonts, payments, templates, renders, sitemap, transliterate
+from app.api import admin, auth, categories, drafts, fonts, payments, templates, renders, seo_render, sitemap, transliterate
 
 app = FastAPI(title=settings.APP_NAME)
 
@@ -29,6 +29,10 @@ app.include_router(renders.router, prefix="/api/renders", tags=["renders"])
 app.include_router(payments.router, prefix="/api/payments", tags=["payments"])
 app.include_router(transliterate.router, prefix="/api/transliterate", tags=["transliterate"])
 app.include_router(sitemap.router, tags=["sitemap"])  # no /api prefix — served at the site root
+# No /api prefix — Caddy proxies only bot User-Agents to this path here (see
+# ops/Caddyfile); real browsers get the SPA's /editor/{slug} from the
+# frontend container, never this route.
+app.include_router(seo_render.router, tags=["seo"])
 
 
 @app.get("/health")

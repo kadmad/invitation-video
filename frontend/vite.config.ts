@@ -10,6 +10,19 @@ export default defineConfig({
     },
   },
   build: {
+    // Vite's default modulepreload injection walks the FULL import graph
+    // reachable from the entry, including chunks only ever reached through
+    // a React.lazy()/dynamic import() — so vendor-remotion (136 kB, editor-
+    // only) and vendor-moveable (238 kB, admin-only) were being eagerly
+    // <link rel="modulepreload">'d in index.html and downloaded/parsed on
+    // every landing-page visit, hurting FCP/TBT for anonymous mobile
+    // traffic that never opens the editor or admin. Strip them from every
+    // entry's preload list; App.tsx's lazy() already fetches them on demand
+    // when those routes are actually visited.
+    modulePreload: {
+      resolveDependencies: (_filename, deps) =>
+        deps.filter((dep) => !dep.includes("vendor-remotion") && !dep.includes("vendor-moveable")),
+    },
     // Route-level code splitting lives in App.tsx (React.lazy). This adds
     // vendor splitting on top so the rarely-changing framework code sits in
     // its own long-cached chunk instead of being invalidated by every app

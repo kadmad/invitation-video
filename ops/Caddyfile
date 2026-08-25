@@ -20,6 +20,22 @@
         reverse_proxy backend:8000
     }
 
+    # /editor/{slug} is a client-rendered SPA page — title, canonical and
+    # og:image are only set once React mounts and the template loads. Link-
+    # preview bots (WhatsApp, Facebook, Twitter, Slack, ...) almost never run
+    # JavaScript, so a shared invitation link — the site's main distribution
+    # channel — always showed the generic homepage card instead of that
+    # template's own name/image. Route just those User-Agents to the
+    # backend's server-rendered stand-in (app/api/seo_render.py) instead;
+    # every other visitor still gets the real SPA below, untouched.
+    @editorBot {
+        path /editor/*
+        header_regexp User-Agent (?i)(bot|facebookexternalhit|whatsapp|telegrambot|slackbot|discordbot|linkedinbot|twitterbot|pinterest|embedly|quora|redditbot|vkshare|skypeuripreview|applebot|w3c_validator)
+    }
+    handle @editorBot {
+        reverse_proxy backend:8000
+    }
+
     handle {
         reverse_proxy frontend:80
     }
