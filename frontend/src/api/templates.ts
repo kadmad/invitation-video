@@ -1,4 +1,4 @@
-import client, { API_URL, IS_PROXIED_API } from "./client";
+import client, { API_URL } from "./client";
 import type { Template } from "@/types";
 
 export async function listTemplates(categoryId?: string, search?: string) {
@@ -14,12 +14,17 @@ export async function getTemplate(slug: string) {
   return data;
 }
 
+/** The raw source video is never handed out as a direct storage link (see
+ * backend get_video_token) — always streamed through the token-gated proxy,
+ * built from API_URL so it resolves correctly regardless of deployment
+ * topology (unlike the relative video_stream_url string the backend also
+ * returns, which only works when the frontend and API share an origin). */
 export async function fetchVideoUrl(templateId: string): Promise<string> {
   const baseUrl = API_URL;
   const res = await fetch(`${baseUrl}/templates/${templateId}/video-token`);
   if (!res.ok) throw new Error("Failed to get video token");
-  const { video_url, video_stream_url } = await res.json();
-  return IS_PROXIED_API ? video_stream_url : video_url;
+  const { token } = await res.json();
+  return `${baseUrl}/templates/${templateId}/video-file?token=${token}`;
 }
 
 /** @deprecated use fetchVideoUrl (async) */

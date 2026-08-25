@@ -2,6 +2,7 @@ import hashlib
 import hmac
 import json
 import os
+import re
 import subprocess
 import tempfile
 import time
@@ -52,6 +53,36 @@ def _verify_video_token(token: str, template_id: str) -> bool:
         return False
 
 
+_LAN_ORIGIN_RE = re.compile(
+    r"^https?://(localhost|127\.0\.0\.1|192\.168\.\d{1,3}\.\d{1,3}|10\.\d{1,3}\.\d{1,3}\.\d{1,3}|172\.(1[6-9]|2\d|3[01])\.\d{1,3}\.\d{1,3})(:\d+)?$"
+)
+
+
+def _same_site(request: Request) -> bool:
+    """Defense-in-depth for the raw source video endpoints only. Rejects a
+    request whose Origin/Referer explicitly names a different site — blocks
+    another website embedding these endpoints directly in its own page, and
+    copy-pasted scraping scripts that carry a browser's Referer verbatim.
+
+    This is NOT real access control: Origin/Referer are client-supplied and
+    trivially spoofable by anything that isn't an actual browser, so a script
+    that sets the header itself sails straight through. There's no way to
+    fully close that for a public, unauthenticated, pre-signup preview
+    endpoint without requiring login — which would break anonymous template
+    browsing/customization. The real gate is the short-lived signed token;
+    this just narrows casual/automated abuse on top of it.
+
+    Native <video>/media requests and most non-browser HTTP clients often
+    send neither header at all, so both being absent is allowed through
+    rather than blocked — this only rejects an explicit, named mismatch."""
+    allowed = {o.strip().rstrip("/") for o in settings.BACKEND_CORS_ORIGINS.split(",") if o.strip()}
+    header = request.headers.get("origin") or request.headers.get("referer")
+    if not header:
+        return True
+    origin = "/".join(header.split("/", 3)[:3]).rstrip("/")
+    return origin in allowed or bool(_LAN_ORIGIN_RE.match(origin))
+
+
 @router.get("/", response_model=list[TemplateListResponse])
 async def list_templates(
     category_id: uuid.UUID | None = None,
@@ -97,21 +128,22 @@ async def get_video_token(
     db: AsyncSession = Depends(get_db),
 ):
     """Issue a short-lived signed token for video playback."""
+    if not _same_site(request):
+        raise HTTPException(status_code=403, detail="Forbidden")
     result = await db.execute(select(Template).where(Template.id == template_id))
     template = result.scalar_one_or_none()
     if not template or not template.video_key:
         raise HTTPException(status_code=404, detail="Template not found")
     token, expires_at = _generate_video_token(str(template_id))
     host = request.url.hostname
-    # Presigned S3 URL for direct browser access (native range requests, no proxy)
-    video_url = storage_service.presigned_url(template.video_key, expires=300, public_host=host)
     # Extract version from preview_key for cache busting (preview_<ts>.mp4)
     preview_version = ""
     preview_url = None
     if template.preview_key:
-        import re as _re
-        m = _re.search(r"preview_(\d+)\.mp4$", template.preview_key)
+        m = re.search(r"preview_(\d+)\.mp4$", template.preview_key)
         preview_version = m.group(1) if m else ""
+        # The admin-reviewed preview (sample text baked in) is the deliberately
+        # shareable/promotional asset — fine as a direct, cacheable CDN link.
         preview_url = storage_service.presigned_url(template.preview_key, expires=3600, public_host=host)
     return {
         "token": token,
@@ -119,14 +151,15 @@ async def get_video_token(
         "has_preview": bool(template.preview_key),
         "preview_status": template.preview_status,
         "preview_v": preview_version,
-        # Same-origin (relative) alternative to video_url/preview_url, for
-        # setups where MinIO isn't separately reachable by the browser — the
-        # frontend picks these when VITE_API_URL is a relative path.
+        # The raw, unwatermarked source is never handed out as a direct
+        # storage link (permanent + guessable once someone has the key) —
+        # only ever streamed through the token-gated proxy below, which
+        # expires with the token and never reveals the underlying URL.
         "video_stream_url": f"/api/templates/{template_id}/video-file?token={token}",
         "preview_stream_url": (
             f"/api/templates/{template_id}/preview-file?token={token}" if template.preview_key else None
         ),
-        "video_url": video_url,
+        "video_url": None,
         "preview_url": preview_url,
     }
 
@@ -156,7 +189,15 @@ async def get_video(
     token: str = Query(...),
     db: AsyncSession = Depends(get_db),
 ):
-    """Redirect to presigned S3 URL — native range request support, no proxy overhead."""
+    """Same raw source video as /video-file — kept as a separate route for
+    backward compatibility, both now stream through the backend rather than
+    redirecting. Used to redirect to a presigned S3 URL, but that URL is
+    permanent once CDN_BASE_URL is set (see storage_service.presigned_url),
+    and the token is interchangeable between these routes — a redirect here
+    would've let anyone swap a `video-file` token for a forever-valid direct
+    link, defeating the point of gating it at all."""
+    if not _same_site(request):
+        raise HTTPException(status_code=403, detail="Forbidden")
     if not _verify_video_token(token, str(template_id)):
         raise HTTPException(status_code=403, detail="Invalid or expired token")
     result = await db.execute(select(Template).where(Template.id == template_id))
@@ -165,16 +206,16 @@ async def get_video(
         raise HTTPException(status_code=404, detail="Template not found")
     if not template.video_key:
         raise HTTPException(status_code=400, detail="No video uploaded")
-    url = storage_service.presigned_url(template.video_key, expires=300, public_host=request.url.hostname)
-    return RedirectResponse(url=url, status_code=302)
+    return await _stream_from_storage(request, template.video_key)
 
 
 async def _stream_from_storage(request: Request, key: str) -> StreamingResponse:
-    """Proxy bytes from MinIO through the backend, forwarding Range requests so
-    video seeking still works. Only meant for setups where the browser can't
-    reach MinIO directly (e.g. the single-tunnel ngrok demo, where only the
-    frontend's port is exposed) — normal/LAN access uses the direct presigned
-    S3 URL instead, which is cheaper for the backend."""
+    """Proxy bytes from MinIO/R2 through the backend, forwarding Range requests
+    so video seeking still works. The raw template source (video_key) always
+    goes through this proxy now, whatever the deployment topology — it's the
+    only way to serve it without handing out a permanent, unauthenticated
+    direct storage link (see get_video_token). Preview/render/thumbnail
+    assets are lower-stakes and still get the cheaper direct CDN link."""
     internal_url = storage_service.internal_presigned_url(key, expires=600)
     headers = {}
     range_header = request.headers.get("range")
@@ -217,6 +258,8 @@ async def stream_video_file(
 ):
     """Same video as /video, streamed through the backend instead of redirecting
     to MinIO directly — for setups where only the backend is externally reachable."""
+    if not _same_site(request):
+        raise HTTPException(status_code=403, detail="Forbidden")
     if not _verify_video_token(token, str(template_id)):
         raise HTTPException(status_code=403, detail="Invalid or expired token")
     result = await db.execute(select(Template).where(Template.id == template_id))

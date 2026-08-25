@@ -138,7 +138,12 @@ export interface Template {
   slug: string;
   category_id: string;
   thumbnail_key: string | null;
-  video_key: string | null;
+  // video_key only appears on admin responses (raw source object key) — the
+  // public template list/detail endpoints deliberately never return it (see
+  // backend/app/schemas/template.py), only the boolean has_video. Both are
+  // optional here since the two response shapes share this one TS type.
+  video_key?: string | null;
+  has_video?: boolean;
   preview_key: string | null;
   preview_status?: string | null;
   duration_frames: number;

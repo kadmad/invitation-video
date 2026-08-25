@@ -44,7 +44,7 @@ function PhoneMockup({
   const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    if (!template.video_key) return;
+    if (!template.has_video) return;
     let cancelled = false;
     getTemplateVideoSrc(template.id)
       .then((cached) => {
@@ -57,7 +57,7 @@ function PhoneMockup({
     return () => {
       cancelled = true;
     };
-  }, [template.id, template.video_key]);
+  }, [template.id, template.has_video]);
 
   // Only play while actually in view — autoplaying every mockup at once on
   // load gets silently throttled by the browser, so several never start.

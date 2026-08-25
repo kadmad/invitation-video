@@ -64,7 +64,13 @@ class TemplateListResponse(BaseModel):
     slug: str
     category_id: uuid.UUID
     thumbnail_key: str | None
-    video_key: str | None
+    # Deliberately NOT video_key — that's the raw, unwatermarked source
+    # object key, and this schema is returned by unauthenticated public
+    # endpoints. Exposing it handed out a permanent, guessable CDN link to
+    # the master video for every template (competitors could just read it
+    # off GET /api/templates/). Callers only ever needed to know whether a
+    # video exists at all, which this boolean gives them without the key.
+    has_video: bool
     duration_frames: int
     fps: int
     width: int
@@ -92,7 +98,6 @@ class TemplateListResponse(BaseModel):
 
 
 class TemplateDetailResponse(TemplateListResponse):
-    video_key: str | None
     remotion_comp: str | None
     tag_labels: dict | None
     pdf_snapshot_timestamps: list[float] | None = None

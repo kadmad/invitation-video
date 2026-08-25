@@ -44,6 +44,12 @@ class Template(UUIDMixin, TimestampMixin, Base):
     preview_status: Mapped[str | None] = mapped_column(String(50), nullable=True)
     pdf_snapshot_timestamps: Mapped[list | None] = mapped_column(JSONB, nullable=True)
 
+    @property
+    def has_video(self) -> bool:
+        """Public-safe existence flag — lets browser-facing code know whether
+        to fetch a video without ever seeing the raw storage key itself."""
+        return self.video_key is not None
+
     category = relationship("Category", back_populates="templates")
     default_font = relationship("Font", foreign_keys=[default_font_id])
     text_blocks = relationship(

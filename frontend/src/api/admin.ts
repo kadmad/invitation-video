@@ -1,4 +1,4 @@
-import client, { API_URL, IS_PROXIED_API } from "@/api/client";
+import client, { API_URL } from "@/api/client";
 import type { Category, Template, Font, TextBlock, ImageBlock } from "@/types";
 import type { AdminStats, AEImportPreviewResponse, AwaitingRendersList, AwaitingRender } from "@/types";
 
@@ -46,12 +46,15 @@ export const uploadTemplateVideo = (templateId: string, file: File) => {
     .then((r) => r.data);
 };
 
+/** Raw source is always streamed through the token-gated proxy, never a
+ * direct storage link — see api/templates.ts's fetchVideoUrl (same backend
+ * endpoint, same reasoning). */
 export const getTemplateVideoUrl = async (templateId: string): Promise<string> => {
   const baseUrl = API_URL;
   const res = await fetch(`${baseUrl}/templates/${templateId}/video-token`);
   if (!res.ok) throw new Error("Failed to get video token");
-  const { video_url, video_stream_url } = await res.json();
-  return IS_PROXIED_API ? video_stream_url : video_url;
+  const { token } = await res.json();
+  return `${baseUrl}/templates/${templateId}/video-file?token=${token}`;
 };
 
 // ── Text Blocks ────────────────────────────────────────────────────────────────

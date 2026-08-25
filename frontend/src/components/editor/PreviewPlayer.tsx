@@ -42,13 +42,13 @@ export default function PreviewPlayer() {
 
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
   useEffect(() => {
-    if (!template?.video_key) { setVideoUrl(null); return; }
+    if (!template?.has_video) { setVideoUrl(null); return; }
     const refresh = () => fetchVideoUrl(template.id).then(setVideoUrl).catch(() => {});
     refresh();
     // Refresh token every 4 minutes (token TTL is 5 min)
     const interval = setInterval(refresh, 4 * 60 * 1000);
     return () => clearInterval(interval);
-  }, [template?.id, template?.video_key]);
+  }, [template?.id, template?.has_video]);
 
   // Collect unique font_ids from text_blocks and load each font
   useEffect(() => {

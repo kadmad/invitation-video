@@ -37,7 +37,7 @@ function TemplateCard({
 
   // Prefetch token + preload metadata when card enters viewport
   useEffect(() => {
-    if (!t.video_key || !cardRef.current) return;
+    if (!t.has_video || !cardRef.current) return;
     const el = cardRef.current;
     const observer = new IntersectionObserver(
       ([entry]) => {
@@ -57,7 +57,7 @@ function TemplateCard({
     );
     observer.observe(el);
     return () => observer.disconnect();
-  }, [t.id, t.video_key]);
+  }, [t.id, t.has_video]);
 
   // Poll video token while hovered if rendering or video not ready
   useEffect(() => {
@@ -81,7 +81,7 @@ function TemplateCard({
   const startPreview = useCallback(async () => {
     hoveredRef.current = true;
     setHovered(true);
-    if (!t.video_key) return;
+    if (!t.has_video) return;
 
     // If already have src and video ready, just play
     if (videoSrc && videoReady && previewStatus !== "processing") {
@@ -97,7 +97,7 @@ function TemplateCard({
       if (cached.hasPreview) setVideoSrc(cached.url);
       if (cached.previewStatus !== undefined) setPreviewStatus(cached.previewStatus);
     } catch { /* ignore */ }
-  }, [t.id, t.video_key, videoSrc, videoReady, previewStatus]);
+  }, [t.id, t.has_video, videoSrc, videoReady, previewStatus]);
 
   const stopPreview = useCallback(() => {
     hoveredRef.current = false;
@@ -178,7 +178,7 @@ function TemplateCard({
         )}
 
         {/* Video — preloaded metadata, plays on hover */}
-        {t.video_key && videoSrc && (
+        {t.has_video && videoSrc && (
           <video
             ref={videoRef}
             src={videoSrc}

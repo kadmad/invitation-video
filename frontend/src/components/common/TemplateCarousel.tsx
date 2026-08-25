@@ -32,7 +32,7 @@ function CarouselTemplateCard({
   // ready the instant it becomes active — the <video> element itself still
   // only mounts (and can only play) once it actually is.
   useEffect(() => {
-    if (!t.video_key || !elRef.current) return;
+    if (!t.has_video || !elRef.current) return;
     const el = elRef.current;
     const observer = new IntersectionObserver(
       ([entry]) => {
@@ -52,7 +52,7 @@ function CarouselTemplateCard({
     );
     observer.observe(el);
     return () => observer.disconnect();
-  }, [t.id, t.video_key]);
+  }, [t.id, t.has_video]);
 
   // Play only while active; pause (freeze in place, no rewind) otherwise.
   // The element itself stays mounted regardless — see the render below —
@@ -139,7 +139,7 @@ function CarouselTemplateCard({
 
         {/* Mounts once prefetched (not gated on `active`) so it never has to
             be torn down and rebuilt — see the play/pause effect above. */}
-        {t.video_key && videoSrc && (
+        {t.has_video && videoSrc && (
           <video
             ref={videoRef}
             src={videoSrc}
