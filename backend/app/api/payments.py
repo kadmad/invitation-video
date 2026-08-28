@@ -1,3 +1,4 @@
+import logging
 import re
 import uuid
 
@@ -22,13 +23,16 @@ from app.schemas.payment import (
     VerifyPaymentResponse,
 )
 from app.services import payment_service, whatsapp_service
+from app.utils.orders import format_order_number
+
+logger = logging.getLogger(__name__)
 from app.workers.tasks import generate_pdf_only_task, render_video_task
 
 router = APIRouter()
 
 
 def _format_order_number(n: int) -> str:
-    return f"INV-{n:06d}"
+    return format_order_number(n)
 
 
 INDIAN_MOBILE_PATTERN = re.compile(r"^[6-9]\d{9}$")
@@ -186,11 +190,15 @@ async def verify_payment(
 
     order_number = _format_order_number(payment.order_number) if payment.order_number else str(payment.id)
 
+    # Notifications are best-effort: the payment is already captured and the
+    # render already dispatched, so nothing here may raise into the response.
+    # send_* never raises on its own — this catch is the backstop, and it logs
+    # rather than swallowing, so a silently unnotified customer is diagnosable.
     if user.phone_number:
         try:
             whatsapp_service.send_order_confirmation(user.phone_number, user.full_name or "Customer", order_number)
         except Exception:
-            pass
+            logger.exception("[WhatsApp] Order confirmation failed for order %s", order_number)
 
     if not settings.SERVER_RENDERING:
         # Manual-render mode: still alert every admin with a phone number on
@@ -207,7 +215,9 @@ async def verify_payment(
                     admin.phone_number, user.full_name or "Customer", tmpl.name if tmpl else "Template", order_number
                 )
             except Exception:
-                pass
+                logger.exception(
+                    "[WhatsApp] Admin manual-render alert failed for order %s", order_number
+                )
 
     return VerifyPaymentResponse(
         render_job_id=job.id,

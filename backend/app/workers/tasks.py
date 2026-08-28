@@ -1,3 +1,4 @@
+import logging
 import json
 import os
 import re
@@ -15,15 +16,19 @@ from sqlalchemy.orm import sessionmaker
 from app.config import settings
 from app.models.category import Category
 from app.models.font import Font
+from app.models.payment import Payment
 from app.models.render_job import RenderJob
 from app.models.template import Template
 from app.models.text_block import TextBlock
 from app.models.user import User
 from app.services.storage_service import storage_service
 from app.services.whatsapp_service import send_render_ready
+from app.utils.orders import format_order_number
 from app.workers.celery_app import celery_app
 from app.workers.ffmpeg_renderer import FFmpegRenderer
 from app.workers.pdf_generator import generate_invitation_pdf
+
+logger = logging.getLogger(__name__)
 
 LANGUAGE_TO_ITC = {
     "hindi": "hi-t-i0-und",
@@ -491,15 +496,38 @@ def render_video_task(self, job_id: str):
                     job.pdf_status = "failed"
                     db.commit()
 
-                # Send WhatsApp notification
+                # Tell the customer their video is ready, on the number they
+                # gave at checkout (payments.py stores it on the user before
+                # creating the Razorpay order). This is the completion path for
+                # BOTH a server-side render and a local worker draining the
+                # manual queue — they run this same task — so the notification
+                # does not depend on where the render actually happened.
+                # Never let a notification failure fail the finished job.
+                # The render is finished and uploaded at this point. Nothing in
+                # here may raise: an exception escaping would fail the task,
+                # and with task_acks_late the whole render would be retried
+                # from scratch — re-rendering a video that is already delivered
+                # because a text message didn't go out. send_render_ready never
+                # raises on its own; this catch covers the DB lookup too, and
+                # logs a traceback rather than swallowing it.
                 try:
                     user = db.execute(select(User).where(User.id == job.user_id)).scalar_one_or_none()
                     if user and user.phone_number:
-                        send_render_ready(user.phone_number, user.full_name, str(job.id))
+                        order_no = db.execute(
+                            select(Payment.order_number).where(Payment.render_job_id == job.id)
+                        ).scalar_one_or_none()
+                        send_render_ready(
+                            user.phone_number,
+                            user.full_name,
+                            format_order_number(order_no, job.id),
+                            watch_url=f"{settings.APP_BASE_URL.rstrip('/')}/watch/{job.id}",
+                        )
                     else:
-                        print(f"[WhatsApp] Skipped for job {job_id}: user has no phone number")
-                except Exception as notify_err:
-                    print(f"[WhatsApp] Notification failed for job {job_id}: {notify_err}")
+                        logger.info(
+                            "[WhatsApp] Skipped for job %s: user has no phone number", job_id
+                        )
+                except Exception:
+                    logger.exception("[WhatsApp] Notification failed for job %s", job_id)
 
         except Exception as e:
             job.status = "failed"

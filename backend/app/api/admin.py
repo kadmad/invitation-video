@@ -1,3 +1,4 @@
+import logging
 import json
 import os
 import re
@@ -47,10 +48,13 @@ from app.schemas.admin import (
 )
 from app.schemas.font import FontResponse
 from app.services.storage_service import storage_service, prod_storage_service
+from app.utils.orders import format_order_number
 from app.services import whatsapp_service
 from app.workers.celery_app import celery_app
 from app.workers.prod_celery import prod_celery_app
 from app.workers.tasks import render_video_task
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -822,7 +826,7 @@ async def delete_font(
 # --- Manual Render Queue (SERVER_RENDERING=false) ---
 
 def _order_number(n: int | None, fallback_id) -> str:
-    return f"INV-{n:06d}" if n else str(fallback_id)
+    return format_order_number(n, fallback_id)
 
 
 def _awaiting_render_response(
@@ -896,7 +900,15 @@ async def _cancel_in(session: AsyncSession, job: RenderJob, celery_client) -> No
     await session.refresh(job)
 
 
-async def _complete_in(session: AsyncSession, job: RenderJob, usr: User, storage, video_data: bytes, pdf_data: bytes | None) -> None:
+async def _complete_in(
+    session: AsyncSession,
+    job: RenderJob,
+    usr: User,
+    storage,
+    video_data: bytes,
+    pdf_data: bytes | None,
+    app_base_url: str,
+) -> None:
     if job.status == "completed":
         raise HTTPException(status_code=400, detail="Render already completed")
     output_key = f"renders/{job.user_id}/{job.id}/output.mp4"
@@ -910,11 +922,34 @@ async def _complete_in(session: AsyncSession, job: RenderJob, usr: User, storage
         job.pdf_key = pdf_key
         job.pdf_status = "completed"
     await session.commit()
+    # Same "your video is ready" notification the worker sends when it
+    # finishes a render itself — an admin uploading the file by hand is just
+    # another way the same job reaches "completed", and the customer should
+    # not be able to tell the difference. `app_base_url` is passed in because
+    # a production job actioned from a local admin session must still link to
+    # the production site, never to localhost.
+    # Best-effort: the video is already uploaded and the job already marked
+    # completed above, so neither the order-number lookup nor the send may
+    # raise into the admin's response. Logged with a traceback instead of
+    # swallowed — a customer who never got their "video ready" message should
+    # be traceable to a line in the logs.
     if usr.phone_number:
         try:
-            whatsapp_service.send_render_ready(usr.phone_number, usr.full_name or "Customer", str(job.id))
+            order_no = (
+                await session.execute(
+                    select(Payment.order_number).where(Payment.render_job_id == job.id)
+                )
+            ).scalar_one_or_none()
+            whatsapp_service.send_render_ready(
+                usr.phone_number,
+                usr.full_name or "Customer",
+                _order_number(order_no, job.id),
+                watch_url=f"{app_base_url.rstrip('/')}/watch/{job.id}",
+            )
         except Exception:
-            pass
+            logger.exception(
+                "[WhatsApp] Render-ready notification failed for job %s", job.id
+            )
 
 
 @router.get("/renders/awaiting", response_model=AwaitingRendersListResponse)
@@ -1087,7 +1122,7 @@ async def complete_manual_render(
     row = result.first()
     if row:
         job, usr = row
-        await _complete_in(db, job, usr, storage_service, video_data, pdf_data)
+        await _complete_in(db, job, usr, storage_service, video_data, pdf_data, settings.APP_BASE_URL)
         return {"status": "completed"}
 
     if prod_async_session is None or prod_storage_service is None:
@@ -1102,5 +1137,8 @@ async def complete_manual_render(
         if not row:
             raise HTTPException(status_code=404, detail="Manual render job not found")
         job, usr = row
-        await _complete_in(prod_db, job, usr, prod_storage_service, video_data, pdf_data)
+        await _complete_in(
+            prod_db, job, usr, prod_storage_service, video_data, pdf_data,
+            settings.PROD_APP_BASE_URL or settings.APP_BASE_URL,
+        )
         return {"status": "completed"}

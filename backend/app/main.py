@@ -1,8 +1,19 @@
+import logging
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
 from app.api import admin, auth, categories, drafts, fonts, payments, templates, renders, seo_render, sitemap, transliterate
+
+# Without this, module loggers propagate to a bare root logger that has no
+# handler and a WARNING threshold, so anything logged at INFO by app code
+# (e.g. "[WhatsApp] Meta not configured...") silently disappears in the API
+# process. Uvicorn configures only its own loggers, not ours.
+logging.basicConfig(
+    level=logging.DEBUG if settings.DEBUG else logging.INFO,
+    format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+)
 
 app = FastAPI(title=settings.APP_NAME)
 

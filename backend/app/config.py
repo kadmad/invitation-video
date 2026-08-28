@@ -62,7 +62,18 @@ class Settings(BaseSettings):
     META_PHONE_NUMBER_ID: str = ""
     META_WHATSAPP_TEMPLATE_NAME: str = "ordered"
     META_WHATSAPP_TEMPLATE_LANG: str = "en_US"
+    # Template "delivery_confirmation" — sent to the customer's phone once
+    # their video finishes rendering, whichever worker produced it (the
+    # server-side pipeline, a local render worker draining the manual queue,
+    # or an admin uploading the file by hand). See whatsapp_service.
+    META_WHATSAPP_DELIVERY_TEMPLATE_NAME: str = "delivery_confirmation"
+    META_WHATSAPP_DELIVERY_TEMPLATE_LANG: str = "en_US"
     APP_BASE_URL: str = "http://localhost:5173"  # frontend URL for download links
+    # Only used when a local admin session completes a PRODUCTION render job
+    # (the PROD_* fallback path in admin.py): the customer's "video ready"
+    # link must point at the live site, not at this machine's localhost.
+    # Unset falls back to APP_BASE_URL.
+    PROD_APP_BASE_URL: str = ""
 
     # App
     APP_NAME: str = "Bring My Matter"
