@@ -40,6 +40,11 @@ make migrate
 make seed
 ```
 
+`make seed` creates categories, ~25 Google fonts, and one sample "Royal Wedding"
+template — but that template has **no source video** (`video_key` is null), so
+nothing can be rendered from it yet. Upload a video to it from `/admin` before
+trying a render end to end.
+
 Then open:
 
 | URL | What |
@@ -82,8 +87,9 @@ you're pointing at something else.
 |---|---|
 | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `VITE_GOOGLE_CLIENT_ID` | **Any login at all** — this is the only way a user account gets created. Add `http://localhost:5173/login-callback` as an Authorized redirect URI on the OAuth client. |
 | `RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET` | Checkout. Test keys are fine locally. |
-| `META_TOKEN`, `META_PHONE_NUMBER_ID` | WhatsApp order/render notifications. Optional — everything else works without it. |
+| `META_TOKEN`, `META_PHONE_NUMBER_ID` | WhatsApp notifications (see [below](#whatsapp-notifications)). Optional — everything else works without it; unset just logs what would have been sent. |
 | `JWT_SECRET_KEY` | Must be replaced with `openssl rand -hex 32` for any real deployment. |
+| `APP_BASE_URL` | The site's own public URL. Used to build the `/watch/{job_id}` link a customer gets when their video is ready. Defaults to `http://localhost:5173`. |
 
 **Behaviour switches:**
 
@@ -97,9 +103,54 @@ you're pointing at something else.
 - `RENDER_CONCURRENCY` / `MAX_PARALLEL_JOBS` — renderer frame concurrency and
   simultaneous render jobs.
 - `PROD_*` — optional; only for the manual-render workflow below.
+  `PROD_APP_BASE_URL` is the one to remember: when you complete a *production*
+  job from a local admin session, it is what keeps the customer's link pointing
+  at the live site instead of your localhost. Unset falls back to `APP_BASE_URL`.
 
 Google Sign-In creates the account; email+password is an optional extra
 credential a logged-in user sets afterwards. There is no SMS/OTP login.
+
+### WhatsApp notifications
+
+Sent through the Meta WhatsApp Cloud API using **pre-approved message
+templates** — Meta does not allow arbitrary text to a customer who has not
+messaged you first. Two templates are wired up, each with two body variables
+(`{{1}}` first name, `{{2}}` order number, e.g. `INV-000123`):
+
+| Template | Fires when | Sent by |
+|---|---|---|
+| `ordered` | Razorpay payment verified | backend, `api/payments.py` |
+| `delivery_confirmation` | a render job reaches `completed` | the Celery worker (`workers/tasks.py`), or the backend when an admin uploads a hand-rendered file from `/admin/renders` |
+
+Override the names/languages with `META_WHATSAPP_TEMPLATE_NAME` /
+`META_WHATSAPP_TEMPLATE_LANG` and `META_WHATSAPP_DELIVERY_TEMPLATE_NAME` /
+`META_WHATSAPP_DELIVERY_TEMPLATE_LANG` if your approved templates are named or
+localised differently. The language code must match what Meta approved, or the
+send fails with `132001`.
+
+The gotcha: `delivery_confirmation` is sent by **whichever process finished the
+render**. With `SERVER_RENDERING=false` that is usually the local-worker stack,
+so `META_TOKEN` and `META_PHONE_NUMBER_ID` have to be in
+`.env.production-worker` as well — setting them only on the server means
+manual-queue renders complete silently.
+
+Sending is best-effort by design: `services/whatsapp_service.py` never raises,
+so a failed notification can never fail a payment or re-queue a finished
+render. Failures are logged with Meta's own error body — `132001` template not
+found/approved, `132000` parameter count mismatch, `131030` recipient not on
+the test-mode allow list.
+
+To check a template end to end without placing an order:
+
+```bash
+docker compose exec backend python -c "
+from app.services.whatsapp_service import send_render_ready
+print(send_render_ready('91XXXXXXXXXX', 'Test User', 'INV-000123'))"
+```
+
+`True` means Meta accepted it. Use a recipient that is **not** the WABA's own
+sending number — Meta rejects that with a generic `(#100) Invalid parameter`
+that looks like a template problem but isn't.
 
 ## Daily commands
 
@@ -115,6 +166,12 @@ make clean              # down -v — wipes the database and MinIO volumes
 
 Backend and frontend both hot-reload from bind-mounted source; you rarely need
 `make build`. Rebuild when Python or npm dependencies change.
+
+The worker runs `worker_concurrency=1`, so renders are strictly serial — a job
+sitting at `pending` usually means an earlier render is still holding the single
+slot, not that anything is broken. `make logs-worker` shows what it is chewing
+on. Because tasks live in Redis and are acked late, a queued render also
+survives `make down`, and the worker will pick it up again on the next `make up`.
 
 ### Database migrations
 
@@ -158,6 +215,12 @@ make up-worker      # backend :8001, frontend :5174, renderer :3100
 make logs-worker-stack
 make down-worker
 ```
+
+`.env.production-worker` needs its own `META_TOKEN` / `META_PHONE_NUMBER_ID` —
+this stack is what finishes the render, so it is what sends the customer's
+"your video is ready" message. Compose reads `env_file` at container *create*
+time, so after editing it use `make up-worker` with `--force-recreate` (or
+`make down-worker` first) or the running containers keep the old values.
 
 It drains the queue oldest-first as soon as it connects, no admin click needed,
 and several machines can run it at once. It uses its own Compose project name
