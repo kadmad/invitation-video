@@ -6,6 +6,7 @@ import { useSeo } from "@/lib/seo";
 import { SITE_NAME, SITE_DESCRIPTION, SITE_URL, SITE_TAGLINE } from "@/lib/site";
 import { getTemplateVideoSrc } from "@/lib/templateVideo";
 import { DUMMY_TEMPLATES } from "@/lib/dummyTemplates";
+import { trackOnce } from "@/lib/track";
 import PageTransition from "@/components/common/PageTransition";
 import Reveal from "@/components/common/Reveal";
 import Sparkles from "@/components/common/Sparkles";
@@ -185,6 +186,7 @@ export default function LandingPage() {
 
   useEffect(() => {
     listTemplates().then(setTemplates).catch(() => setTemplates([]));
+    trackOnce("landing", "landing_view");
   }, []);
 
   useSeo({

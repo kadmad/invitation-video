@@ -9,6 +9,12 @@ export async function listTemplates(categoryId?: string, search?: string) {
   return data;
 }
 
+/** The template's own soundtrack, streamed same-origin so the editor can both
+ *  play it and fetch its bytes for waveform analysis. */
+export function templateMusicUrl(templateId: string): string {
+  return `${API_URL}/templates/${templateId}/music-file`;
+}
+
 export async function getTemplate(slug: string) {
   const { data } = await client.get<Template>(`/templates/${slug}`);
   return data;

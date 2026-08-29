@@ -7,6 +7,7 @@ from app.models.image_block import ImageBlock
 from app.models.render_job import RenderJob
 from app.models.user_draft import UserDraft
 from app.models.payment import Payment
+from app.models.analytics_event import AnalyticsEvent
 from app.models.base import Base
 
-__all__ = ["Base", "User", "Category", "Font", "Template", "TextBlock", "ImageBlock", "RenderJob", "UserDraft", "Payment"]
+__all__ = ["Base", "User", "Category", "Font", "Template", "TextBlock", "ImageBlock", "RenderJob", "UserDraft", "Payment", "AnalyticsEvent"]

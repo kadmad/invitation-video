@@ -161,6 +161,13 @@ export interface Template {
   render_notes: string | null;
   seo_description: string | null;
   price: number | null;
+  /** The admin attached a soundtrack to this template. The key itself never
+   *  reaches the browser — stream it from /templates/{id}/music-file. */
+  has_music?: boolean;
+  music_start_seconds?: number | null;
+  /** 0..1 mix level for the template soundtrack. */
+  music_volume?: number | null;
+  music_key?: string | null;  // admin responses only
   discount_amount_paise: number | null;
   watermark_position_x: number | null;
   watermark_position_y: number | null;

@@ -10,6 +10,9 @@ from app.models.user import User
 from app.utils.security import decode_token
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login")
+# auto_error=False so an anonymous request reaches the endpoint instead of
+# being rejected at the dependency — see get_current_user_optional.
+oauth2_scheme_optional = OAuth2PasswordBearer(tokenUrl="/api/auth/login", auto_error=False)
 
 
 async def get_db() -> AsyncGenerator[AsyncSession, None]:
@@ -51,4 +54,27 @@ async def get_admin_user(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Admin access required",
         )
+    return user
+
+
+async def get_current_user_optional(
+    token: str | None = Depends(oauth2_scheme_optional),
+    db: AsyncSession = Depends(get_db),
+) -> User | None:
+    """Same as get_current_user but never raises — a missing, malformed or
+    expired token just yields None. For endpoints that serve signed-out
+    visitors and only want to attribute the request when it happens to carry
+    a valid token (analytics ingestion)."""
+    if not token:
+        return None
+    payload = decode_token(token)
+    if payload is None:
+        return None
+    user_id = payload.get("sub")
+    if user_id is None:
+        return None
+    result = await db.execute(select(User).where(User.id == user_id))
+    user = result.scalar_one_or_none()
+    if user is None or not user.is_active:
+        return None
     return user

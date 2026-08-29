@@ -4,11 +4,12 @@ import os
 import re
 import subprocess
 import tempfile
+import time
 import uuid
 from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Request, UploadFile, status
-from sqlalchemy import select, func, case, and_
+from sqlalchemy import String, cast, distinct, select, func, case, and_
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -17,6 +18,7 @@ from app.database import prod_async_session
 from app.dependencies import get_admin_user, get_db
 from app.models.category import Category
 from app.models.font import Font
+from app.models.analytics_event import AnalyticsEvent
 from app.models.template import Template
 from app.models.text_block import TextBlock
 from app.models.image_block import ImageBlock
@@ -104,6 +106,205 @@ def _period_cols(label: str, start: datetime, end: datetime, prev_start: datetim
             and_(paid, Payment.created_at >= prev_start, Payment.created_at < prev_end)
         ), 0).label(f"{label}_prev_revenue"),
     ]
+
+
+def _actor():
+    """One human, however we know them. A signed-in user counts once even if
+    they browsed anonymously first (the anon id is kept through sign-in on the
+    client); a signed-out visitor counts as their anon id. This is what every
+    "how many people" number on the funnel dashboard is built from."""
+    return func.coalesce(cast(AnalyticsEvent.user_id, String), AnalyticsEvent.anon_id)
+
+
+def _actors_in(event: str, since: datetime):
+    return func.count(distinct(_actor())).filter(
+        and_(AnalyticsEvent.event == event, AnalyticsEvent.created_at >= since)
+    )
+
+
+# The funnel, in the order a customer walks it. Each stage is counted in
+# distinct people, not raw hits — ten replays of one preview is one interested
+# visitor, and counting hits would make the top of the funnel look wider than
+# it is.
+_FUNNEL_STAGES = [
+    ("landing_view", "Landed on the site"),
+    ("browse_view", "Browsed templates"),
+    ("template_card_click", "Opened a template"),
+    ("preview_play", "Started a preview"),
+    ("preview_10s", "Watched 10s+ of a preview"),
+    ("editor_open", "Opened the editor"),
+    ("customization_started", "Started typing their details"),
+    ("customization_complete", "Filled in every field"),
+    ("checkout_opened", "Reached checkout"),
+]
+
+
+@router.get("/analytics/funnel")
+async def funnel_analytics(
+    days: int = 30,
+    db: AsyncSession = Depends(get_db),
+    _admin=Depends(get_admin_user),
+):
+    """Pre-purchase funnel: what people did before (and instead of) paying.
+
+    The revenue dashboard next door only sees completed purchases, which
+    cannot answer "which template is worth advertising" — a template with a
+    hundred 10-second previews and two sales is a different problem from one
+    with two previews and two sales, and they look identical in revenue.
+    """
+    days = max(1, min(days, 365))
+    since = datetime.now(timezone.utc) - timedelta(days=days)
+
+    # --- Stage totals, distinct people per stage ---
+    stage_cols = [_actors_in(ev, since).label(ev) for ev, _ in _FUNNEL_STAGES]
+    row = (await db.execute(select(*stage_cols))).one()
+
+    funnel = [
+        {"event": ev, "label": label, "actors": getattr(row, ev) or 0}
+        for ev, label in _FUNNEL_STAGES
+    ]
+
+    # --- Purchases come from payments, never from events ---
+    # A Payment row IS the order; recording a duplicate event would let the
+    # two drift apart and there would be no way to tell which was right.
+    pay_row = (await db.execute(
+        select(
+            func.count(Payment.id).filter(Payment.created_at >= since).label("orders"),
+            func.count(Payment.id).filter(
+                and_(Payment.status == "paid", Payment.created_at >= since)
+            ).label("paid"),
+            func.count(Payment.id).filter(
+                and_(Payment.status == "created", Payment.created_at >= since)
+            ).label("unpaid"),
+            func.coalesce(func.sum(Payment.amount).filter(
+                and_(Payment.status == "created", Payment.created_at >= since)
+            ), 0).label("unpaid_value"),
+            func.count(distinct(Payment.user_id)).filter(
+                and_(Payment.status == "paid", Payment.created_at >= since)
+            ).label("paying_customers"),
+        )
+    )).one()
+
+    funnel.append({"event": "order_created", "label": "Started payment", "actors": pay_row.orders or 0})
+    funnel.append({"event": "payment_paid", "label": "Paid", "actors": pay_row.paid or 0})
+
+    # Percentages come last, against the widest stage rather than the first
+    # one. The first stage can legitimately be zero — traffic arriving straight
+    # on a shared /editor link, or a page not instrumented yet — and anchoring
+    # on it would render the whole funnel as 0%, or as several hundred percent
+    # for the stages below it.
+    top = max((stage["actors"] for stage in funnel), default=0)
+    for stage in funnel:
+        stage["pct_of_top"] = round(stage["actors"] / top * 100, 1) if top else 0.0
+
+    # --- The two questions worth acting on ---
+    # People who typed in everything and then stopped: highest-intent traffic
+    # on the site, and the cheapest to win back.
+    completed = select(distinct(_actor())).where(
+        and_(AnalyticsEvent.event == "customization_complete", AnalyticsEvent.created_at >= since)
+    )
+    reached_checkout = select(distinct(_actor())).where(
+        and_(AnalyticsEvent.event == "checkout_opened", AnalyticsEvent.created_at >= since)
+    )
+    stalled_before_checkout = (await db.execute(
+        select(func.count()).select_from(
+            completed.except_(reached_checkout).subquery()
+        )
+    )).scalar_one()
+
+    # Hit the login wall and never came back — a signup-friction number, not a
+    # pricing one, and it needs a different fix from the row above.
+    hit_auth_wall = select(distinct(_actor())).where(
+        and_(AnalyticsEvent.event == "auth_wall_hit", AnalyticsEvent.created_at >= since)
+    )
+    stalled_at_auth = (await db.execute(
+        select(func.count()).select_from(
+            hit_auth_wall.except_(reached_checkout).subquery()
+        )
+    )).scalar_one()
+
+    drop_offs = {
+        # Filled the form, never opened checkout.
+        "filled_in_but_no_checkout": stalled_before_checkout,
+        # Got as far as the login wall and stopped there.
+        "blocked_at_login": stalled_at_auth,
+        # Razorpay order created, money never arrived. Exact, from payments.
+        "ordered_but_unpaid": pay_row.unpaid or 0,
+        "ordered_but_unpaid_value": pay_row.unpaid_value or 0,
+    }
+
+    # --- Per template ---
+    ev_cols = [
+        func.count(distinct(_actor())).filter(AnalyticsEvent.event == ev).label(ev)
+        for ev in ("template_card_click", "preview_play", "preview_10s", "editor_open",
+                   "customization_started", "customization_complete", "checkout_opened")
+    ]
+    tmpl_events = (await db.execute(
+        select(AnalyticsEvent.template_id, *ev_cols)
+        .where(and_(AnalyticsEvent.created_at >= since, AnalyticsEvent.template_id.isnot(None)))
+        .group_by(AnalyticsEvent.template_id)
+    )).all()
+    by_template = {r.template_id: r for r in tmpl_events}
+
+    tmpl_pay = (await db.execute(
+        select(
+            Payment.template_id,
+            func.count(Payment.id).filter(Payment.created_at >= since).label("orders"),
+            func.count(Payment.id).filter(
+                and_(Payment.status == "paid", Payment.created_at >= since)
+            ).label("paid"),
+            func.coalesce(func.sum(Payment.amount).filter(
+                and_(Payment.status == "paid", Payment.created_at >= since)
+            ), 0).label("revenue"),
+        ).group_by(Payment.template_id)
+    )).all()
+    pay_by_template = {r.template_id: r for r in tmpl_pay}
+
+    templates = (await db.execute(
+        select(Template.id, Template.name, Template.slug, Template.is_published)
+    )).all()
+
+    rows = []
+    for t in templates:
+        e = by_template.get(t.id)
+        p = pay_by_template.get(t.id)
+        watched = (e.preview_10s if e else 0) or 0
+        opened = (e.editor_open if e else 0) or 0
+        filled = (e.customization_complete if e else 0) or 0
+        paid = (p.paid if p else 0) or 0
+        rows.append({
+            "template_id": str(t.id),
+            "name": t.name,
+            "slug": t.slug,
+            "is_published": t.is_published,
+            "card_clicks": (e.template_card_click if e else 0) or 0,
+            "preview_plays": (e.preview_play if e else 0) or 0,
+            "preview_10s": watched,
+            "editor_opens": opened,
+            "customization_started": (e.customization_started if e else 0) or 0,
+            "customization_complete": filled,
+            "checkout_opened": (e.checkout_opened if e else 0) or 0,
+            "orders": (p.orders if p else 0) or 0,
+            "paid": paid,
+            "revenue": (p.revenue if p else 0) or 0,
+            # Of the people who watched enough preview to have an opinion, how
+            # many opened the editor. This is the "is the template itself
+            # working" number, isolated from how much traffic it got.
+            "watch_to_edit_pct": round(opened / watched * 100, 1) if watched else None,
+            # Of those who watched it properly, how many bought. This is the
+            # number to rank ad spend by.
+            "watch_to_paid_pct": round(paid / watched * 100, 1) if watched else None,
+        })
+
+    rows.sort(key=lambda r: (r["preview_10s"], r["paid"]), reverse=True)
+
+    return {
+        "days": days,
+        "funnel": funnel,
+        "drop_offs": drop_offs,
+        "paying_customers": pay_row.paying_customers or 0,
+        "templates": rows,
+    }
 
 
 @router.get("/analytics", response_model=AnalyticsSummary)
@@ -328,8 +529,17 @@ async def update_template(
         raise HTTPException(status_code=404, detail="Template not found")
     should_render = body.render_preview
     update_data = body.model_dump(exclude_unset=True, exclude={"render_preview"})
+    # These two are baked into the preview MP4, so changing either leaves the
+    # preview playing the wrong mix. Re-render on change rather than trusting
+    # whoever moved the slider to also tick Render.
+    music_mix_changed = any(
+        key in update_data and update_data[key] != getattr(template, key)
+        for key in ("music_start_seconds", "music_volume")
+    )
     for key, value in update_data.items():
         setattr(template, key, value)
+    if music_mix_changed and template.music_key:
+        should_render = True
     if template.is_published:
         if not template.price:
             raise HTTPException(status_code=400, detail="Price must be set before publishing")
@@ -491,6 +701,105 @@ async def get_template_video_url(
 
     url = storage_service.presigned_url(template.video_key, public_host=request.url.hostname)
     return {"url": url}
+
+
+# --- Template Music ---
+
+@router.post("/templates/{template_id}/upload-music")
+async def upload_template_music(
+    template_id: uuid.UUID,
+    file: UploadFile,
+    db: AsyncSession = Depends(get_db),
+    _admin=Depends(get_admin_user),
+):
+    """Replace the template's soundtrack. Independent of the source video, so
+    an admin can re-score a template without re-uploading (and re-probing, and
+    re-thumbnailing) the video. Uploading again overwrites the previous track:
+    the newest upload is what customers hear by default."""
+    result = await db.execute(select(Template).where(Template.id == template_id))
+    template = result.scalar_one_or_none()
+    if not template:
+        raise HTTPException(status_code=404, detail="Template not found")
+
+    data = await file.read()
+    ext = os.path.splitext(file.filename or "")[1].lower() or ".mp3"
+    if ext not in {".mp3", ".m4a", ".aac", ".wav", ".ogg", ".opus", ".flac"}:
+        raise HTTPException(status_code=400, detail="Unsupported audio format")
+
+    with tempfile.NamedTemporaryFile(suffix=ext) as tmp_audio:
+        tmp_audio.write(data)
+        tmp_audio.flush()
+        probe_result = subprocess.run(
+            [
+                "ffprobe", "-v", "quiet", "-print_format", "json",
+                "-show_streams", "-show_format", tmp_audio.name,
+            ],
+            capture_output=True, text=True,
+        )
+        try:
+            probe_info = json.loads(probe_result.stdout)
+            duration = float(probe_info.get("format", {}).get("duration", 0))
+        except (ValueError, json.JSONDecodeError):
+            duration = 0
+
+    if duration <= 0:
+        raise HTTPException(status_code=400, detail="Couldn't read that audio file")
+
+    # Timestamped key rather than a fixed name: CDN/browser caches key off the
+    # URL, and a fixed "music.mp3" would keep serving the old track after a
+    # replacement (the same reason preview_key carries a timestamp).
+    music_key = f"templates/{template.slug}/music_{int(time.time())}{ext}"
+    storage_service.upload(music_key, data, content_type=file.content_type or "audio/mpeg")
+
+    old_key = template.music_key
+    template.music_key = music_key
+    template.music_start_seconds = 0.0  # a new track invalidates the old offset
+    # The preview is a rendered MP4 with the audio baked in, and it is what
+    # browse cards play and what a shared link shows. Leaving it stale meant
+    # the whole site kept playing the *old* soundtrack until someone
+    # remembered to tick Render and Save — so rebuild it automatically.
+    template.preview_status = "processing"
+    await db.commit()
+    _queue_preview(template)
+
+    if old_key and old_key != music_key:
+        try:
+            storage_service.delete(old_key)
+        except Exception as exc:  # a stale object is harmless, a 500 here isn't
+            print(f"[music] failed to delete replaced track {old_key}: {exc}")
+
+    return {"music_key": music_key, "duration_seconds": duration}
+
+
+@router.delete("/templates/{template_id}/music")
+async def delete_template_music(
+    template_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    _admin=Depends(get_admin_user),
+):
+    """Drop the soundtrack — the template falls back to the source video's own
+    audio, which is what it used before any music was ever attached."""
+    result = await db.execute(select(Template).where(Template.id == template_id))
+    template = result.scalar_one_or_none()
+    if not template:
+        raise HTTPException(status_code=404, detail="Template not found")
+
+    old_key = template.music_key
+    template.music_key = None
+    template.music_start_seconds = 0.0
+    # Same reason as upload: the baked-in preview would otherwise keep playing
+    # a soundtrack the template no longer has.
+    template.preview_status = "processing"
+    await db.commit()
+    _queue_preview(template)
+
+    if old_key:
+        try:
+            storage_service.delete(old_key)
+        except Exception as exc:
+            print(f"[music] failed to delete {old_key}: {exc}")
+
+    return {"ok": True}
 
 
 # --- Text Blocks ---

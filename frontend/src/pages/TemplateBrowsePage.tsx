@@ -4,6 +4,7 @@ import { listTemplates } from "@/api/templates";
 import { listCategories } from "@/api/categories";
 import PageTransition from "@/components/common/PageTransition";
 import { DUMMY_TEMPLATES } from "@/lib/dummyTemplates";
+import { track, trackOnce } from "@/lib/track";
 import { useSeo } from "@/lib/seo";
 import { API_URL } from "@/api/client";
 import { SITE_NAME, SITE_URL } from "@/lib/site";
@@ -82,6 +83,9 @@ function TemplateCard({
     hoveredRef.current = true;
     setHovered(true);
     if (!t.has_video) return;
+    // Hover on a card is a deliberate act, so it counts as a play. The 10s
+    // milestone below is what separates a passing cursor from real interest.
+    trackOnce(`card-play-${t.id}`, "preview_play", { templateId: t.id, meta: { surface: "browse_card" } });
 
     // If already have src and video ready, just play
     if (videoSrc && videoReady && previewStatus !== "processing") {
@@ -135,6 +139,7 @@ function TemplateCard({
         animationDelay: `${Math.min(index * 50, 300)}ms`,
         animationFillMode: "forwards",
       }}
+      onClick={() => track("template_card_click", { templateId: t.id, meta: { slug: t.slug } })}
       onMouseEnter={handleMouseEnter}
       onMouseLeave={handleMouseLeave}
       onTouchStart={handleTouchStart}
@@ -190,6 +195,18 @@ function TemplateCard({
             disablePictureInPicture
             onContextMenu={(e) => e.preventDefault()}
             onLoadedData={() => setVideoReady(true)}
+            // Watched-time milestone. currentTime rather than wall-clock so a
+            // paused or backgrounded card doesn't accrue time it never played,
+            // and `loop` means this fires on the first pass only.
+            onTimeUpdate={(e) => {
+              if (e.currentTarget.currentTime >= 10) {
+                trackOnce(`card-10s-${t.id}`, "preview_10s", {
+                  templateId: t.id,
+                  value: 10,
+                  meta: { surface: "browse_card" },
+                });
+              }
+            }}
             onCanPlay={() => {
               setVideoReady(true);
               if (hoveredRef.current) videoRef.current?.play().catch(() => {});
@@ -350,6 +367,10 @@ export default function TemplateBrowsePage() {
 
   useEffect(() => {
     listCategories().then(setCategories);
+  }, []);
+
+  useEffect(() => {
+    trackOnce("browse", "browse_view");
   }, []);
 
   useEffect(() => {

@@ -263,6 +263,10 @@ export default function AdminTemplateEditorPage() {
         watermark_rotation: watermarkRotation,
         watermark_opacity: watermarkOpacity,
         pdf_snapshot_timestamps: pdfSnapshotTimestamps.length > 0 ? pdfSnapshotTimestamps : null,
+        // AudioTrack edits these on the template directly (so drags land in
+        // undo history); Save just persists whatever is on it now.
+        music_start_seconds: template.music_start_seconds ?? 0,
+        music_volume: template.music_volume ?? 1,
         render_preview: renderPreview,
       } as any);
 

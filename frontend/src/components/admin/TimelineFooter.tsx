@@ -4,6 +4,7 @@ import type { PlayerRef } from "@remotion/player";
 import { useAdminTemplateStore, beginTemporalGesture, endTemporalGesture } from "@/store/adminTemplateStore";
 import { updateTextBlock } from "@/api/admin";
 import { clearAdminDraft } from "@/lib/adminDraft";
+import AudioTrack from "./AudioTrack";
 
 /** Assign overlapping blocks to rows so none overlap visually */
 function assignLanes(blocks: { id: string; start_time: number; end_time: number }[]): Map<string, number> {
@@ -600,6 +601,10 @@ export default function TimelineFooter({ playerRef, pdfSnapshotTimestamps, onPdf
           })()}
         </div>
       </div>
+
+      {/* Soundtrack — a real track on the same time axis as the blocks above,
+          which is where anyone who has used a video editor looks for it. */}
+      <AudioTrack totalSeconds={totalSeconds} />
 
       {/* Scrubber track — always visible outside scroll */}
       <div className="mx-4 mb-2 h-1 bg-white/10 rounded-full relative cursor-pointer"

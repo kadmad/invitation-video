@@ -31,6 +31,7 @@ class FFmpegRenderer:
         watermark_opacity: float | None = None,
         music_path: str | None = None,
         music_start_seconds: float = 0.0,
+        music_volume: float = 1.0,
         video_duration_seconds: float | None = None,
     ):
         self.source_path = source_path
@@ -56,6 +57,7 @@ class FFmpegRenderer:
         # music_start_seconds. None = keep the source video's own audio.
         self.music_path = music_path
         self.music_start_seconds = music_start_seconds
+        self.music_volume = music_volume
         self.video_duration_seconds = video_duration_seconds
 
     @staticmethod
@@ -231,9 +233,12 @@ class FFmpegRenderer:
             # If the uploaded track ever runs out before `duration` (it
             # shouldn't — validated at upload time), atrim just yields less
             # audio than requested rather than erroring.
+            # volume last, so it applies to the trimmed segment only — the
+            # same order as Remotion's <Audio volume> on a startFrom'd clip,
+            # which is what keeps the fallback matching the preview.
             audio_parts.append(
                 f"[{music_idx}:a]atrim=start={self.music_start_seconds}:duration={duration},"
-                f"asetpts=PTS-STARTPTS[aout]"
+                f"asetpts=PTS-STARTPTS,volume={self.music_volume}[aout]"
             )
             audio_map = "[aout]"
             audio_codec = ["-c:a", "aac"]  # re-encoding a filtered stream, can't -c:a copy

@@ -81,7 +81,15 @@ class TemplateListResponse(BaseModel):
     render_notes: str | None
     preview_key: str | None = None
     preview_status: str | None = None
-    price: int
+    # The key itself never ships to the browser (same rule as video_key) —
+    # clients get the flag and stream the track from /music-file.
+    has_music: bool = False
+    music_start_seconds: float | None = None
+    music_volume: float | None = None
+    # Nullable to match the column and the frontend's `price: number | null`.
+    # A template an admin hasn't priced yet used to make the whole list
+    # endpoint 500 on response validation, which showed as an empty catalog.
+    price: int | None = None
     discount_amount_paise: int | None = None
     seo_description: str | None = None
     # Where the brand watermark sits on a discounted render. Needed by the

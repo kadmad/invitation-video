@@ -1,5 +1,6 @@
 import { useEffect, useState, useMemo } from "react";
 import client from "@/api/client";
+import FunnelAnalytics from "@/components/admin/FunnelAnalytics";
 
 interface PeriodData {
   purchases: number;
@@ -150,7 +151,7 @@ function StatCard({
   );
 }
 
-export default function AdminAnalyticsPage() {
+function RevenueAnalytics() {
   const [data, setData] = useState<AnalyticsSummary | null>(null);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<TimeFilter>("30d");
@@ -214,7 +215,7 @@ export default function AdminAnalyticsPage() {
     <div className="space-y-6">
       {/* Header + filter */}
       <div className="flex items-center justify-between flex-wrap gap-3">
-        <h1 className="text-xl font-bold text-ink">Analytics</h1>
+        <h2 className="text-sm font-semibold text-ink">Revenue by template</h2>
         <div className="flex gap-1 bg-surface-alt rounded-lg p-1 flex-wrap">
           {FILTERS.map((f) => (
             <button
@@ -359,6 +360,45 @@ export default function AdminAnalyticsPage() {
           </table>
         </div>
       </div>
+    </div>
+  );
+}
+
+
+/**
+ * Two views of the same business, deliberately separate because they answer
+ * different questions. Revenue is what was earned; Funnel is what was nearly
+ * earned — and only the second one can say whether a template that never sells
+ * is failing to attract attention or failing to convert it.
+ */
+export default function AdminAnalyticsPage() {
+  const [tab, setTab] = useState<"revenue" | "funnel">("revenue");
+
+  return (
+    <div className="space-y-5">
+      <div className="flex items-center justify-between flex-wrap gap-3">
+        <h1 className="text-xl font-bold text-ink">Analytics</h1>
+        <div className="flex gap-1 bg-surface-alt rounded-lg p-1">
+          {(
+            [
+              ["revenue", "Revenue"],
+              ["funnel", "Funnel"],
+            ] as const
+          ).map(([value, label]) => (
+            <button
+              key={value}
+              onClick={() => setTab(value)}
+              className={`px-3 py-1.5 rounded-md text-xs font-medium transition ${
+                tab === value ? "bg-surface text-ink shadow-sm" : "text-ink-muted hover:text-ink"
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {tab === "revenue" ? <RevenueAnalytics /> : <FunnelAnalytics />}
     </div>
   );
 }

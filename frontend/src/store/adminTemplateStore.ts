@@ -102,7 +102,6 @@ export const useAdminTemplateStore = create<AdminTemplateState>()(
       previewBlockTrigger: 0,
       previewEndFrame: null,
       currentTime: 0,
-
       setTemplate: (template) => set({ template }),
 
       setVideoUrl: (url) => set({ videoUrl: url }),

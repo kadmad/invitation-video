@@ -12,15 +12,18 @@ import { transliterateBatch, transliterateBatchCandidates } from "@/api/translit
 import type { WordCandidates } from "@/api/transliterate";
 import TranslitWord from "@/components/common/TranslitWord";
 import { getDraft, saveDraft, getGuestDraft, saveGuestDraft } from "@/api/drafts";
-import { uploadUserImage, uploadUserMusic } from "@/api/templates";
+import { uploadUserImage, uploadUserMusic, templateMusicUrl } from "@/api/templates";
 import { useEditorStore, extractTags } from "@/store/editorStore";
 import { useAuthStore } from "@/store/authStore";
 import type { Font, TextBlock, ImageBlock, RenderJob } from "@/types";
 import PreviewPlayer from "@/components/editor/PreviewPlayer";
+import MusicPicker from "@/components/editor/MusicPicker";
 import WatermarkPreviewPopup from "@/components/editor/WatermarkPreviewPopup";
 import PageTransition from "@/components/common/PageTransition";
 import RichTextEditor from "@/components/admin/RichTextEditor";
 import { loadRazorpayCheckout } from "@/lib/razorpay";
+import { checkAudioFile } from "@/lib/audioFile";
+import { track, trackOnce } from "@/lib/track";
 
 /** Convert snake_case tag to human-readable label. */
 function humanizeTag(tag: string): string {
@@ -85,6 +88,7 @@ export default function EditorPage() {
     watermarkPreview: watermarkOptIn,
     setWatermarkPreview: setWatermarkOptIn,
     musicFile,
+    musicObjectUrl,
     musicDurationSeconds,
     musicStartSeconds,
     setMusic,
@@ -111,8 +115,10 @@ export default function EditorPage() {
   const [editingRender, setEditingRender] = useState<RenderJob | null>(null);
   const [editRenderError, setEditRenderError] = useState("");
   const [musicError, setMusicError] = useState("");
-  const [musicLimitHit, setMusicLimitHit] = useState(false);
-  const musicLimitTimer = useRef<ReturnType<typeof setTimeout>>();
+  const [musicNotice, setMusicNotice] = useState("");
+  // Length of the template's own soundtrack, probed once so the picker can
+  // draw the same selection window the admin chose.
+  const [templateMusicDuration, setTemplateMusicDuration] = useState<number | null>(null);
   const debounceTimer = useRef<ReturnType<typeof setTimeout>>();
   const blockOverrideDebounceTimer = useRef<ReturnType<typeof setTimeout>>();
   const saveDraftTimer = useRef<ReturnType<typeof setTimeout>>();
@@ -289,10 +295,40 @@ export default function EditorPage() {
     return () => clearTimeout(saveDraftTimer.current);
   }, [fieldValues, font, textColorOverrides, template, isLoggedIn, editorMode, blockOverrides, blockFormatOverrides, flushDraftSave]);
 
+  useEffect(() => {
+    if (template) trackOnce(`editor-${template.id}`, "editor_open", { templateId: template.id });
+  }, [template?.id]);
+
   const tags = useMemo(
     () => (template ? extractTags(template) : []),
     [template]
   );
+
+  // The two intent milestones, derived rather than fired from a keystroke
+  // handler: "started" is the first field with anything in it, "complete" is
+  // every field filled. Complete-but-no-checkout is the highest-intent
+  // abandonment on the site, and it can't be measured without this pair.
+  useEffect(() => {
+    if (!template) return;
+    const source =
+      editorMode === "advanced"
+        ? Object.values(blockOverrides)
+        : tags.map((t) => fieldValues[t] ?? "");
+    if (source.length === 0) return;
+    const filled = source.filter((v) => (v ?? "").trim().length > 0).length;
+    if (filled > 0) {
+      trackOnce(`cust-start-${template.id}`, "customization_started", {
+        templateId: template.id,
+        value: filled,
+      });
+    }
+    if (filled === source.length) {
+      trackOnce(`cust-done-${template.id}`, "customization_complete", {
+        templateId: template.id,
+        value: filled,
+      });
+    }
+  }, [template?.id, editorMode, tags, fieldValues, blockOverrides]);
 
   const tagConfigs = useMemo(
     () => (template ? getTagConfigs(template.text_blocks ?? [], tags) : {}),
@@ -566,61 +602,47 @@ export default function EditorPage() {
 
   // --- Music: customer's own uploaded track ---
   const videoDurationSeconds = template ? template.duration_frames / template.fps : 0;
-  const musicMaxStartSeconds = musicDurationSeconds
-    ? Math.max(0, musicDurationSeconds - videoDurationSeconds)
-    : 0;
 
-  const formatMmSs = (seconds: number) => {
-    const s = Math.max(0, Math.round(seconds));
-    return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
+  const handleMusicFileSelect = async (file: File) => {
+    setMusicError("");
+    setMusicNotice("");
+
+    const check = await checkAudioFile(file, videoDurationSeconds);
+    if (check.error) {
+      setMusicError(check.error);
+      return;
+    }
+    // A short track is accepted with a warning rather than rejected: refusing
+    // it left the customer holding a song they'd chosen and no way forward.
+    // The whole song plays and the video ends in silence after it runs out.
+    if (check.notice) setMusicNotice(check.notice);
+    setMusic(file, URL.createObjectURL(file), check.duration);
+    track("music_uploaded", { templateId: template?.id, value: check.duration });
   };
 
-  const handleMusicFileSelect = (e: ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    e.target.value = ""; // allow re-selecting the same file after an error
-    if (!file) return;
-    setMusicError("");
+  // The template's soundtrack is the default the customer hears; their own
+  // upload replaces it. Neither = the source video keeps its original audio.
+  const templateMusicSrc = template?.has_music ? templateMusicUrl(template.id) : null;
+  const usingTemplateMusic = !musicFile && !!templateMusicSrc;
 
-    const objectUrl = URL.createObjectURL(file);
+  useEffect(() => {
+    if (!templateMusicSrc) {
+      setTemplateMusicDuration(null);
+      return;
+    }
     const probe = new Audio();
     probe.preload = "metadata";
     probe.onloadedmetadata = () => {
-      const duration = probe.duration;
-      if (!isFinite(duration) || duration <= 0) {
-        setMusicError("Couldn't read that audio file.");
-        URL.revokeObjectURL(objectUrl);
-        return;
-      }
-      if (duration < videoDurationSeconds) {
-        setMusicError(
-          `That track is ${formatMmSs(duration)} long — needs to be at least ${formatMmSs(videoDurationSeconds)} (the video's length).`
-        );
-        URL.revokeObjectURL(objectUrl);
-        return;
-      }
-      setMusic(file, objectUrl, duration);
+      const d = probe.duration;
+      setTemplateMusicDuration(isFinite(d) && d > 0 ? d : null);
     };
-    probe.onerror = () => {
-      setMusicError("Couldn't read that audio file.");
-      URL.revokeObjectURL(objectUrl);
-    };
-    probe.src = objectUrl;
-  };
+    probe.src = templateMusicSrc;
+  }, [templateMusicSrc]);
 
-  // The slider spans the whole uploaded track, but dragging past the point
-  // where the remaining audio would run out before the video ends clamps
-  // back to that limit and flashes a brief "limit reached" note instead.
-  const handleMusicSliderChange = (e: ChangeEvent<HTMLInputElement>) => {
-    const raw = parseFloat(e.target.value);
-    if (raw > musicMaxStartSeconds) {
-      setMusicStartSeconds(musicMaxStartSeconds);
-      setMusicLimitHit(true);
-      clearTimeout(musicLimitTimer.current);
-      musicLimitTimer.current = setTimeout(() => setMusicLimitHit(false), 1800);
-    } else {
-      setMusicStartSeconds(raw);
-      setMusicLimitHit(false);
-    }
+  const handleClearMusic = () => {
+    setMusicError("");
+    setMusicNotice("");
+    clearMusic();
   };
 
   // Seek preview to the midpoint of a block's time range — same as the admin
@@ -635,6 +657,7 @@ export default function EditorPage() {
   // --- Mode switch handlers ---
   const handleSwitchToAdvanced = () => {
     if (!template) return;
+    track("advanced_mode_opened", { templateId: template.id });
     // Always re-expand from the current Basic-mode field values — reusing
     // stale blockOverrides here meant a value changed in Basic after a
     // previous Advanced visit wouldn't show up when switching back.
@@ -659,11 +682,17 @@ export default function EditorPage() {
   const handleRenderClick = () => {
     if (!template) return;
     if (!isLoggedIn) {
+      // Distinct from checkout_opened on purpose: someone stopped by the
+      // login wall needs a different fix from someone who saw the price and
+      // walked away, and lumping them together hides both.
+      track("auth_wall_hit", { templateId: template.id });
       openAuthModal(() => {
+        track("checkout_opened", { templateId: template.id });
         setShowConfirmPopup(true);
       });
       return;
     }
+    track("checkout_opened", { templateId: template.id });
     setShowConfirmPopup(true);
   };
 
@@ -730,6 +759,7 @@ export default function EditorPage() {
   };
 
   const handleSharePreview = async () => {
+    track("share_link_copied", { templateId: template?.id });
     await navigator.clipboard.writeText(window.location.href);
     setLinkCopied(true);
     setTimeout(() => setLinkCopied(false), 2000);
@@ -1128,6 +1158,7 @@ export default function EditorPage() {
                         try {
                           const result = await uploadUserImage(template.id, block.id, file);
                           setImageUpload(block.id, result.url);
+                          track("image_uploaded", { templateId: template.id });
                         } catch (err) {
                           console.error("Failed to upload image", err);
                         toast.error(errorMessage(err, "Couldn't upload that image. Please try another."));
@@ -1153,6 +1184,7 @@ export default function EditorPage() {
                       try {
                         const result = await uploadUserImage(template.id, block.id, file);
                         setImageUpload(block.id, result.url);
+                        track("image_uploaded", { templateId: template.id });
                       } catch (err) {
                         console.error("Failed to upload image", err);
                       }
@@ -1202,86 +1234,20 @@ export default function EditorPage() {
             so the primary CTA is always visible without scrolling. */}
         <div className="sticky bottom-0 z-20 bg-page pt-3 mt-1 border-t border-edge lg:flex-shrink-0">
         {/* Your own music — replaces the template's original audio */}
-        <div className="mb-3">
-          <label className="block text-xs font-medium text-ink-muted mb-1">
-            Your Own Music <span className="text-ink-muted font-normal">(optional)</span>
-          </label>
-          {!musicFile ? (
-            <label className="input-field w-full text-sm py-2 flex items-center justify-center gap-2 cursor-pointer text-ink-muted">
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M9 19V6l12-2v13M9 19a3 3 0 1 1-6 0 3 3 0 0 1 6 0Zm12-2a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" />
-              </svg>
-              Choose an audio file from your device
-              <input type="file" accept="audio/*" className="hidden" onChange={handleMusicFileSelect} />
-            </label>
-          ) : (
-            <div className="bg-surface-alt rounded-xl p-3 space-y-2">
-              <div className="flex items-center justify-between gap-2">
-                <span className="text-sm text-ink truncate">{musicFile.name}</span>
-                <button
-                  type="button"
-                  onClick={clearMusic}
-                  className="text-xs text-red-500 hover:text-red-600 shrink-0"
-                >
-                  Remove
-                </button>
-              </div>
-              {musicDurationSeconds !== null && (
-                <>
-                  {(() => {
-                    const valuePct = (Math.min(musicStartSeconds, musicMaxStartSeconds) / musicDurationSeconds) * 100;
-                    const limitPct = (musicMaxStartSeconds / musicDurationSeconds) * 100;
-                    const hasBlockedZone = musicMaxStartSeconds < musicDurationSeconds;
-                    return (
-                      <div className="relative pt-4">
-                        {hasBlockedZone && (
-                          <div
-                            className="absolute top-0 flex flex-col items-center pointer-events-none"
-                            style={{ left: `${limitPct}%`, transform: "translateX(-50%)" }}
-                            title="Track can't start any later — it would run out before the video ends"
-                          >
-                            <svg className="w-3.5 h-3.5 text-rose-500" fill="currentColor" viewBox="0 0 24 24">
-                              <path d="M12 1a5 5 0 0 0-5 5v3H6a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-9a2 2 0 0 0-2-2h-1V6a5 5 0 0 0-5-5Zm-3 8V6a3 3 0 1 1 6 0v3H9Z" />
-                            </svg>
-                            <div className="w-0.5 h-2 bg-rose-500" />
-                          </div>
-                        )}
-                        <input
-                          type="range"
-                          min={0}
-                          max={musicDurationSeconds}
-                          step={1}
-                          value={Math.min(musicStartSeconds, musicMaxStartSeconds)}
-                          onChange={handleMusicSliderChange}
-                          className="music-slider w-full"
-                          style={{
-                            background: `linear-gradient(to right,
-                              #B98D4C 0%, #B98D4C ${valuePct}%,
-                              rgb(var(--c-surface-alt)) ${valuePct}%, rgb(var(--c-surface-alt)) ${limitPct}%,
-                              #fda4af ${limitPct}%, #fda4af 100%)`,
-                          }}
-                          title={hasBlockedZone ? "The pink zone can't be reached — track would run out before the video ends" : undefined}
-                        />
-                      </div>
-                    );
-                  })()}
-                  <div className="flex items-center justify-between">
-                    <p className="text-[11px] text-ink-muted">
-                      Plays {formatMmSs(musicStartSeconds)} – {formatMmSs(musicStartSeconds + videoDurationSeconds)}
-                      {" "}of {formatMmSs(musicDurationSeconds)}
-                    </p>
-                    {musicLimitHit && (
-                      <p className="text-[11px] text-amber-600 font-medium">
-                        Limit reached — track must finish by the video's end
-                      </p>
-                    )}
-                  </div>
-                </>
-              )}
-            </div>
-          )}
-          {musicError && <p className="text-[11px] text-red-500 mt-1">{musicError}</p>}
-        </div>
+        <MusicPicker
+          name={musicFile ? musicFile.name : usingTemplateMusic ? "Template soundtrack" : null}
+          url={musicFile ? musicObjectUrl : templateMusicSrc}
+          durationSeconds={musicFile ? musicDurationSeconds : templateMusicDuration}
+          startSeconds={musicFile ? musicStartSeconds : template?.music_start_seconds ?? 0}
+          videoDurationSeconds={videoDurationSeconds}
+          error={musicError}
+          notice={musicNotice}
+          readOnly={usingTemplateMusic}
+          replaceLabel={usingTemplateMusic ? "Use my own" : "Replace"}
+          onPick={handleMusicFileSelect}
+          onStartChange={setMusicStartSeconds}
+          onClear={musicFile ? handleClearMusic : undefined}
+        />
 
         {editingRender ? (
           <button
@@ -1393,7 +1359,12 @@ export default function EditorPage() {
                       <input
                         type="checkbox"
                         checked={watermarkOptIn}
-                        onChange={(e) => setWatermarkOptIn(e.target.checked)}
+                        onChange={(e) => {
+                          setWatermarkOptIn(e.target.checked);
+                          if (e.target.checked) {
+                            track("watermark_opted_in", { templateId: template?.id });
+                          }
+                        }}
                         className="mt-0.5 w-4 h-4 shrink-0 rounded accent-brand-500 cursor-pointer"
                       />
                       <span className="text-sm text-ink-muted leading-snug">

@@ -57,6 +57,22 @@ export const getTemplateVideoUrl = async (templateId: string): Promise<string> =
   return `${baseUrl}/templates/${templateId}/video-file?token=${token}`;
 };
 
+// ── Template Music ─────────────────────────────────────────────────────────────
+export const uploadTemplateMusic = (templateId: string, file: File) => {
+  const form = new FormData();
+  form.append("file", file);
+  return client
+    .post<{ music_key: string; duration_seconds: number }>(
+      `/admin/templates/${templateId}/upload-music`,
+      form,
+      { headers: { "Content-Type": "multipart/form-data" } }
+    )
+    .then((r) => r.data);
+};
+
+export const deleteTemplateMusic = (templateId: string) =>
+  client.delete(`/admin/templates/${templateId}/music`).then((r) => r.data);
+
 // ── Text Blocks ────────────────────────────────────────────────────────────────
 export const createTextBlock = (
   templateId: string,

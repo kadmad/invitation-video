@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useParams, Link, useNavigate } from "react-router-dom";
 import { getRender, getDownloadUrl, getPdfDownloadUrl } from "@/api/renders";
 import { useEditorStore } from "@/store/editorStore";
+import { track, trackOnce } from "@/lib/track";
 import type { RenderJob } from "@/types";
 import PageTransition from "@/components/common/PageTransition";
 
@@ -14,6 +15,7 @@ export default function RenderStatusPage() {
 
   useEffect(() => {
     if (!id) return;
+    trackOnce(`render-view-${id}`, "render_status_viewed");
     let active = true;
 
     const poll = async () => {
@@ -54,6 +56,7 @@ export default function RenderStatusPage() {
     const a = document.createElement("a");
     a.href = blobUrl;
     a.download = `render_${id}.mp4`;
+    track("render_downloaded", { templateId: job?.template_id, meta: { kind: "video" } });
     a.click();
     URL.revokeObjectURL(blobUrl);
   };
@@ -70,6 +73,7 @@ export default function RenderStatusPage() {
     const a = document.createElement("a");
     a.href = blobUrl;
     a.download = `invitation_${id}.pdf`;
+    track("render_downloaded", { templateId: job?.template_id, meta: { kind: "pdf" } });
     a.click();
     URL.revokeObjectURL(blobUrl);
   };

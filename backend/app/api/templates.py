@@ -209,6 +209,28 @@ async def get_video(
     return await _stream_from_storage(request, template.video_key)
 
 
+@router.get("/{template_id}/music-file")
+async def get_template_music_file(
+    template_id: uuid.UUID,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+):
+    """The template's soundtrack, streamed same-origin.
+
+    Ungated on purpose, unlike the source video: the track is already audible
+    to anyone who opens the editor, and it's what the customer is deciding
+    whether to keep. Same-origin also means the editor can fetch these bytes
+    for waveform analysis — decodeAudioData goes through fetch(), which a
+    presigned MinIO/R2 URL would fail on CORS."""
+    result = await db.execute(select(Template).where(Template.id == template_id))
+    template = result.scalar_one_or_none()
+    if not template:
+        raise HTTPException(status_code=404, detail="Template not found")
+    if not template.music_key:
+        raise HTTPException(status_code=404, detail="No music on this template")
+    return await _stream_from_storage(request, template.music_key)
+
+
 async def _stream_from_storage(request: Request, key: str) -> StreamingResponse:
     """Proxy bytes from MinIO/R2 through the backend, forwarding Range requests
     so video seeking still works. The raw template source (video_key) always
@@ -396,13 +418,13 @@ async def upload_user_music(
     user: User = Depends(get_current_user),
 ):
     """Customer's own audio track, to replace the template's original audio
-    in their final render. Must be at least as long as the template video."""
+    in their final render. A track shorter than the video is allowed — it just
+    runs out and the tail of the video is silent."""
     result = await db.execute(select(Template).where(Template.id == template_id))
     template = result.scalar_one_or_none()
     if not template:
         raise HTTPException(status_code=404, detail="Template not found")
 
-    video_duration = template.duration_frames / template.fps
     data = await file.read()
     ext = os.path.splitext(file.filename or "")[1] or ".mp3"
 
@@ -425,11 +447,11 @@ async def upload_user_music(
 
         if duration <= 0:
             raise HTTPException(status_code=400, detail="Couldn't read that audio file")
-        if duration < video_duration:
-            raise HTTPException(
-                status_code=400,
-                detail=f"Audio must be at least {video_duration:.0f}s long (video length) — this file is {duration:.0f}s",
-            )
+        # A track shorter than the video used to be rejected here, which left
+        # the customer holding a song they had chosen and no way forward. It
+        # is accepted now and simply runs out: Remotion's <Audio> ends, and
+        # ffmpeg's atrim yields less audio than asked for rather than
+        # erroring. The editor warns about the silent tail before checkout.
 
     music_key = f"user_music/{user.id}/{template_id}/{uuid.uuid4()}{ext}"
     storage_service.upload(music_key, data, content_type=file.content_type or "audio/mpeg")

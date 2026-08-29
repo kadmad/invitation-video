@@ -15,6 +15,8 @@ interface GenericTemplateProps {
   // musicStartSeconds. Omit/null musicUrl to keep the video's own audio.
   musicUrl?: string | null;
   musicStartSeconds?: number;
+  /** 0..1, applied to the replacement track. Defaults to full volume. */
+  musicVolume?: number;
   // New tag-based props
   textBlocks?: TextBlock[];
   tagValues?: Record<string, string>;
@@ -48,6 +50,7 @@ export default function GenericTemplate({
   height,
   musicUrl,
   musicStartSeconds,
+  musicVolume,
   textBlocks,
   tagValues,
   fontFamilies,
@@ -143,7 +146,7 @@ export default function GenericTemplate({
       {musicUrl && (
         <Audio
           src={musicUrl}
-          volume={1}
+          volume={musicVolume ?? 1}
           startFrom={Math.round((musicStartSeconds ?? 0) * fps)}
         />
       )}

@@ -66,6 +66,8 @@ class AdminTemplateUpdate(BaseModel):
     watermark_rotation: float | None = None
     watermark_opacity: float | None = None
     pdf_snapshot_timestamps: list[float] | None = None
+    music_start_seconds: float | None = None
+    music_volume: float | None = None
     render_preview: bool = False  # explicit flag — only queue preview render when True
 
 
@@ -326,6 +328,9 @@ class AdminTemplateListResponse(BaseModel):
     watermark_opacity: float | None = None
     preview_key: str | None = None
     preview_status: str | None = None
+    music_key: str | None = None
+    music_start_seconds: float | None = None
+    music_volume: float | None = None
     created_at: datetime
 
     model_config = {"from_attributes": True}

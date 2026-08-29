@@ -4,7 +4,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
-from app.api import admin, auth, categories, drafts, fonts, payments, templates, renders, seo_render, sitemap, transliterate
+from app.api import admin, auth, categories, drafts, events, fonts, payments, templates, renders, seo_render, sitemap, transliterate
 
 # Without this, module loggers propagate to a bare root logger that has no
 # handler and a WARNING threshold, so anything logged at INFO by app code
@@ -39,6 +39,7 @@ app.include_router(drafts.router, prefix="/api/drafts", tags=["drafts"])
 app.include_router(renders.router, prefix="/api/renders", tags=["renders"])
 app.include_router(payments.router, prefix="/api/payments", tags=["payments"])
 app.include_router(transliterate.router, prefix="/api/transliterate", tags=["transliterate"])
+app.include_router(events.router, prefix="/api/events", tags=["events"])
 app.include_router(sitemap.router, tags=["sitemap"])  # no /api prefix — served at the site root
 # No /api prefix — Caddy proxies only bot User-Agents to this path here (see
 # ops/Caddyfile); real browsers get the SPA's /editor/{slug} from the

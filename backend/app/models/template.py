@@ -43,6 +43,20 @@ class Template(UUIDMixin, TimestampMixin, Base):
     preview_key: Mapped[str | None] = mapped_column(String(500), nullable=True)
     preview_status: Mapped[str | None] = mapped_column(String(50), nullable=True)
     pdf_snapshot_timestamps: Mapped[list | None] = mapped_column(JSONB, nullable=True)
+    # Admin-chosen soundtrack for this template. When set it replaces the
+    # source video's own audio everywhere — the customer's editor preview, the
+    # admin preview render, and the final MP4 — unless the customer uploads
+    # their own track, which wins over this one (RenderJob.music_key).
+    music_key: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    music_start_seconds: Mapped[float | None] = mapped_column(Float, nullable=True, default=0.0)
+    # 0..1. Applied to the soundtrack in both renderers and the editor preview,
+    # so a loud track can sit under the video rather than over it.
+    music_volume: Mapped[float | None] = mapped_column(Float, nullable=True, default=1.0)
+
+    @property
+    def has_music(self) -> bool:
+        """Public-safe existence flag, mirroring has_video."""
+        return self.music_key is not None
 
     @property
     def has_video(self) -> bool:

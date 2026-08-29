@@ -4,6 +4,7 @@ import { Player, type PlayerRef } from "@remotion/player";
 import GenericTemplate from "@/remotion/compositions/GenericTemplate";
 import { useAdminTemplateStore } from "@/store/adminTemplateStore";
 import { uploadTemplateVideo, getTemplateVideoUrl, getAdminTemplate } from "@/api/admin";
+import { templateMusicUrl } from "@/api/templates";
 import { listFonts, getFontFileUrl } from "@/api/fonts";
 import { transliterateBatch } from "@/api/transliterate";
 import TextBlockOverlay from "./TextBlockOverlay";
@@ -383,8 +384,22 @@ export default function VideoPreviewCanvas({
     return fontFamilies[template.default_font_id];
   }, [template?.default_font_id, fontFamilies]);
 
+  // The template's soundtrack plays here too, so what the admin hears while
+  // placing blocks is what the customer gets. The key is timestamped, which
+  // doubles as the cache-buster after a replacement.
+  const musicUrl = useMemo(
+    () =>
+      template?.id && template.music_key
+        ? `${templateMusicUrl(template.id)}?v=${encodeURIComponent(template.music_key)}`
+        : null,
+    [template?.id, template?.music_key]
+  );
+
   const inputProps = useMemo(() => ({
     videoUrl: videoUrl ?? null,
+    musicUrl,
+    musicStartSeconds: template?.music_start_seconds ?? 0,
+    musicVolume: template?.music_volume ?? 1,
     textBlocks: previewBlocks,
     imageBlocks,
     tagValues: previewTagValues,
@@ -393,7 +408,7 @@ export default function VideoPreviewCanvas({
     height: template?.height || 1920,
     defaultTextColor: template?.default_text_color,
     defaultFontFamily,
-  }), [videoUrl, previewBlocks, imageBlocks, previewTagValues, fontFamilies, template, defaultFontFamily]);
+  }), [videoUrl, musicUrl, previewBlocks, imageBlocks, previewTagValues, fontFamilies, template, defaultFontFamily]);
 
   return (
     <div className="flex flex-col flex-1 min-h-0">

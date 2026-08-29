@@ -196,9 +196,19 @@ def render_video_task(self, job_id: str):
 
             with tempfile.TemporaryDirectory() as tmp_dir:
                 source_path = os.path.join(tmp_dir, "source.mp4")
+                # The customer's own upload wins; otherwise the admin's
+                # template soundtrack, which is what they heard in the editor
+                # preview. Neither set = the source video keeps its own audio.
+                music_key = job.music_key or template.music_key
+                music_start = (
+                    job.music_start_seconds if job.music_key else template.music_start_seconds
+                ) or 0
+                # A customer's own upload plays at full volume; the admin's
+                # mix level only applies to the admin's own track.
+                music_volume = 1.0 if job.music_key else (template.music_volume if template.music_volume is not None else 1.0)
                 music_path = None
-                if job.music_key:
-                    music_path = os.path.join(tmp_dir, f"music{os.path.splitext(job.music_key)[1] or '.mp3'}")
+                if music_key:
+                    music_path = os.path.join(tmp_dir, f"music{os.path.splitext(music_key)[1] or '.mp3'}")
 
                 font_paths = {}
                 default_font_path = None
@@ -225,7 +235,7 @@ def render_video_task(self, job_id: str):
                 download_tasks = [(template.video_key, source_path)]
                 download_tasks.extend(font_download_info.values())
                 if music_path:
-                    download_tasks.append((job.music_key, music_path))
+                    download_tasks.append((music_key, music_path))
 
                 with ThreadPoolExecutor(max_workers=len(download_tasks)) as pool:
                     list(pool.map(_download, download_tasks))
@@ -314,7 +324,7 @@ def render_video_task(self, job_id: str):
                     blocks_json.append(_block_to_dict(b, content_ovr, ranges_ovr))
 
                 video_url = storage_service.internal_presigned_url(template.video_key, expires=600)
-                music_url = storage_service.internal_presigned_url(job.music_key, expires=600) if job.music_key else None
+                music_url = storage_service.internal_presigned_url(music_key, expires=600) if music_key else None
 
                 default_font_family = None
                 if template.default_font_id and str(template.default_font_id) in font_families:
@@ -333,7 +343,8 @@ def render_video_task(self, job_id: str):
                 input_props = {
                     "videoUrl": video_url,
                     "musicUrl": music_url,
-                    "musicStartSeconds": job.music_start_seconds or 0,
+                    "musicStartSeconds": music_start,
+                    "musicVolume": music_volume,
                     "width": template.width,
                     "height": template.height,
                     "textBlocks": blocks_json,
@@ -432,7 +443,8 @@ def render_video_task(self, job_id: str):
                         watermark_rotation=template.watermark_rotation,
                         watermark_opacity=template.watermark_opacity,
                         music_path=music_path,
-                        music_start_seconds=job.music_start_seconds or 0,
+                        music_start_seconds=music_start,
+                        music_volume=music_volume,
                         video_duration_seconds=template.duration_frames / template.fps,
                     )
                     ffmpeg.render()
@@ -668,8 +680,20 @@ def render_preview_task(self, template_id: str):
 
         # Call Remotion renderer service
         renderer_url = os.environ.get("RENDERER_URL", "http://renderer:3100")
+        # The preview is what a customer sees before they open the editor, so
+        # it has to carry the admin's soundtrack too — otherwise the card loops
+        # the source video's original audio and the track only appears later.
+        preview_music_url = (
+            storage_service.internal_presigned_url(template.music_key, expires=600)
+            if template.music_key
+            else None
+        )
+
         input_props = {
             "videoUrl": video_url,
+            "musicUrl": preview_music_url,
+            "musicStartSeconds": template.music_start_seconds or 0,
+            "musicVolume": template.music_volume if template.music_volume is not None else 1.0,
             "width": preview_width,
             "height": preview_height,
             "textBlocks": blocks_json,
@@ -848,6 +872,12 @@ def _ffmpeg_preview_fallback(db, template, text_blocks, tag_values):
         source_path = os.path.join(tmp_dir, "source.mp4")
         storage_service.download_to_file(template.video_key, source_path)
 
+        music_path = None
+        if template.music_key:
+            ext = os.path.splitext(template.music_key)[1] or ".mp3"
+            music_path = os.path.join(tmp_dir, f"music{ext}")
+            storage_service.download_to_file(template.music_key, music_path)
+
         font_paths = {}
         unique_font_ids = {b.font_id for b in text_blocks if b.font_id}
         if template.default_font_id:
@@ -876,6 +906,10 @@ def _ffmpeg_preview_fallback(db, template, text_blocks, tag_values):
             height=actual_height,
             default_text_color=template.default_text_color,
             fallback_font_path=fallback_font_path,
+            music_path=music_path,
+            music_start_seconds=template.music_start_seconds or 0,
+            music_volume=template.music_volume if template.music_volume is not None else 1.0,
+            video_duration_seconds=template.duration_frames / template.fps,
         )
         renderer.render(preset="veryfast")
 

@@ -4,8 +4,9 @@ import { Player, type PlayerRef } from "@remotion/player";
 import GenericTemplate from "@/remotion/compositions/GenericTemplate";
 import { useEditorStore, extractTags } from "@/store/editorStore";
 import { listFonts, getFontFileUrl } from "@/api/fonts";
-import { fetchVideoUrl } from "@/api/templates";
+import { fetchVideoUrl, templateMusicUrl } from "@/api/templates";
 import { transliterateBatch } from "@/api/transliterate";
+import { track, trackOnce } from "@/lib/track";
 import type { Font, TextBlock, FormatRange } from "@/types";
 
 export default function PreviewPlayer() {
@@ -343,11 +344,21 @@ export default function PreviewPlayer() {
     return Object.keys(remapped).length > 0 ? remapped : undefined;
   }, [editorMode, blockFormatOverrides, blockOverrides, transliteratedBlockOverrides, needsTransliteration]);
 
+  // The customer's own upload wins; otherwise the template's soundtrack, so
+  // the preview matches what the worker will render (see tasks.py). Neither
+  // set leaves musicUrl null, and GenericTemplate keeps the video's own audio.
+  const effectiveMusicUrl = musicObjectUrl ?? (template?.has_music ? templateMusicUrl(template.id) : null);
+  const effectiveMusicStart = musicObjectUrl ? musicStartSeconds : template?.music_start_seconds ?? 0;
+  // A customer's own upload plays at full volume; the admin's mix level
+  // belongs to the admin's own track. Same rule as the worker.
+  const effectiveMusicVolume = musicObjectUrl ? 1 : template?.music_volume ?? 1;
+
   const inputProps = useMemo(
     () => ({
       videoUrl,
-      musicUrl: musicObjectUrl,
-      musicStartSeconds,
+      musicUrl: effectiveMusicUrl,
+      musicStartSeconds: effectiveMusicStart,
+      musicVolume: effectiveMusicVolume,
       textBlocks: previewBlocks,
       tagValues: effectiveValues,
       fontFamilies,
@@ -364,7 +375,7 @@ export default function PreviewPlayer() {
     [
       previewBlocks, effectiveValues, fontFamilies, videoUrl, textColorOverrides, font, placeholderTags,
       template?.default_font_id, template?.width, template?.height, template?.default_text_color,
-      effectiveBlockOverrides, effectiveBlockFormatOverrides, musicObjectUrl, musicStartSeconds,
+      effectiveBlockOverrides, effectiveBlockFormatOverrides, effectiveMusicUrl, effectiveMusicStart, effectiveMusicVolume,
     ]
   );
 
@@ -381,6 +392,42 @@ export default function PreviewPlayer() {
       playerRef.current?.pause();
     }
   }, [previewReady]);
+
+  // How much of the preview people actually watch, in the editor where
+  // playback is always a deliberate press of play. The 10s mark is the point
+  // where someone has seen enough of a template to have an opinion about it.
+  useEffect(() => {
+    const player = playerRef.current;
+    if (!player || !template) return;
+    const fps = template.fps || 30;
+    const tenSecondFrame = fps * 10;
+
+    const onPlay = () =>
+      trackOnce(`editor-play-${template.id}`, "preview_play", {
+        templateId: template.id,
+        meta: { surface: "editor" },
+      });
+    const onFrame = (e: { detail: { frame: number } }) => {
+      if (e.detail.frame >= tenSecondFrame) {
+        trackOnce(`editor-10s-${template.id}`, "preview_10s", {
+          templateId: template.id,
+          value: 10,
+          meta: { surface: "editor" },
+        });
+      }
+    };
+    const onEnded = () =>
+      trackOnce(`editor-end-${template.id}`, "preview_complete", { templateId: template.id });
+
+    player.addEventListener("play", onPlay);
+    player.addEventListener("frameupdate", onFrame);
+    player.addEventListener("ended", onEnded);
+    return () => {
+      player.removeEventListener("play", onPlay);
+      player.removeEventListener("frameupdate", onFrame);
+      player.removeEventListener("ended", onEnded);
+    };
+  }, [template?.id, template?.fps]);
 
   // Seek to a block's start frame when the user focuses its input, so they
   // can see the relevant frame — but don't auto-play it. Playback only
