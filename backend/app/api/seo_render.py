@@ -156,6 +156,80 @@ async def render_editor_page_for_bots(slug: str, request: Request, db: AsyncSess
     )
 
 
+@router.get("/templates", response_class=HTMLResponse)
+async def browse_page_for_bots(db: AsyncSession = Depends(get_db)):
+    """Server-rendered stand-in for the /templates browse grid.
+
+    /editor and /watch already had one; /templates did not, so a crawler or a
+    link-preview bot got the raw index.html — whose canonical is hardcoded to
+    "/" . That told search engines the catalogue page *is* the homepage, and
+    made a shared catalogue link on WhatsApp show the generic site card. It
+    also means this is the one page that gives crawlers a plain-HTML link to
+    every published template, so discovery no longer depends on running JS.
+    """
+    base = _base_url()
+    canonical = f"{base}/templates"
+
+    result = await db.execute(
+        select(Template)
+        .where(Template.is_published == True)  # noqa: E712
+        .order_by(Template.created_at.desc())
+    )
+    templates = result.scalars().all()
+
+    title = f"Invitation Video Templates — Weddings, Engagements & Birthdays | {SITE_NAME}"
+    description = (
+        "Browse video invitation templates for Indian weddings, engagements, birthdays and "
+        "housewarmings. Personalise names, dates and photos in English, Hindi or Gujarati, "
+        "then download an HD video and PDF card."
+    )
+    image = f"{base}/logo.png"
+    image_alt = f"{SITE_NAME} invitation video templates"
+
+    items = "".join(
+        f'<li><a href="{base}/editor/{escape(t.slug)}">{escape(t.name)}</a></li>'
+        for t in templates
+    )
+    body = (
+        "<h1>Invitation Video Templates</h1>"
+        f"<p>{escape(description)}</p>"
+        f"<ul>{items}</ul>"
+    )
+
+    json_ld = {
+        "@context": "https://schema.org",
+        "@type": "CollectionPage",
+        "name": title,
+        "description": description,
+        "url": canonical,
+        "mainEntity": {
+            "@type": "ItemList",
+            "numberOfItems": len(templates),
+            "itemListElement": [
+                {
+                    "@type": "ListItem",
+                    "position": i + 1,
+                    "name": t.name,
+                    "url": f"{base}/editor/{t.slug}",
+                }
+                for i, t in enumerate(templates)
+            ],
+        },
+    }
+
+    return HTMLResponse(
+        _page(
+            title=title,
+            description=description,
+            canonical=canonical,
+            image=image,
+            image_alt=image_alt,
+            body=body,
+            json_ld=json_ld,
+        )
+    )
+
+
 @router.get("/watch/{render_id}", response_class=HTMLResponse)
 async def render_watch_page_for_bots(render_id: str, db: AsyncSession = Depends(get_db)):
     """Server-rendered stand-in for /watch/{id}, for crawlers/social-link bots

@@ -48,6 +48,19 @@
         reverse_proxy backend:8000
     }
 
+    # And the catalogue. Without this a bot fetching /templates got index.html,
+    # whose canonical is hardcoded to "/" — telling search engines the browse
+    # page is a duplicate of the homepage, and showing the generic site card
+    # when the catalogue link is shared. This page is also the only plain-HTML
+    # place a crawler can find a link to every published template.
+    @browseBot {
+        path /templates
+        header_regexp User-Agent (?i)(bot|facebookexternalhit|whatsapp|telegrambot|slackbot|discordbot|linkedinbot|twitterbot|pinterest|embedly|quora|redditbot|vkshare|skypeuripreview|applebot|w3c_validator)
+    }
+    handle @browseBot {
+        reverse_proxy backend:8000
+    }
+
     handle {
         reverse_proxy frontend:80
     }
