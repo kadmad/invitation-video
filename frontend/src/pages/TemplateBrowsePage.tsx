@@ -9,6 +9,7 @@ import { useSeo } from "@/lib/seo";
 import { API_URL } from "@/api/client";
 import { SITE_NAME, SITE_URL } from "@/lib/site";
 import { getTemplateVideoSrc as getVideoUrl } from "@/lib/templateVideo";
+import { pausePreview, playPreview } from "@/lib/previewPlayback";
 import type { Template, Category } from "@/types";
 
 const BASE_URL = API_URL;
@@ -89,7 +90,7 @@ function TemplateCard({
 
     // If already have src and video ready, just play
     if (videoSrc && videoReady && previewStatus !== "processing") {
-      videoRef.current?.play().catch(() => {});
+      playPreview(videoRef.current);
       return;
     }
 
@@ -107,7 +108,7 @@ function TemplateCard({
     hoveredRef.current = false;
     setHovered(false);
     if (videoRef.current) {
-      videoRef.current.pause();
+      pausePreview(videoRef.current);
       videoRef.current.currentTime = 0;
     }
   }, []);
@@ -209,7 +210,10 @@ function TemplateCard({
             }}
             onCanPlay={() => {
               setVideoReady(true);
-              if (hoveredRef.current) videoRef.current?.play().catch(() => {});
+              if (hoveredRef.current) playPreview(videoRef.current);
+            }}
+            onWaiting={() => {
+              if (hoveredRef.current) playPreview(videoRef.current);
             }}
             className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-200 pointer-events-none select-none ${
               hovered && videoReady ? "opacity-100" : "opacity-0"

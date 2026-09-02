@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { API_URL } from "@/api/client";
 import { getTemplateVideoSrc as getVideoUrl } from "@/lib/templateVideo";
+import { pausePreview, playPreview } from "@/lib/previewPlayback";
 import type { Template, Category } from "@/types";
 
 const BASE_URL = API_URL;
@@ -61,9 +62,9 @@ function CarouselTemplateCard({
     const video = videoRef.current;
     if (!video) return;
     if (active) {
-      video.play().catch(() => {});
+      playPreview(video);
     } else {
-      video.pause();
+      pausePreview(video);
     }
   }, [active, videoSrc]);
 
@@ -150,6 +151,12 @@ function CarouselTemplateCard({
             controlsList="nodownload nofullscreen noremoteplayback"
             disablePictureInPicture
             onContextMenu={(e) => e.preventDefault()}
+            onCanPlay={() => {
+              if (active) playPreview(videoRef.current);
+            }}
+            onWaiting={() => {
+              if (active) playPreview(videoRef.current);
+            }}
             className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-[400ms] ease-in-out pointer-events-none select-none ${
               videoReady ? "opacity-100" : "opacity-0"
             }`}

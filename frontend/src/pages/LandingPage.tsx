@@ -5,6 +5,7 @@ import { API_URL } from "@/api/client";
 import { useSeo } from "@/lib/seo";
 import { SITE_NAME, SITE_DESCRIPTION, SITE_URL, SITE_TAGLINE } from "@/lib/site";
 import { getTemplateVideoSrc } from "@/lib/templateVideo";
+import { pausePreview, playPreview } from "@/lib/previewPlayback";
 import { DUMMY_TEMPLATES } from "@/lib/dummyTemplates";
 import { trackOnce } from "@/lib/track";
 import PageTransition from "@/components/common/PageTransition";
@@ -43,6 +44,7 @@ function PhoneMockup({
   const [videoReady, setVideoReady] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const visibleRef = useRef(false);
 
   useEffect(() => {
     if (!template.has_video) return;
@@ -69,13 +71,17 @@ function PhoneMockup({
       ([entry]) => {
         const video = videoRef.current;
         if (!video) return;
-        if (entry.isIntersecting) video.play().catch(() => {});
-        else video.pause();
+        visibleRef.current = entry.isIntersecting;
+        if (entry.isIntersecting) playPreview(video);
+        else pausePreview(video);
       },
       { threshold: 0.4 }
     );
     observer.observe(el);
-    return () => observer.disconnect();
+    return () => {
+      observer.disconnect();
+      pausePreview(videoRef.current);
+    };
   }, [videoSrc]);
 
   return (
@@ -117,7 +123,13 @@ function PhoneMockup({
           preload="metadata"
           disablePictureInPicture
           onContextMenu={(e) => e.preventDefault()}
-          onCanPlay={() => setVideoReady(true)}
+          onCanPlay={() => {
+            setVideoReady(true);
+            if (visibleRef.current) playPreview(videoRef.current);
+          }}
+          onWaiting={() => {
+            if (visibleRef.current) playPreview(videoRef.current);
+          }}
           className="absolute inset-0 w-full h-full object-cover pointer-events-none select-none"
         />
       )}
