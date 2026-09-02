@@ -10,7 +10,6 @@ import {
 import { transliterateBatchCandidates } from "@/api/transliterate";
 import type { WordCandidates } from "@/api/transliterate";
 import TranslitWord from "@/components/common/TranslitWord";
-import ConfirmModal from "@/components/admin/ConfirmModal";
 import RichTextEditor from "@/components/admin/RichTextEditor";
 import FontPicker from "@/components/editor/FontPicker";
 import type { Font, TextBlock } from "@/types";
@@ -678,20 +677,18 @@ export default function TextBlockPanel() {
     selectedBlockIds,
     expandedBlockId,
     currentTime,
-    selectBlock,
     selectBlockMulti,
     expandBlock,
     updateBlock,
     addBlock,
     removeBlock,
+    removeBlocks,
     triggerBlockPreview,
   } = useAdminTemplateStore();
 
   const [fonts, setFonts] = useState<Font[]>([]);
   const [saving, setSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
-  const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
-  const [deleteAllTarget, setDeleteAllTarget] = useState(false);
   const [showAllBlocks, setShowAllBlocks] = useState(false);
   const contentInputRef = useRef<HTMLTextAreaElement | null>(null);
   const blockListRef = useRef<HTMLDivElement>(null);
@@ -774,29 +771,25 @@ export default function TextBlockPanel() {
   };
 
   const handleDeleteBlock = async (blockId?: string) => {
-    const target = blockId || deleteTarget;
+    const target = blockId;
     if (!templateId || !target) return;
     try {
       await deleteTextBlock(templateId, target);
+      removeBlock(target);
     } catch (err) {
       console.error("Failed to delete block from server", err);
-      // Still remove from UI even if server fails (block may not be saved yet)
     }
-    removeBlock(target);
-    if (deleteTarget) setDeleteTarget(null);
   };
 
   const handleDeleteAllVisible = async () => {
     if (!templateId) return;
     const blocksToDelete = showAllBlocks ? allBlocks : visibleBlocks;
-    try {
-      await Promise.all(blocksToDelete.map((b) => deleteTextBlock(templateId, b.id)));
-      blocksToDelete.forEach((b) => removeBlock(b.id));
-      setDeleteAllTarget(false);
-      selectBlock(null);
-    } catch (err) {
-      console.error("Failed to delete blocks", err);
-    }
+    const results = await Promise.allSettled(blocksToDelete.map((b) => deleteTextBlock(templateId, b.id)));
+    const deletedIds = blocksToDelete.filter((_, index) => results[index].status === "fulfilled").map((b) => b.id);
+    if (deletedIds.length > 0) removeBlocks(deletedIds);
+    results.forEach((result) => {
+      if (result.status === "rejected") console.error("Failed to delete block from server", result.reason);
+    });
   };
 
   const handleSaveBlock = async (blockId: string, extraFields?: Partial<TextBlock>) => {
@@ -858,9 +851,9 @@ export default function TextBlockPanel() {
     updateBlock(blockId, { [field]: value } as Partial<TextBlock>);
   };
 
-  // Click block header: select (shift for multi-select) + show transform on canvas
-  const handleBlockClick = (blockId: string, shiftKey: boolean) => {
-    selectBlockMulti(blockId, shiftKey);
+  // Click block header: select (Shift/Ctrl/Cmd for multi-select) + show transform on canvas
+  const handleBlockClick = (blockId: string, multiSelect: boolean) => {
+    selectBlockMulti(blockId, multiSelect);
   };
 
   return (
@@ -905,7 +898,7 @@ export default function TextBlockPanel() {
           {/* Delete all visible blocks */}
           {displayedBlocks.length > 0 && (
             <button
-              onClick={() => setDeleteAllTarget(true)}
+              onClick={handleDeleteAllVisible}
               className="p-1.5 rounded-lg text-ink-muted hover:text-red-500 hover:bg-red-50 transition"
               title={`Delete ${showAllBlocks ? "all" : "visible"} blocks (${displayedBlocks.length})`}
             >
@@ -952,7 +945,7 @@ export default function TextBlockPanel() {
                 {/* Block header row */}
                 <div
                   className="flex items-center gap-2 px-3 py-2.5 cursor-pointer select-none"
-                  onClick={(e) => handleBlockClick(block.id, e.shiftKey)}
+                  onClick={(e) => handleBlockClick(block.id, e.shiftKey || e.ctrlKey || e.metaKey)}
                 >
                   {/* Time badge */}
                   <span className="flex-shrink-0 text-[9px] font-mono bg-surface-alt text-ink-muted rounded px-1.5 py-0.5">
@@ -1068,21 +1061,6 @@ export default function TextBlockPanel() {
         </div>
       )}
 
-      <ConfirmModal
-        open={!!deleteTarget}
-        title="Delete Text Block"
-        message="Are you sure you want to delete this text block? This action cannot be undone."
-        onConfirm={handleDeleteBlock}
-        onCancel={() => setDeleteTarget(null)}
-      />
-
-      <ConfirmModal
-        open={deleteAllTarget}
-        title="Delete All Blocks"
-        message={`Delete ${displayedBlocks.length} ${showAllBlocks ? "" : "visible "}text block${displayedBlocks.length !== 1 ? "s" : ""}? This cannot be undone.`}
-        onConfirm={handleDeleteAllVisible}
-        onCancel={() => setDeleteAllTarget(false)}
-      />
 
     </div>
   );

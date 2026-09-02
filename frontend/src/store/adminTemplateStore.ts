@@ -27,6 +27,8 @@ interface AdminTemplateState {
   updateBlock: (blockId: string, updates: Partial<TextBlock>) => void;
   addBlock: (block: TextBlock) => void;
   removeBlock: (blockId: string) => void;
+  removeBlocks: (blockIds: string[]) => void;
+  replaceBlockId: (oldId: string, block: TextBlock) => void;
   selectImageBlock: (id: string | null) => void;
   toggleImageBlock: (id: string) => void;
   updateImageBlock: (blockId: string, updates: Partial<ImageBlock>) => void;
@@ -206,6 +208,46 @@ export const useAdminTemplateStore = create<AdminTemplateState>()(
             },
             selectedBlockId:
               state.selectedBlockId === blockId ? null : state.selectedBlockId,
+            selectedBlockIds: state.selectedBlockIds.filter((id) => id !== blockId),
+            expandedBlockId:
+              state.expandedBlockId === blockId ? null : state.expandedBlockId,
+          };
+        }),
+
+      removeBlocks: (blockIds) =>
+        set((state) => {
+          if (!state.template || blockIds.length === 0) return state;
+          const ids = new Set(blockIds);
+          debouncedSaveDraft();
+          return {
+            template: {
+              ...state.template,
+              text_blocks: state.template.text_blocks.filter((b) => !ids.has(b.id)),
+            },
+            selectedBlockId: state.selectedBlockId && ids.has(state.selectedBlockId)
+              ? null
+              : state.selectedBlockId,
+            selectedBlockIds: state.selectedBlockIds.filter((id) => !ids.has(id)),
+            expandedBlockId: state.expandedBlockId && ids.has(state.expandedBlockId)
+              ? null
+              : state.expandedBlockId,
+          };
+        }),
+
+      replaceBlockId: (oldId, block) =>
+        set((state) => {
+          if (!state.template) return state;
+          const replace = (id: string) => (id === oldId ? block.id : id);
+          return {
+            template: {
+              ...state.template,
+              text_blocks: state.template.text_blocks.map((b) =>
+                b.id === oldId ? block : b,
+              ),
+            },
+            selectedBlockId: state.selectedBlockId ? replace(state.selectedBlockId) : null,
+            selectedBlockIds: state.selectedBlockIds.map(replace),
+            expandedBlockId: state.expandedBlockId ? replace(state.expandedBlockId) : null,
           };
         }),
 

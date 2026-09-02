@@ -5,6 +5,7 @@ import type { PlayerRef } from "@remotion/player";
 import {
   getAdminTemplate,
   updateTemplate,
+  createTextBlock,
   updateTextBlock,
   deleteTextBlock,
   getTemplateVideoUrl,
@@ -19,7 +20,7 @@ import ImageBlockPanel from "@/components/admin/ImageBlockPanel";
 import AEImportModal from "@/components/admin/AEImportModal";
 import Toggle from "@/components/common/Toggle";
 import FontPicker from "@/components/editor/FontPicker";
-import type { Category, Font } from "@/types";
+import type { Category, Font, Template, TextBlock } from "@/types";
 import {
   loadAdminDraft,
   clearAdminDraft,
@@ -68,6 +69,69 @@ export default function AdminTemplateEditorPage() {
   const [renderPreview, setRenderPreview] = useState(false);
   const [pdfSnapshotTimestamps, setPdfSnapshotTimestamps] = useState<number[]>([]);
   const [newTimestamp, setNewTimestamp] = useState("");
+  const historySyncRef = useRef(false);
+  const activeTemplateIdRef = useRef(id);
+  activeTemplateIdRef.current = id;
+
+  const syncHistoryToServer = async (before: Template | null, after: Template | null) => {
+    const activeTemplateId = activeTemplateIdRef.current;
+    if (!activeTemplateId || !before || !after) return;
+    const beforeBlocks = before.text_blocks ?? [];
+    const afterBlocks = after.text_blocks ?? [];
+    const beforeIds = new Set(beforeBlocks.map((block) => block.id));
+    const afterIds = new Set(afterBlocks.map((block) => block.id));
+    const restored = afterBlocks.filter((block) => !beforeIds.has(block.id));
+    const removed = beforeBlocks.filter((block) => !afterIds.has(block.id));
+
+    if (restored.length > 0) {
+      const results = await Promise.allSettled(
+        restored.map(({ id: _oldId, ...block }) => createTextBlock(activeTemplateId, {
+          ...block,
+          sort_order: block.sort_order,
+        })),
+      );
+      const replacements: Array<{ oldId: string; block: TextBlock }> = [];
+      const failedIds: string[] = [];
+      results.forEach((result, index) => {
+        if (result.status === "fulfilled") {
+          replacements.push({ oldId: restored[index].id, block: result.value });
+        } else {
+          failedIds.push(restored[index].id);
+          console.error("Failed to restore deleted text block", result.reason);
+        }
+      });
+      const temporalApi = useAdminTemplateStore.temporal.getState();
+      temporalApi.pause();
+      try {
+        const state = useAdminTemplateStore.getState();
+        replacements.forEach(({ oldId, block }) => state.replaceBlockId(oldId, block));
+        if (failedIds.length > 0) state.removeBlocks(failedIds);
+      } finally {
+        temporalApi.resume();
+      }
+    }
+
+    if (removed.length > 0) {
+      const results = await Promise.allSettled(
+        removed.map((block) => deleteTextBlock(activeTemplateId, block.id)),
+      );
+      results.forEach((result) => {
+        if (result.status === "rejected") console.error("Failed to sync text block history deletion", result.reason);
+      });
+    }
+  };
+
+  const applyHistoryAction = (direction: "undo" | "redo") => {
+    if (historySyncRef.current) return;
+    const before = useAdminTemplateStore.getState().template;
+    if (direction === "undo") useAdminTemplateStore.temporal.getState().undo();
+    else useAdminTemplateStore.temporal.getState().redo();
+    const after = useAdminTemplateStore.getState().template;
+    historySyncRef.current = true;
+    void syncHistoryToServer(before, after).finally(() => {
+      historySyncRef.current = false;
+    });
+  };
 
   // Undo/redo reactive state
   const canUndo = useStore(useAdminTemplateStore.temporal, (s) => s.pastStates.length > 0);
@@ -176,24 +240,21 @@ export default function AdminTemplateEditorPage() {
       const target = e.target as HTMLElement;
       const tag = target.tagName;
       const inInput = tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || target.isContentEditable;
+      const key = e.key.toLowerCase();
 
       // Ctrl/Cmd+Z = undo, Ctrl/Cmd+Shift+Z = redo
-      if ((e.ctrlKey || e.metaKey) && e.key === "z") {
+      if ((e.ctrlKey || e.metaKey) && key === "z") {
         if (inInput) return; // let browser handle undo in inputs
         e.preventDefault();
-        if (e.shiftKey) {
-          useAdminTemplateStore.temporal.getState().redo();
-        } else {
-          useAdminTemplateStore.temporal.getState().undo();
-        }
+        applyHistoryAction(e.shiftKey ? "redo" : "undo");
         return;
       }
 
       // Ctrl/Cmd+Y = redo (Windows convention)
-      if ((e.ctrlKey || e.metaKey) && e.key === "y") {
+      if ((e.ctrlKey || e.metaKey) && key === "y") {
         if (inInput) return;
         e.preventDefault();
-        useAdminTemplateStore.temporal.getState().redo();
+        applyHistoryAction("redo");
         return;
       }
 
@@ -204,12 +265,14 @@ export default function AdminTemplateEditorPage() {
         const ids = state.selectedBlockIds;
         if (ids.length === 0 || !id) return;
         e.preventDefault();
-        ids.forEach(async (bid) => {
-          try {
-            await deleteTextBlock(id, bid);
-            state.removeBlock(bid);
-          } catch (err) { console.error("Failed to delete block", err); }
-        });
+        void (async () => {
+          const results = await Promise.allSettled(ids.map((bid) => deleteTextBlock(id, bid)));
+          const deletedIds = ids.filter((_, index) => results[index].status === "fulfilled");
+          if (deletedIds.length > 0) useAdminTemplateStore.getState().removeBlocks(deletedIds);
+          results.forEach((result) => {
+            if (result.status === "rejected") console.error("Failed to delete block", result.reason);
+          });
+        })();
         return;
       }
 
@@ -507,7 +570,7 @@ export default function AdminTemplateEditorPage() {
         {/* Undo/Redo */}
         <div className="flex items-center gap-0.5">
           <button
-            onClick={() => useAdminTemplateStore.temporal.getState().undo()}
+            onClick={() => applyHistoryAction("undo")}
             disabled={!canUndo}
             className="p-1 rounded text-ink-muted hover:text-ink-muted hover:bg-surface-alt disabled:opacity-30 transition"
             title="Undo (Ctrl+Z)"
@@ -517,7 +580,7 @@ export default function AdminTemplateEditorPage() {
             </svg>
           </button>
           <button
-            onClick={() => useAdminTemplateStore.temporal.getState().redo()}
+            onClick={() => applyHistoryAction("redo")}
             disabled={!canRedo}
             className="p-1 rounded text-ink-muted hover:text-ink-muted hover:bg-surface-alt disabled:opacity-30 transition"
             title="Redo (Ctrl+Shift+Z)"

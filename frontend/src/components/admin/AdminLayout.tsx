@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { NavLink, Outlet, useLocation } from "react-router-dom";
+import { Link, NavLink, Outlet, useLocation } from "react-router-dom";
 import PageTransition from "@/components/common/PageTransition";
 import { useAuthStore } from "@/store/authStore";
 
@@ -235,7 +235,7 @@ export default function AdminLayout() {
         </div>
         <div className="min-w-[64rem] lg:min-w-0">
         {/* Breadcrumb */}
-        <nav className="flex items-center gap-1.5 text-sm text-ink-muted mb-4">
+        <nav aria-label="Breadcrumb" className="flex items-center gap-1.5 text-sm text-ink-muted mb-4">
           {breadcrumbs.map((crumb, i) => (
             <span key={crumb.path} className="flex items-center gap-1.5">
               {i > 0 && (
@@ -243,9 +243,18 @@ export default function AdminLayout() {
                   <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
                 </svg>
               )}
-              <span className={crumb.isLast ? "text-ink font-medium" : ""}>
-                {crumb.label}
-              </span>
+              {crumb.isLast ? (
+                <span className="text-ink font-medium" aria-current="page">
+                  {crumb.label}
+                </span>
+              ) : (
+                <Link
+                  to={crumb.path}
+                  className="hover:text-primary-500 hover:underline transition-colors"
+                >
+                  {crumb.label}
+                </Link>
+              )}
             </span>
           ))}
         </nav>

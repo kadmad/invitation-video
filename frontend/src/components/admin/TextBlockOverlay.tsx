@@ -157,11 +157,12 @@ export default function TextBlockOverlay({
         onMouseDown={(e) => {
           e.stopPropagation();
           const store = useAdminTemplateStore.getState();
-          if (!e.shiftKey && store.selectedBlockIds.includes(block.id)) {
+          const multiSelect = e.shiftKey || e.ctrlKey || e.metaKey;
+          if (!multiSelect && store.selectedBlockIds.includes(block.id)) {
             if (store.selectedBlockIds[0] !== block.id) makePrimary(block.id);
             return;
           }
-          selectBlockMulti(block.id, e.shiftKey);
+          selectBlockMulti(block.id, multiSelect);
         }}
         style={{
           position: "absolute",

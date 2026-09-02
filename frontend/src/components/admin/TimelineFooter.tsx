@@ -275,7 +275,7 @@ export default function TimelineFooter({ playerRef, pdfSnapshotTimestamps, onPdf
     const block = blocks.find((b) => b.id === blockId);
     if (!block) return;
 
-    const shiftKey = e.shiftKey;
+    const multiSelect = e.shiftKey || e.ctrlKey || e.metaKey;
     const isMultiSelected = selectedBlockIds.includes(blockId) && selectedBlockIds.length > 1;
     // Capture all blocks to drag: if multi-selected, move all; otherwise just this one
     const dragBlockIds = isMultiSelected ? [...selectedBlockIds] : [blockId];
@@ -316,8 +316,8 @@ export default function TimelineFooter({ playerRef, pdfSnapshotTimestamps, onPdf
       window.removeEventListener("mousemove", handleMouseMove);
       window.removeEventListener("mouseup", handleMouseUp);
       if (!moved) {
-        // Was a click, not a drag — select (shift for multi-select) + seek
-        selectBlockMulti(blockId, shiftKey);
+        // Was a click, not a drag — select (modifier for multi-select) + seek
+        selectBlockMulti(blockId, multiSelect);
         seekToTime(block.start_time);
         return;
       }
