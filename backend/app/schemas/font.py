@@ -13,3 +13,13 @@ class FontResponse(BaseModel):
     preview_text: str | None
 
     model_config = {"from_attributes": True}
+
+
+class FontUploadError(BaseModel):
+    filename: str
+    error: str
+
+
+class BulkFontUploadResponse(BaseModel):
+    uploaded: list[FontResponse]
+    errors: list[FontUploadError]

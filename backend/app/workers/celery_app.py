@@ -31,6 +31,9 @@ celery_app.conf.update(
     broker_transport_options={"visibility_timeout": 3600},
     worker_prefetch_multiplier=1,
     worker_concurrency=1,
+    # The production-connected worker may start before Tailscale or Redis
+    # finishes coming up after Docker Desktop launches at machine login.
+    broker_connection_retry_on_startup=True,
 )
 
 celery_app.autodiscover_tasks(["app.workers"])

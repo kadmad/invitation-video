@@ -175,17 +175,16 @@ export const uploadFrameImage = (
 export const listAdminFonts = () =>
   client.get<Font[]>("/admin/fonts").then((r) => r.data);
 
-export const uploadFont = (
-  data: { name: string; family_name: string; language?: string; weight?: string; style?: string },
-  file: File,
-) => {
+export interface BulkFontUploadResult {
+  uploaded: Font[];
+  errors: { filename: string; error: string }[];
+}
+
+export const uploadFont = (files: File[]) => {
   const form = new FormData();
-  form.append("file", file);
-  Object.entries(data).forEach(([key, value]) => {
-    if (value !== undefined) form.append(key, value);
-  });
+  files.forEach((file) => form.append("files", file));
   return client
-    .post<Font>("/admin/fonts", form, {
+    .post<BulkFontUploadResult>("/admin/fonts", form, {
       headers: { "Content-Type": "multipart/form-data" },
     })
     .then((r) => r.data);

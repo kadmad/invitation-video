@@ -64,8 +64,10 @@ services:
       - renderer
     # Comes back automatically whenever Docker (re)starts — including at PC
     # boot, as long as Docker Desktop itself is set to launch at login and
-    # this container was left running (`up -d`) at least once.
-    restart: unless-stopped
+    # this container was left running (`up -d`) at least once. `always` also
+    # makes the worker recover if Docker stopped it during startup while the
+    # production network was still coming up.
+    restart: always
 
   frontend:
     build:

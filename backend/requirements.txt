@@ -20,3 +20,4 @@ razorpay>=1.4.2
 reportlab>=4.0
 Pillow>=10.0
 qrcode[pil]>=7.4
+fonttools[woff]==4.55.3

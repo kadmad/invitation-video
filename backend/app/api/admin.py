@@ -8,7 +8,7 @@ import time
 import uuid
 from datetime import datetime, timedelta, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, Request, UploadFile, status
+from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile, status
 from sqlalchemy import String, cast, distinct, select, func, case, and_
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -48,8 +48,16 @@ from app.schemas.admin import (
     TemplateAnalyticsRow,
     PeriodData,
 )
-from app.schemas.font import FontResponse
+from app.schemas.font import BulkFontUploadResponse, FontResponse
 from app.services.storage_service import storage_service, prod_storage_service
+from app.services.font_metadata import (
+    MAX_FONT_FILE_BYTES,
+    MAX_BULK_FONT_FILES,
+    SUPPORTED_FONT_EXTENSIONS,
+    detect_font_metadata,
+    content_type_for_font,
+    extension_for_font_data,
+)
 from app.utils.orders import format_order_number
 from app.services import whatsapp_service
 from app.workers.celery_app import celery_app
@@ -868,6 +876,16 @@ _AE_STYLE_SUFFIXES = (
     "thinitalic", "thin", "blackitalic", "black", "italic", "oblique",
     "regular",
 )
+_AE_WEIGHT_HINTS = (
+    ("extrabold", "800"),
+    ("semibold", "600"),
+    ("bold", "700"),
+    ("medium", "500"),
+    ("light", "300"),
+    ("thin", "100"),
+    ("black", "900"),
+    ("regular", "regular"),
+)
 
 
 def _ae_font_family_guess(ps_name: str) -> str:
@@ -888,24 +906,76 @@ def _ae_font_family_guess(ps_name: str) -> str:
     # CamelCase -> spaced words: "PlayfairDisplay" -> "Playfair Display"
     spaced = re.sub(r"(?<=[a-z0-9])(?=[A-Z])", " ", base)
     spaced = re.sub(r"(?<=[A-Z])(?=[A-Z][a-z])", " ", spaced)
+    # After Effects can emit the abbreviated family token "Deva", while
+    # the font's name table commonly calls the same script "Devanagari".
+    spaced = re.sub(r"\bdeva\b", "Devanagari", spaced, flags=re.IGNORECASE)
     return spaced.strip()
 
 
-async def _match_ae_font(font_ps_name: str, db: AsyncSession) -> Font | None:
-    """Fuzzy-match an After Effects PostScript font name against our fonts
-    table by family name. Best-effort only — admin reviews/overrides in the
-    import preview before anything is created."""
+def _ae_font_name_key(value: str) -> str:
+    """Normalize family spelling differences without changing font data."""
+    return re.sub(r"[^a-z0-9]", "", value.lower().replace("devanagari", "deva"))
+
+
+def _ae_font_variant_hints(font_ps_name: str) -> tuple[str | None, str | None]:
+    compact = re.sub(r"[^a-z]", "", font_ps_name.lower())
+    style = "italic" if "italic" in compact or "oblique" in compact else None
+    weight = next((value for token, value in _AE_WEIGHT_HINTS if token in compact), None)
+    return weight, style
+
+
+def _best_ae_font_match(candidates: list[Font], font_ps_name: str) -> Font | None:
+    if not candidates:
+        return None
+    weight_hint, style_hint = _ae_font_variant_hints(font_ps_name)
+
+    def score(font: Font) -> tuple[int, str]:
+        points = 0
+        if style_hint:
+            points += 4 if font.style == style_hint else 0
+        elif font.style == "normal":
+            points += 2
+        if weight_hint:
+            points += 4 if font.weight == weight_hint else 0
+        elif font.weight == "regular":
+            points += 2
+        return points, font.name.lower()
+
+    return max(candidates, key=score)
+
+
+async def _match_ae_font(
+    font_ps_name: str,
+    db: AsyncSession,
+    font_catalog: list[Font] | None = None,
+) -> Font | None:
+    """Match an After Effects PostScript name to a stored family and variant.
+
+    AE's PostScript family spelling is not guaranteed to match the readable
+    family from the font name table (for example TiroDevaHindi vs Tiro
+    Devanagari Hindi), so comparison uses a normalized family key. When a
+    family has multiple records, an explicit AE weight/style wins; otherwise
+    the regular/normal record is the safe default.
+    """
     guess = _ae_font_family_guess(font_ps_name)
     if not guess:
         return None
 
-    result = await db.execute(select(Font).where(func.lower(Font.family_name) == guess.lower()))
-    match = result.scalars().first()
-    if match:
-        return match
+    if font_catalog is None:
+        result = await db.execute(select(Font))
+        font_catalog = result.scalars().all()
+    guess_key = _ae_font_name_key(guess)
+    exact = [font for font in font_catalog if _ae_font_name_key(font.family_name) == guess_key]
+    if exact:
+        return _best_ae_font_match(exact, font_ps_name)
 
-    result = await db.execute(select(Font).where(Font.family_name.ilike(f"%{guess}%")))
-    return result.scalars().first()
+    fuzzy = [
+        font
+        for font in font_catalog
+        if guess_key in _ae_font_name_key(font.family_name)
+        or _ae_font_name_key(font.family_name) in guess_key
+    ]
+    return _best_ae_font_match(fuzzy, font_ps_name)
 
 
 @router.post("/templates/{template_id}/text-blocks/import-ae", response_model=AEImportPreviewResponse)
@@ -928,9 +998,12 @@ async def preview_ae_import(
 
     hex_color_re = re.compile(r"^#[0-9a-fA-F]{6}$")
 
+    font_result = await db.execute(select(Font))
+    font_catalog = font_result.scalars().all()
+
     preview_layers = []
     for layer in body.layers:
-        matched = await _match_ae_font(layer.font, db)
+        matched = await _match_ae_font(layer.font, db, font_catalog)
         color = layer.color if layer.color and hex_color_re.match(layer.color) else None
         preview_layers.append(
             AEImportPreviewLayer(
@@ -1085,35 +1158,71 @@ async def list_fonts(
     return result.scalars().all()
 
 
-@router.post("/fonts", response_model=FontResponse, status_code=status.HTTP_201_CREATED)
+@router.post("/fonts", response_model=BulkFontUploadResponse, status_code=status.HTTP_201_CREATED)
 async def upload_font(
-    name: str,
-    family_name: str,
-    language: str,
-    file: UploadFile,
-    weight: str = "regular",
-    style: str = "normal",
-    preview_text: str | None = None,
+    files: list[UploadFile] = File(...),
     db: AsyncSession = Depends(get_db),
     _admin=Depends(get_admin_user),
 ):
-    file_key = f"fonts/{file.filename}"
-    data = await file.read()
-    storage_service.upload(file_key, data, content_type="font/ttf")
+    if len(files) > MAX_BULK_FONT_FILES:
+        raise HTTPException(
+            status_code=400,
+            detail=f"You can upload up to {MAX_BULK_FONT_FILES} font files at a time",
+        )
 
-    font = Font(
-        name=name,
-        family_name=family_name,
-        language=language,
-        weight=weight,
-        style=style,
-        file_key=file_key,
-        preview_text=preview_text,
-    )
-    db.add(font)
-    await db.commit()
-    await db.refresh(font)
-    return font
+    uploaded: list[Font] = []
+    uploaded_keys: list[str] = []
+    errors: list[dict[str, str]] = []
+
+    for file in files:
+        filename = file.filename or "unnamed font"
+        try:
+            # Read only one file at a time and one byte over the limit, so a
+            # large batch cannot consume unbounded memory.
+            data = await file.read(MAX_FONT_FILE_BYTES + 1)
+            metadata = detect_font_metadata(data, filename)
+            extension = extension_for_font_data(data)
+            if extension not in SUPPORTED_FONT_EXTENSIONS:
+                raise ValueError("Unsupported font format")
+
+            # A UUID prevents one upload from replacing another when files
+            # have the same filename, while preserving the actual format.
+            file_key = f"fonts/{uuid.uuid4()}{extension}"
+            storage_service.upload(file_key, data, content_type=content_type_for_font(extension))
+            uploaded_keys.append(file_key)
+
+            font = Font(
+                name=metadata["name"],
+                family_name=metadata["family_name"],
+                language=metadata["language"],
+                weight=metadata["weight"],
+                style=metadata["style"],
+                file_key=file_key,
+                preview_text=metadata["preview_text"],
+            )
+            db.add(font)
+            uploaded.append(font)
+        except ValueError as exc:
+            errors.append({"filename": filename, "error": str(exc)})
+        except Exception:
+            logger.exception("Font upload failed for %s", filename)
+            errors.append({"filename": filename, "error": "Could not store this font file"})
+
+    try:
+        if uploaded:
+            await db.commit()
+            for font in uploaded:
+                await db.refresh(font)
+    except Exception:
+        await db.rollback()
+        for file_key in uploaded_keys:
+            try:
+                storage_service.delete(file_key)
+            except Exception:
+                logger.exception("Could not clean up font object %s", file_key)
+        raise
+
+    return {"uploaded": uploaded, "errors": errors}
 
 
 @router.delete("/fonts/{font_id}")

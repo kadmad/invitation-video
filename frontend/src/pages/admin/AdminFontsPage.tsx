@@ -4,28 +4,11 @@ import ConfirmModal from "@/components/admin/ConfirmModal";
 import type { Font } from "@/types";
 import { toast, errorMessage } from "@/store/toastStore";
 
-interface FontForm {
-  name: string;
-  family_name: string;
-  language: string;
-  weight: string;
-  style: string;
-}
-
-const emptyForm: FontForm = {
-  name: "",
-  family_name: "",
-  language: "",
-  weight: "400",
-  style: "normal",
-};
-
 export default function AdminFontsPage() {
   const [fonts, setFonts] = useState<Font[]>([]);
   const [loading, setLoading] = useState(true);
   const [showUpload, setShowUpload] = useState(false);
-  const [form, setForm] = useState<FontForm>(emptyForm);
-  const [file, setFile] = useState<File | null>(null);
+  const [files, setFiles] = useState<File[]>([]);
   const [saving, setSaving] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string } | null>(null);
   const [previewText, setPreviewText] = useState("The quick brown fox jumps over the lazy dog");
@@ -47,13 +30,18 @@ export default function AdminFontsPage() {
 
   const handleUpload = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!file) return;
+    if (files.length === 0) return;
     setSaving(true);
     try {
-      await uploadFont(form, file);
+      const result = await uploadFont(files);
       setShowUpload(false);
-      setForm(emptyForm);
-      setFile(null);
+      setFiles([]);
+      if (result.errors.length > 0) {
+        const failed = result.errors.map(({ filename, error }) => `${filename}: ${error}`).join("; ");
+        toast.error(`${result.uploaded.length} uploaded. Failed: ${failed}`, 12000);
+      } else {
+        toast.success(`${result.uploaded.length} font${result.uploaded.length === 1 ? "" : "s"} uploaded`);
+      }
       load();
     } catch (err) {
       console.error("Failed to upload font", err);
@@ -90,89 +78,28 @@ export default function AdminFontsPage() {
           className="card p-6 mb-6 space-y-4 animate-slide-up"
         >
           <h2 className="font-semibold text-lg text-ink">Upload Font</h2>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-ink mb-1">Name</label>
-              <input
-                type="text"
-                value={form.name}
-                onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
-                className="input-field w-full"
-                placeholder="Display name"
-                required
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-ink mb-1">Family Name</label>
-              <input
-                type="text"
-                value={form.family_name}
-                onChange={(e) => setForm((f) => ({ ...f, family_name: e.target.value }))}
-                className="input-field w-full"
-                placeholder="CSS font-family"
-                required
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-ink mb-1">Language</label>
-              <input
-                type="text"
-                value={form.language}
-                onChange={(e) => setForm((f) => ({ ...f, language: e.target.value }))}
-                className="input-field w-full"
-                placeholder="e.g. hindi, english"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-ink mb-1">Weight</label>
-              <select
-                value={form.weight}
-                onChange={(e) => setForm((f) => ({ ...f, weight: e.target.value }))}
-                className="input-field w-full"
-              >
-                <option value="100">100 - Thin</option>
-                <option value="200">200 - Extra Light</option>
-                <option value="300">300 - Light</option>
-                <option value="400">400 - Regular</option>
-                <option value="500">500 - Medium</option>
-                <option value="600">600 - Semi Bold</option>
-                <option value="700">700 - Bold</option>
-                <option value="800">800 - Extra Bold</option>
-                <option value="900">900 - Black</option>
-              </select>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-ink mb-1">Style</label>
-              <select
-                value={form.style}
-                onChange={(e) => setForm((f) => ({ ...f, style: e.target.value }))}
-                className="input-field w-full"
-              >
-                <option value="normal">Normal</option>
-                <option value="italic">Italic</option>
-              </select>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-ink mb-1">Font File</label>
-              <input
-                type="file"
-                accept=".ttf,.otf,.woff,.woff2"
-                onChange={(e) => setFile(e.target.files?.[0] ?? null)}
-                className="input-field w-full text-sm file:mr-3 file:py-1 file:px-3 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-primary-50 file:text-primary-700 hover:file:bg-primary-100"
-                required
-              />
-            </div>
+          <div>
+            <p className="text-sm text-ink-muted mb-3">
+              Choose one or more font files. Name, family, language, weight, style, and preview text are detected automatically. You can select up to 1,000 files per batch.
+            </p>
+            <input
+              type="file"
+              accept=".ttf,.otf,.woff,.woff2"
+              multiple
+              onChange={(e) => setFiles(Array.from(e.target.files ?? []))}
+              className="input-field w-full max-w-md text-sm file:mr-3 file:py-1 file:px-3 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-primary-50 file:text-primary-700 hover:file:bg-primary-100"
+              required
+            />
           </div>
           <div className="flex gap-2">
-            <button type="submit" disabled={saving || !file} className="btn-primary text-sm disabled:opacity-50">
-              {saving ? "Uploading..." : "Upload"}
+            <button type="submit" disabled={saving || files.length === 0} className="btn-primary text-sm disabled:opacity-50">
+              {saving ? `Uploading ${files.length}...` : `Upload${files.length > 1 ? ` ${files.length} Fonts` : ""}`}
             </button>
             <button
               type="button"
               onClick={() => {
                 setShowUpload(false);
-                setForm(emptyForm);
-                setFile(null);
+                setFiles([]);
               }}
               className="btn-secondary text-sm"
             >
