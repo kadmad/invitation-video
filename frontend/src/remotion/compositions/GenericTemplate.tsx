@@ -140,6 +140,11 @@ export default function GenericTemplate({
         <OffthreadVideo
           src={videoUrl}
           volume={musicUrl ? 0 : 1}
+          // Keep the Remotion timeline aligned with the native media element.
+          // Without this, a network buffer stall lets the timeline continue
+          // advancing and then repeatedly seeks the video ahead, which makes
+          // the editor preview appear frozen and makes seeking unreliable.
+          pauseWhenBuffering
           style={{ width: "100%", height: "100%", objectFit: "cover" }}
         />
       )}
@@ -147,6 +152,7 @@ export default function GenericTemplate({
         <Audio
           src={musicUrl}
           volume={musicVolume ?? 1}
+          pauseWhenBuffering
           startFrom={Math.round((musicStartSeconds ?? 0) * fps)}
         />
       )}
