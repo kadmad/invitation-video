@@ -9,7 +9,11 @@ import { transliterateBatch } from "@/api/transliterate";
 import { track, trackOnce } from "@/lib/track";
 import type { Font, TextBlock, FormatRange } from "@/types";
 
-export default function PreviewPlayer() {
+interface PreviewPlayerProps {
+  compact?: boolean;
+}
+
+export default function PreviewPlayer({ compact = false }: PreviewPlayerProps) {
   const { template, font, fontUrl, fieldValues, transliteratedValues, textColorOverrides, seekToTime, editorMode, blockOverrides, blockFormatOverrides, transliteratedBlockOverrides, musicObjectUrl, musicStartSeconds } = useEditorStore();
 
   // The tag text itself is the default value shown until the customer types
@@ -518,11 +522,19 @@ export default function PreviewPlayer() {
   if (!template) return null;
 
   return (
-    <div className="card p-2.5 sm:p-3 lg:p-4 lg:sticky lg:top-20">
+    <div
+      data-testid="preview-shell"
+      data-compact={compact ? "true" : "false"}
+      className={`card transition-[padding] duration-300 ease-out lg:sticky lg:top-20 lg:p-4 ${
+        compact ? "p-1.5 sm:p-2" : "p-2.5 sm:p-3"
+      }`}
+    >
       <p className="hidden lg:block text-sm font-medium text-ink-muted mb-3">Live Preview</p>
       <div
         data-testid="preview-canvas"
-        className="relative mx-auto w-[min(82vw,300px)] sm:w-[280px] lg:w-[390px]"
+        className={`relative mx-auto transition-[width] duration-300 ease-out lg:w-[390px] ${
+          compact ? "w-[112px] sm:w-[132px]" : "w-[min(82vw,300px)] sm:w-[280px]"
+        }`}
         style={{ aspectRatio: `${template.width} / ${template.height}` }}
       >
         {showVideoLoader && (
@@ -532,13 +544,17 @@ export default function PreviewPlayer() {
             style={{ background: "linear-gradient(160deg, rgba(42,36,32,0.96), rgba(99,57,52,0.9))" }}
           >
             <div className="text-center px-6">
-              <div className="relative w-12 h-12 mx-auto mb-3">
+              <div className={`relative mx-auto ${compact ? "w-7 h-7" : "w-12 h-12 mb-3"}`}>
                 <div className="absolute inset-0 rounded-full border-2 border-white/15" />
                 <div className="absolute inset-0 rounded-full border-2 border-transparent border-t-brand-300 animate-spin" />
-                <div className="absolute inset-[9px] rounded-full bg-white/10 animate-pulse" />
+                {!compact && <div className="absolute inset-[9px] rounded-full bg-white/10 animate-pulse" />}
               </div>
-              <p className="text-sm font-semibold text-white">Loading your preview</p>
-              <p className="text-[11px] text-white/60 mt-1">Preparing smooth playback...</p>
+              {!compact && (
+                <>
+                  <p className="text-sm font-semibold text-white">Loading your preview</p>
+                  <p className="text-[11px] text-white/60 mt-1">Preparing smooth playback...</p>
+                </>
+              )}
             </div>
           </div>
         )}
@@ -587,11 +603,13 @@ export default function PreviewPlayer() {
             boxShadow: "0 4px 24px rgba(0,0,0,0.15)",
             filter: "blur(0.5px)",
           }}
-          controls
+          controls={!compact}
           loop
           numberOfSharedAudioTags={5}
         />
-        {!showMediaOverlay && (fullscreenTarget ? createPortal(<Watermark />, fullscreenTarget) : <Watermark />)}
+        {!showMediaOverlay && (fullscreenTarget
+          ? createPortal(<Watermark compact={compact} />, fullscreenTarget)
+          : <Watermark compact={compact} />)}
       </div>
     </div>
   );
@@ -635,11 +653,11 @@ function useIsMobileViewport(breakpointPx: number): boolean {
   return isMobile;
 }
 
-function Watermark() {
+function Watermark({ compact = false }: { compact?: boolean }) {
   const isMobile = useIsMobileViewport(WATERMARK_MOBILE_BREAKPOINT_PX);
-  const tilePx = isMobile ? WATERMARK_TILE_PX_MOBILE : WATERMARK_TILE_PX;
-  const columnGap = isMobile ? WATERMARK_COLUMN_GAP_PX_MOBILE : WATERMARK_COLUMN_GAP_PX;
-  const rowGap = isMobile ? WATERMARK_ROW_GAP_PX_MOBILE : WATERMARK_ROW_GAP_PX;
+  const tilePx = compact ? 64 : isMobile ? WATERMARK_TILE_PX_MOBILE : WATERMARK_TILE_PX;
+  const columnGap = compact ? 4 : isMobile ? WATERMARK_COLUMN_GAP_PX_MOBILE : WATERMARK_COLUMN_GAP_PX;
+  const rowGap = compact ? 10 : isMobile ? WATERMARK_ROW_GAP_PX_MOBILE : WATERMARK_ROW_GAP_PX;
 
   return (
     <div

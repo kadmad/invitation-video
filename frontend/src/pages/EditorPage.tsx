@@ -116,6 +116,8 @@ export default function EditorPage() {
   const [editRenderError, setEditRenderError] = useState("");
   const [musicError, setMusicError] = useState("");
   const [musicNotice, setMusicNotice] = useState("");
+  const [mobilePreviewCompact, setMobilePreviewCompact] = useState(false);
+  const mobilePreviewCompactRef = useRef(false);
   // Length of the template's own soundtrack, probed once so the picker can
   // draw the same selection window the admin chose.
   const [templateMusicDuration, setTemplateMusicDuration] = useState<number | null>(null);
@@ -123,6 +125,62 @@ export default function EditorPage() {
   const blockOverrideDebounceTimer = useRef<ReturnType<typeof setTimeout>>();
   const saveDraftTimer = useRef<ReturnType<typeof setTimeout>>();
   const draftApplied = useRef(false);
+
+  useEffect(() => {
+    mobilePreviewCompactRef.current = false;
+    setMobilePreviewCompact(false);
+    if (isPreviewOnly) return;
+    const mobileQuery = window.matchMedia("(max-width: 1023px)");
+    let touchY: number | null = null;
+
+    const updatePreviewSize = (nextCompact: boolean) => {
+      if (nextCompact === mobilePreviewCompactRef.current) return;
+      mobilePreviewCompactRef.current = nextCompact;
+      setMobilePreviewCompact(nextCompact);
+    };
+    const handleTouchStart = (event: TouchEvent) => {
+      touchY = event.touches[0]?.clientY ?? null;
+    };
+    const handleTouchMove = (event: TouchEvent) => {
+      if (!mobileQuery.matches || touchY === null) return;
+      const currentY = event.touches[0]?.clientY;
+      if (currentY === undefined) return;
+      const delta = touchY - currentY;
+      if (delta > 18) {
+        updatePreviewSize(true);
+        touchY = currentY;
+      } else if (delta < -18 && window.scrollY < 30) {
+        updatePreviewSize(false);
+        touchY = currentY;
+      }
+    };
+    const handleTouchEnd = () => {
+      touchY = null;
+    };
+    const handleWheel = (event: WheelEvent) => {
+      if (!mobileQuery.matches) return;
+      if (event.deltaY > 8) updatePreviewSize(true);
+      else if (event.deltaY < -8 && window.scrollY < 30) updatePreviewSize(false);
+    };
+    const handleViewportChange = () => {
+      if (!mobileQuery.matches) updatePreviewSize(false);
+    };
+
+    window.addEventListener("touchstart", handleTouchStart, { passive: true });
+    window.addEventListener("touchmove", handleTouchMove, { passive: true });
+    window.addEventListener("touchend", handleTouchEnd, { passive: true });
+    window.addEventListener("touchcancel", handleTouchEnd, { passive: true });
+    window.addEventListener("wheel", handleWheel, { passive: true });
+    mobileQuery.addEventListener("change", handleViewportChange);
+    return () => {
+      window.removeEventListener("touchstart", handleTouchStart);
+      window.removeEventListener("touchmove", handleTouchMove);
+      window.removeEventListener("touchend", handleTouchEnd);
+      window.removeEventListener("touchcancel", handleTouchEnd);
+      window.removeEventListener("wheel", handleWheel);
+      mobileQuery.removeEventListener("change", handleViewportChange);
+    };
+  }, [isPreviewOnly, slug]);
 
   // Reads live state straight from the stores (never a stale closure) so it is
   // safe to call from cleanup / unload handlers, not just the debounced effect.
@@ -1066,17 +1124,22 @@ export default function EditorPage() {
                   if (newTags.length === 0) return null;
                   return newTags.map((tag) => {
                     const cfg = tagConfigs[tag] ?? {};
+                    const label = cfg.label || humanizeTag(tag);
                     return (
                       <div key={tag}>
+                        <label className="block text-xs font-semibold text-ink mb-1" htmlFor={`field-${tag}`}>
+                          {label}
+                        </label>
                         <textarea
-                          placeholder={tag}
+                          id={`field-${tag}`}
+                          placeholder={cfg.placeholder || `Enter ${label.toLowerCase()}`}
                           value={fieldValues[tag] || ""}
                           onChange={(e) => setFieldValue(tag, e.target.value)}
                           onFocus={() => seekToBlockMid(block)}
                           minLength={cfg.min_chars}
                           maxLength={cfg.max_chars}
                           rows={1}
-                          className="input-field w-full text-center resize-y placeholder:text-slate-300 text-sm py-2"
+                          className="input-field w-full text-left resize-none placeholder:text-slate-300 text-sm py-2.5"
                         />
                         {isRegionalFont && transliterationCandidates[tag] && transliterationCandidates[tag].length > 0 && (
                           <div className="bg-brand-50 px-2 py-1 rounded mt-0.5 flex flex-wrap gap-1 items-center">
@@ -1285,7 +1348,7 @@ export default function EditorPage() {
           user can see edits update live without losing their place in the
           form; full-size sticky sidebar on desktop (order-1 mobile, order-2 desktop). */}
       <div className="sticky top-16 z-30 -mx-4 px-4 pb-3 bg-page/95 backdrop-blur-sm lg:static lg:mx-0 lg:px-0 lg:pb-0 lg:bg-transparent lg:backdrop-blur-none flex-1 flex justify-center order-1 lg:order-2">
-        <PreviewPlayer />
+        <PreviewPlayer compact={mobilePreviewCompact} />
       </div>
 
       {/* Modals live here, as siblings of both columns — NOT inside the form
