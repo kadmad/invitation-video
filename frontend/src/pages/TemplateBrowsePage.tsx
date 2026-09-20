@@ -212,9 +212,6 @@ function TemplateCard({
               setVideoReady(true);
               if (hoveredRef.current) playPreview(videoRef.current);
             }}
-            onWaiting={() => {
-              if (hoveredRef.current) playPreview(videoRef.current);
-            }}
             className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-200 pointer-events-none select-none ${
               hovered && videoReady ? "opacity-100" : "opacity-0"
             }`}

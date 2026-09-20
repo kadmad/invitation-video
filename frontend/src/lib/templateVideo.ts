@@ -18,6 +18,21 @@ export interface CachedTemplateVideo {
 const tokenCache = new Map<string, CachedTemplateVideo>();
 const inflight = new Map<string, Promise<CachedTemplateVideo>>();
 
+function apiUrl(url: string | null | undefined): string {
+  if (!url) return "";
+  if (/^https?:\/\//.test(url)) return url;
+  const apiOrigin = new URL(API_URL, window.location.origin).origin;
+  return new URL(url, apiOrigin).toString();
+}
+
+function playbackUrl(directUrl: string | null | undefined, streamUrl: string | null | undefined): string {
+  // Relative API mode is used by both production and local tunnel demos.
+  // Production's HTTPS CDN is the fastest path; a local HTTP MinIO URL on an
+  // HTTPS tunnel would be blocked as mixed content, so retain the proxy there.
+  if (directUrl && (!IS_PROXIED_API || directUrl.startsWith("https://"))) return directUrl;
+  return apiUrl(streamUrl) || directUrl || "";
+}
+
 /**
  * Signed playback URL for a template's video — the admin-reviewed preview
  * render (sample text baked in) when one exists, else the raw source video.
@@ -35,6 +50,7 @@ export async function getTemplateVideoSrc(templateId: string, forceRefresh = fal
 
   const promise = (async () => {
     const res = await fetch(`${BASE_URL}/templates/${templateId}/video-token`);
+    if (!res.ok) throw new Error("Failed to load template video");
     const {
       expires_at,
       has_preview,
@@ -44,9 +60,10 @@ export async function getTemplateVideoSrc(templateId: string, forceRefresh = fal
       video_stream_url,
       preview_stream_url,
     } = await res.json();
-    const url = IS_PROXIED_API
-      ? (has_preview && preview_stream_url ? preview_stream_url : video_stream_url)
-      : (has_preview && preview_url ? preview_url : video_url);
+    const url = has_preview
+      ? playbackUrl(preview_url, preview_stream_url)
+      : playbackUrl(video_url, video_stream_url);
+    if (!url) throw new Error("Template video URL is unavailable");
     const entry: CachedTemplateVideo = {
       url,
       expiresAt: expires_at,
@@ -54,10 +71,16 @@ export async function getTemplateVideoSrc(templateId: string, forceRefresh = fal
       hasPreview: Boolean(has_preview),
     };
     tokenCache.set(templateId, entry);
-    inflight.delete(templateId);
     return entry;
   })();
 
   inflight.set(templateId, promise);
-  return promise;
+  try {
+    return await promise;
+  } finally {
+    // A transient network failure must not poison this template forever.
+    // Only remove the promise we installed; a forced refresh may have
+    // replaced it while this request was still in flight.
+    if (inflight.get(templateId) === promise) inflight.delete(templateId);
+  }
 }

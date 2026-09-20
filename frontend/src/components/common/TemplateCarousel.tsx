@@ -154,9 +154,6 @@ function CarouselTemplateCard({
             onCanPlay={() => {
               if (active) playPreview(videoRef.current);
             }}
-            onWaiting={() => {
-              if (active) playPreview(videoRef.current);
-            }}
             className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-[400ms] ease-in-out pointer-events-none select-none ${
               videoReady ? "opacity-100" : "opacity-0"
             }`}

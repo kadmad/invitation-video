@@ -1,4 +1,4 @@
-import client, { API_URL } from "@/api/client";
+import client from "@/api/client";
 import type { Category, Template, Font, TextBlock, ImageBlock } from "@/types";
 import type { AdminStats, AEImportPreviewResponse, AwaitingRendersList, AwaitingRender } from "@/types";
 
@@ -46,15 +46,10 @@ export const uploadTemplateVideo = (templateId: string, file: File) => {
     .then((r) => r.data);
 };
 
-/** Raw source is always streamed through the token-gated proxy, never a
- * direct storage link — see api/templates.ts's fetchVideoUrl (same backend
- * endpoint, same reasoning). */
+/** Admin previews use direct storage/CDN playback to avoid proxy stalls. */
 export const getTemplateVideoUrl = async (templateId: string): Promise<string> => {
-  const baseUrl = API_URL;
-  const res = await fetch(`${baseUrl}/templates/${templateId}/video-token`);
-  if (!res.ok) throw new Error("Failed to get video token");
-  const { token } = await res.json();
-  return `${baseUrl}/templates/${templateId}/video-file?token=${token}`;
+  const { data } = await client.get<{ url: string }>(`/admin/templates/${templateId}/video-url`);
+  return data.url;
 };
 
 // ── Template Music ─────────────────────────────────────────────────────────────

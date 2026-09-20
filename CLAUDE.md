@@ -139,11 +139,12 @@ switching databases.
 - `public_url` — stable, cacheable; in production R2 is bucket-scoped at the
   root, locally MinIO is not, so the bucket name is added only in the fallback.
 
-`Template.video_key` must never reach the browser. Public responses expose
-`has_video` and clients fetch playback through `/api/templates/{id}/video-token`,
-which prefers the reviewed `preview_key` render. `templateVideo.ts`'s
-`hasPreview` flag exists because raw source uploads (18 MB+ for a short clip)
-must never be autoplayed as a background loop.
+Public responses expose `has_video` rather than the storage key. Clients fetch
+playback metadata through `/api/templates/{id}/video-token`, which prefers the
+reviewed `preview_key` render and returns direct storage/CDN URLs for smooth
+browser playback, with API-streamed URLs as a local/tunnel fallback.
+`templateVideo.ts`'s `hasPreview` flag exists because raw source uploads (18
+MB+ for a short clip) must never be autoplayed as a background loop.
 
 ### SEO / bot handling
 

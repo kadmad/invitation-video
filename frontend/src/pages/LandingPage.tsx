@@ -127,9 +127,6 @@ function PhoneMockup({
             setVideoReady(true);
             if (visibleRef.current) playPreview(videoRef.current);
           }}
-          onWaiting={() => {
-            if (visibleRef.current) playPreview(videoRef.current);
-          }}
           className="absolute inset-0 w-full h-full object-cover pointer-events-none select-none"
         />
       )}

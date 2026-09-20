@@ -20,17 +20,19 @@ export async function getTemplate(slug: string) {
   return data;
 }
 
-/** The raw source video is never handed out as a direct storage link (see
- * backend get_video_token) — always streamed through the token-gated proxy,
- * built from API_URL so it resolves correctly regardless of deployment
- * topology (unlike the relative video_stream_url string the backend also
- * returns, which only works when the frontend and API share an origin). */
+/** Prefer direct storage/CDN playback so the API server never becomes the
+ * media bottleneck. The stream URL remains a fallback for local proxy mode. */
 export async function fetchVideoUrl(templateId: string): Promise<string> {
   const baseUrl = API_URL;
   const res = await fetch(`${baseUrl}/templates/${templateId}/video-token`);
   if (!res.ok) throw new Error("Failed to get video token");
-  const { token } = await res.json();
-  return `${baseUrl}/templates/${templateId}/video-file?token=${token}`;
+  const { video_url, video_stream_url } = await res.json();
+  if (video_url && (!API_URL.startsWith("/") || video_url.startsWith("https://"))) {
+    return video_url;
+  }
+  if (!video_stream_url) throw new Error("Video URL is unavailable");
+  const apiOrigin = new URL(API_URL, window.location.origin).origin;
+  return new URL(video_stream_url, apiOrigin).toString();
 }
 
 /** @deprecated use fetchVideoUrl (async) */
