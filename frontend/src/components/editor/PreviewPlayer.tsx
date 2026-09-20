@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Player, type PlayerRef } from "@remotion/player";
 import GenericTemplate from "@/remotion/compositions/GenericTemplate";
@@ -42,14 +42,54 @@ export default function PreviewPlayer() {
   }, []);
 
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
+  const [videoLoading, setVideoLoading] = useState(false);
+  const [videoLoadError, setVideoLoadError] = useState(false);
+  const [videoLoadAttempt, setVideoLoadAttempt] = useState(0);
   useEffect(() => {
-    if (!template?.has_video) { setVideoUrl(null); return; }
-    const refresh = () => fetchVideoUrl(template.id).then(setVideoUrl).catch(() => {});
-    refresh();
+    if (!template?.has_video) {
+      setVideoUrl(null);
+      setVideoLoading(false);
+      setVideoLoadError(false);
+      return;
+    }
+    let active = true;
+    const refresh = (initial = false) => {
+      if (initial) {
+        setVideoLoading(true);
+        setVideoLoadError(false);
+      }
+      fetchVideoUrl(template.id)
+        .then((url) => {
+          if (!active) return;
+          setVideoUrl((current) => {
+            if (current && current !== url) setVideoLoading(true);
+            return url;
+          });
+        })
+        .catch(() => {
+          if (!active || !initial) return;
+          setVideoLoading(false);
+          setVideoLoadError(true);
+        });
+    };
+    refresh(true);
     // Refresh token every 4 minutes (token TTL is 5 min)
     const interval = setInterval(refresh, 4 * 60 * 1000);
-    return () => clearInterval(interval);
-  }, [template?.id, template?.has_video]);
+    return () => {
+      active = false;
+      clearInterval(interval);
+    };
+  }, [template?.id, template?.has_video, videoLoadAttempt]);
+
+  const handleVideoReady = useCallback(() => {
+    setVideoLoading(false);
+    setVideoLoadError(false);
+  }, []);
+  const handleVideoWaiting = useCallback(() => setVideoLoading(true), []);
+  const handleVideoError = useCallback(() => {
+    setVideoLoading(false);
+    setVideoLoadError(true);
+  }, []);
 
   // Collect unique font_ids from text_blocks and load each font
   useEffect(() => {
@@ -105,6 +145,21 @@ export default function PreviewPlayer() {
 
   // Transliterate static block content for regional fonts
   const playerRef = useRef<PlayerRef>(null);
+  useEffect(() => {
+    const player = playerRef.current;
+    if (!player || !videoUrl) return;
+    const onResume = () => handleVideoReady();
+    const onWaiting = () => handleVideoWaiting();
+    const onError = () => handleVideoError();
+    player.addEventListener("resume", onResume);
+    player.addEventListener("waiting", onWaiting);
+    player.addEventListener("error", onError);
+    return () => {
+      player.removeEventListener("resume", onResume);
+      player.removeEventListener("waiting", onWaiting);
+      player.removeEventListener("error", onError);
+    };
+  }, [videoUrl, handleVideoReady, handleVideoWaiting, handleVideoError]);
   const [blockTranslitCache, setBlockTranslitCache] = useState<Record<string, string>>({});
   const [translitDone, setTranslitDone] = useState(false);
   const blockTranslitTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -384,6 +439,9 @@ export default function PreviewPlayer() {
   const tagValuesReady = !needsTransliteration || !hasFieldInput || Object.keys(transliteratedValues).length > 0;
   const blockContentReady = !needsTransliteration || translitDone;
   const previewReady = tagValuesReady && blockContentReady;
+  const showVideoLoader = Boolean(template?.has_video && !videoLoadError && (videoLoading || !videoUrl));
+  const showVideoError = Boolean(template?.has_video && videoLoadError);
+  const showMediaOverlay = showVideoLoader || showVideoError;
 
   // Pause while translating — do NOT auto-resume once done. Playback only
   // ever starts from an explicit user press of play, never automatically.
@@ -463,10 +521,47 @@ export default function PreviewPlayer() {
     <div className="card p-2.5 sm:p-3 lg:p-4 lg:sticky lg:top-20">
       <p className="hidden lg:block text-sm font-medium text-ink-muted mb-3">Live Preview</p>
       <div
-        className="relative mx-auto w-40 sm:w-52 lg:w-[390px]"
+        data-testid="preview-canvas"
+        className="relative mx-auto w-[min(82vw,300px)] sm:w-[280px] lg:w-[390px]"
         style={{ aspectRatio: `${template.width} / ${template.height}` }}
       >
-        {!previewReady && (
+        {showVideoLoader && (
+          <div
+            data-testid="preview-loading"
+            className="absolute inset-0 flex items-center justify-center rounded-xl z-20 pointer-events-none overflow-hidden"
+            style={{ background: "linear-gradient(160deg, rgba(42,36,32,0.96), rgba(99,57,52,0.9))" }}
+          >
+            <div className="text-center px-6">
+              <div className="relative w-12 h-12 mx-auto mb-3">
+                <div className="absolute inset-0 rounded-full border-2 border-white/15" />
+                <div className="absolute inset-0 rounded-full border-2 border-transparent border-t-brand-300 animate-spin" />
+                <div className="absolute inset-[9px] rounded-full bg-white/10 animate-pulse" />
+              </div>
+              <p className="text-sm font-semibold text-white">Loading your preview</p>
+              <p className="text-[11px] text-white/60 mt-1">Preparing smooth playback...</p>
+            </div>
+          </div>
+        )}
+        {showVideoError && (
+          <div
+            data-testid="preview-error"
+            className="absolute inset-0 flex items-center justify-center rounded-xl z-20 overflow-hidden"
+            style={{ background: "linear-gradient(160deg, rgba(42,36,32,0.96), rgba(99,57,52,0.9))" }}
+          >
+            <div className="text-center px-6">
+              <p className="text-sm font-semibold text-white">Preview couldn&apos;t load</p>
+              <p className="text-[11px] text-white/60 mt-1 mb-3">Check your connection and try again.</p>
+              <button
+                type="button"
+                className="rounded-full bg-white px-4 py-2 text-xs font-semibold text-brand-700 shadow-sm"
+                onClick={() => setVideoLoadAttempt((attempt) => attempt + 1)}
+              >
+                Retry preview
+              </button>
+            </div>
+          </div>
+        )}
+        {!showMediaOverlay && !previewReady && (
           <div className="absolute inset-0 flex items-center justify-center rounded-xl z-10 pointer-events-none"
             style={{ background: "rgba(0,0,0,0.3)", backdropFilter: "blur(2px)" }}
           >
@@ -496,7 +591,7 @@ export default function PreviewPlayer() {
           loop
           numberOfSharedAudioTags={5}
         />
-        {fullscreenTarget ? createPortal(<Watermark />, fullscreenTarget) : <Watermark />}
+        {!showMediaOverlay && (fullscreenTarget ? createPortal(<Watermark />, fullscreenTarget) : <Watermark />)}
       </div>
     </div>
   );
